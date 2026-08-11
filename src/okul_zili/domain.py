@@ -11,6 +11,7 @@ from typing import Iterable
 class EventType(str, Enum):
     PREPARATION = "hazirlik"
     LESSON_START = "ders_baslangici"
+    BLOCK_TRANSITION = "blok_ici_gecis"
     LESSON_END = "ders_bitisi"
     BREAK_END = "teneffus_bitisi"
     ANNOUNCEMENT = "anons"
@@ -49,6 +50,7 @@ class SessionSchedule:
     student_bell_enabled: bool = True
     student_bell_minutes: int = 2
     block_sizes: tuple[int, ...] = ()
+    block_transition_bell_enabled: bool = True
 
     @property
     def effective_blocks(self) -> tuple[int, ...]:
@@ -109,6 +111,7 @@ class SessionSchedule:
             "student_bell_enabled": self.student_bell_enabled,
             "student_bell_minutes": self.student_bell_minutes,
             "block_sizes": list(self.block_sizes),
+            "block_transition_bell_enabled": self.block_transition_bell_enabled,
         }
 
     @classmethod
@@ -125,6 +128,7 @@ class SessionSchedule:
             student_bell_enabled=bool(raw.get("student_bell_enabled", True)),
             student_bell_minutes=int(raw.get("student_bell_minutes", 2)),
             block_sizes=tuple(int(item) for item in raw.get("block_sizes", [])),  # type: ignore[arg-type]
+            block_transition_bell_enabled=bool(raw.get("block_transition_bell_enabled", True)),
         )
 
 

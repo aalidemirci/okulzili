@@ -32,7 +32,10 @@ BUNDLED_SOUND_ASSETS: dict[str, str] = {
     "ogrenci": "meb-ogrenci-teneffus.wav",
     "ogretmen": "meb-ogretmen.wav",
     "teneffus": "meb-ogrenci-teneffus.wav",
+    "blok_gecis": "meb-ogrenci-teneffus.wav",
 }
+
+BUNDLED_SOUND_MAX_SECONDS = {"blok_gecis": 5}
 
 
 def bundled_sound_path(sound_id: str) -> Path | None:
@@ -49,7 +52,20 @@ def restore_bundled_sound(sound_id: str, destination: Path) -> bool:
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = destination.with_name(f".{destination.name}.paket-yeni")
     try:
-        shutil.copyfile(source, temporary)
+        max_seconds = BUNDLED_SOUND_MAX_SECONDS.get(sound_id)
+        if max_seconds is None:
+            shutil.copyfile(source, temporary)
+        else:
+            with wave.open(str(source), "rb") as input_wave:
+                parameters = input_wave.getparams()
+                frame_count = min(
+                    input_wave.getnframes(),
+                    input_wave.getframerate() * max_seconds,
+                )
+                frames = input_wave.readframes(frame_count)
+            with wave.open(str(temporary), "wb") as output_wave:
+                output_wave.setparams(parameters)
+                output_wave.writeframes(frames)
         temporary.replace(destination)
     finally:
         temporary.unlink(missing_ok=True)

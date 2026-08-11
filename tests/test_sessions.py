@@ -36,7 +36,7 @@ class SessionAndBlockScheduleTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "kaynak günle aynı"):
             copy_schedule_to_days(default_config(), 0, (0, 1))
 
-    def test_two_lesson_block_has_no_internal_bell(self) -> None:
+    def test_two_lesson_block_has_five_second_internal_transition_bell(self) -> None:
         schedule = DaySchedule(
             sessions=(
                 SessionSchedule(
@@ -56,10 +56,20 @@ class SessionAndBlockScheduleTests(unittest.TestCase):
 
         starts = [item for item in events if item.event_type is EventType.LESSON_START]
         ends = [item for item in events if item.event_type is EventType.LESSON_END]
+        transitions = [item for item in events if item.event_type is EventType.BLOCK_TRANSITION]
         self.assertEqual([time(8, 0), time(9, 30)], [item.at for item in starts])
         self.assertEqual([time(9, 20), time(10, 50)], [item.at for item in ends])
+        self.assertEqual([time(8, 40), time(10, 10)], [item.at for item in transitions])
+        self.assertTrue(all(item.sound_id == "blok_gecis" for item in transitions))
         self.assertTrue(all(item.session == "sabah" for item in events))
         self.assertIn("1-2. ders bloğu", starts[0].label)
+
+    def test_internal_transition_bell_can_be_disabled(self) -> None:
+        schedule = DaySchedule(
+            sessions=(SessionSchedule(lesson_count=2, block_sizes=(2,), block_transition_bell_enabled=False),)
+        )
+        events = generate_from_day_schedule(schedule)
+        self.assertFalse(any(item.event_type is EventType.BLOCK_TRANSITION for item in events))
 
     def test_dual_education_merges_sessions_in_time_order(self) -> None:
         schedule = DaySchedule(

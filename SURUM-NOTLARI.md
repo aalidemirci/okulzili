@@ -1,5 +1,13 @@
 # Sürüm Notları
 
+## 0.5.0 — Blok içi sınıf değişim zili
+
+- Blok derslerin içindeki her normal ders sınırına ayrı bir “blok içi sınıf değişimi” olayı eklenir.
+- Bu olay normal teneffüs süresi oluşturmaz ve MEB teneffüs zilinin tam beş saniyelik kısa sürümünü çalar.
+- Kısa zil oturum bazında açılıp kapatılabilir ve kullanıcı tarafından ayrı bir ses olarak değiştirilebilir.
+- Haftalık program tablosunda blok içi kısa zil saatleri ayrı bir sütunda görünür.
+- Tekli eğitimde girilen blok düzeninin kaybolmasına neden olan kayıt eksikliği giderildi.
+
 ## 0.4.2 — Windows pencere yaşam döngüsü düzeltmesi
 
 - “Günlere uygula” penceresinin kısa süre görünüp kaybolmasına neden olan üst üste binmiş CustomTkinter başlık çubuğu işlemleri giderildi.
