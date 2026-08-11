@@ -76,7 +76,10 @@ function renderDownloads(data) {
   }
 }
 
-fetch("release-data.json", { credentials: "omit", cache: "no-cache" })
+const releaseDataUrl = new URL("release-data.json", window.location.href);
+releaseDataUrl.searchParams.set("yenile", Date.now().toString());
+
+fetch(releaseDataUrl, { credentials: "omit", cache: "no-store" })
   .then((response) => (response.ok ? response.json() : Promise.reject(new Error("Sürüm bilgisi yok"))))
   .then(renderDownloads)
   .catch(() => renderDownloads({ available: false, release_url: releasesUrl, assets: [] }));
