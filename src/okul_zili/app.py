@@ -693,8 +693,10 @@ class LessonTimesDialog(ctk.CTkToplevel):
 class CopyScheduleDialog(ctk.CTkToplevel):
     def __init__(self, parent: tk.Misc, source_day: int, on_apply: Callable[[tuple[int, ...]], None]) -> None:
         super().__init__(parent)
+        # CTkToplevel briefly withdraws itself while recoloring the Windows title bar.
+        # Build the dialog withdrawn and show it only after those callbacks settle.
+        self.withdraw()
         self.title("Programı günlere uygula")
-        self.resizable(True, True)
         self.transient(parent)
         apply_window_icon(self)
         self.protocol("WM_DELETE_WINDOW", self.destroy)
@@ -715,7 +717,7 @@ class CopyScheduleDialog(ctk.CTkToplevel):
         _primary_button(buttons, "Seçilenlere uygula", self._apply, 160).pack(side="right")
         _secondary_button(buttons, "Tüm günlere uygula", self._apply_all, 145).pack(side="right", padx=(0, 8))
         _secondary_button(buttons, "İptal", self.destroy).pack(side="right", padx=(0, 8))
-        self.after_idle(lambda: self._activate(parent))
+        self.after(80, lambda: self._activate(parent))
 
     def _activate(self, parent: tk.Misc) -> None:
         if not self.winfo_exists():
@@ -729,7 +731,6 @@ class CopyScheduleDialog(ctk.CTkToplevel):
         self.deiconify()
         self.lift()
         self.focus_force()
-        self.grab_set()
 
     def _run_apply(self, targets: tuple[int, ...]) -> None:
         try:

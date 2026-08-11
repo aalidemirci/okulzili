@@ -1,5 +1,11 @@
 # Sürüm Notları
 
+## 0.4.2 — Windows pencere yaşam döngüsü düzeltmesi
+
+- “Günlere uygula” penceresinin kısa süre görünüp kaybolmasına neden olan üst üste binmiş CustomTkinter başlık çubuğu işlemleri giderildi.
+- Pencere artık gizli olarak hazırlanıyor ve Windows başlık işlemleri tamamlandıktan sonra tek seferde görünür hale getiriliyor.
+- Yardımcı pencere ana uygulamanın girişini kilitlemiyor; beklenmeyen bir pencere yöneticisi davranışında bile ana ekran kullanılabilir kalıyor.
+
 ## 0.4.1 — Günlere uygulama kararlılık düzeltmesi
 
 - “Günlere uygula” penceresinin ana pencerenin arkasında kalıp uygulamayı kilitlenmiş gibi göstermesi düzeltildi.
