@@ -1,3 +1,6 @@
+# website/ klasörü artık tanıtım sitesi değil; okulapp.org/okul-zili adresine
+# yönlendiren sayfalardan oluşur. Sayfalarda sürüme bağlı içerik kalmadığı için
+# sürüm yayımlandığında yeniden derleme tetiklenmez.
 name: Web sitesini yayımla
 
 on:
@@ -10,8 +13,6 @@ on:
     paths:
       - "website/**"
       - ".github/workflows/pages.yml"
-  release:
-    types: [published]
   workflow_dispatch:
 
 permissions:
@@ -38,10 +39,6 @@ jobs:
         uses: actions/checkout@v7
       - name: GitHub Pages'i yapılandır
         uses: actions/configure-pages@v5
-      - name: En yeni sürüm bilgisini hazırla
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: node website/scripts/build-release-data.mjs
       - name: Site güvenlik ve içerik denetimleri
         run: node website/scripts/validate-site.mjs
       - name: Site paketini yükle

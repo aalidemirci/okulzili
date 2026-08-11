@@ -1,6 +1,6 @@
 # Okul Zili
 
-[Tanıtım ve indirme sayfası](https://aalidemirci.github.io/okulzili/) · [GitHub sürümleri](https://github.com/aalidemirci/okulzili/releases) · [Kullanım kılavuzu](KULLANIM.md)
+[Tanıtım ve indirme sayfası](https://okulapp.org/okul-zili/) · [Kullanım kılavuzu](https://okulapp.org/okul-zili/kilavuz/) · [GitHub sürümleri](https://github.com/aalidemirci/okulzili/releases)
 
 <p align="center">
   <img src="assets/branding/okul-zili-256.png" width="128" height="128" alt="Okul Zili logosu">
