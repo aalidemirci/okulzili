@@ -1,5 +1,13 @@
 # Sürüm Notları
 
+## 0.4.1 — Günlere uygulama kararlılık düzeltmesi
+
+- “Günlere uygula” penceresinin ana pencerenin arkasında kalıp uygulamayı kilitlenmiş gibi göstermesi düzeltildi.
+- Pencere artık tamamen oluşturulduktan sonra ana pencerenin üzerinde ortalanıyor, odağı alıyor ve ardından güvenli biçimde kipli hale geliyor.
+- Gün programını kopyalama işlemi arayüzden ayrılarak doğrulanan ve test edilen tek bir işleme dönüştürüldü.
+- İkili eğitim ve blok ders ayarlarının seçilen günlere eksiksiz kopyalanması güvence altına alındı.
+- Yapılandırma diske kaydedilemezse bellekteki değişiklik geri alınıyor ve mevcut program korunuyor.
+
 ## 0.4.0 — İkili eğitim ve blok dersler
 
 - Günler tekli veya sabah/öğleden sonra iki oturumlu eğitim modeliyle düzenlenebilir.

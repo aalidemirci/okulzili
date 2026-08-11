@@ -22,6 +22,7 @@ def main() -> None:
     parser.add_argument("--width", type=int, default=1366)
     parser.add_argument("--height", type=int, default=768)
     parser.add_argument("--dual-demo", action="store_true")
+    parser.add_argument("--open-copy-dialog", action="store_true")
     arguments = parser.parse_args()
     preview_root = Path(__file__).resolve().parents[1] / "build"
     preview_root.mkdir(exist_ok=True)
@@ -59,6 +60,9 @@ def main() -> None:
             app._refresh_schedule()
         if arguments.page in app.pages:
             root.after(300, lambda: app._show_page(arguments.page))
+        if arguments.open_copy_dialog:
+            root.after(440, lambda: root.attributes("-topmost", False))
+            root.after(500, app._copy_schedule)
 
         if arguments.capture is not None:
             destination = arguments.capture.resolve()

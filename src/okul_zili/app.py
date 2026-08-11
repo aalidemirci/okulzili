@@ -24,7 +24,7 @@ from .branding import apply_process_identity, apply_window_icon, load_brand_imag
 from .calendar_engine import CalendarEngine
 from .ceremonies import CEREMONY_SCENARIOS, ceremony_events
 from .config import ConfigError, ConfigRepository
-from .defaults import build_school_config, generate_from_day_schedule, infer_day_schedule, set_preparation_bells
+from .defaults import build_school_config, copy_schedule_to_days, generate_from_day_schedule, infer_day_schedule, set_preparation_bells
 from .domain import AcademicCalendar, DateRange, DateRule, DaySchedule, EventSpec, EventType, ExceptionKind, SchoolConfig, SessionSchedule, sort_specs
 from .event_log import configure_logging, log_event
 from .instance import SingleInstanceLock
@@ -696,7 +696,8 @@ class CopyScheduleDialog(ctk.CTkToplevel):
         self.title("Programı günlere uygula")
         self.resizable(True, True)
         self.transient(parent)
-        self.grab_set()
+        apply_window_icon(self)
+        self.protocol("WM_DELETE_WINDOW", self.destroy)
         self.on_apply = on_apply
         self.variables: dict[int, tk.BooleanVar] = {}
         card = _dialog_card(self, 470, 450)
@@ -714,18 +715,40 @@ class CopyScheduleDialog(ctk.CTkToplevel):
         _primary_button(buttons, "Seçilenlere uygula", self._apply, 160).pack(side="right")
         _secondary_button(buttons, "Tüm günlere uygula", self._apply_all, 145).pack(side="right", padx=(0, 8))
         _secondary_button(buttons, "İptal", self.destroy).pack(side="right", padx=(0, 8))
+        self.after_idle(lambda: self._activate(parent))
+
+    def _activate(self, parent: tk.Misc) -> None:
+        if not self.winfo_exists():
+            return
+        self.update_idletasks()
+        width = self.winfo_width()
+        height = self.winfo_height()
+        x = max(0, parent.winfo_rootx() + (parent.winfo_width() - width) // 2)
+        y = max(0, parent.winfo_rooty() + (parent.winfo_height() - height) // 2)
+        self.geometry(f"{width}x{height}+{x}+{y}")
+        self.deiconify()
+        self.lift()
+        self.focus_force()
+        self.grab_set()
+
+    def _run_apply(self, targets: tuple[int, ...]) -> None:
+        try:
+            self.on_apply(targets)
+        except (ConfigError, ValueError) as exc:
+            messagebox.showerror("Program uygulanamadı", str(exc), parent=self)
+            self.lift()
+            return
+        self.destroy()
 
     def _apply(self) -> None:
         selected = tuple(day for day, variable in self.variables.items() if variable.get())
         if not selected:
             messagebox.showinfo("Gün seçilmedi", "En az bir hedef gün seçin.", parent=self)
             return
-        self.on_apply(selected)
-        self.destroy()
+        self._run_apply(selected)
 
     def _apply_all(self) -> None:
-        self.on_apply(tuple(self.variables))
-        self.destroy()
+        self._run_apply(tuple(self.variables))
 
 
 class AcademicCalendarDialog(ctk.CTkToplevel):
@@ -2066,16 +2089,11 @@ class OkulZiliApp:
             return
         source_day = WEEKDAYS.index(self.day_var.get())
         def apply(targets: tuple[int, ...]) -> None:
-            weekly = dict(self.config.weekly_schedule)
-            schedules = dict(self.config.day_schedules)
-            source_events = weekly.get(source_day, ())
-            source_settings = schedules.get(source_day) or infer_day_schedule(source_events)
-            for target in targets:
-                weekly[target] = tuple(source_events)
-                if source_settings:
-                    schedules[target] = source_settings
-            self.config = replace(self.config, weekly_schedule=weekly, day_schedules=schedules)
-            self._save_config()
+            previous = self.config
+            self.config = copy_schedule_to_days(previous, source_day, targets)
+            if not self._save_config(show_error=False):
+                self.config = previous
+                raise ConfigError("Program diske kaydedilemedi; mevcut ayarlar değiştirilmedi.")
         CopyScheduleDialog(self.root, source_day, apply)
 
     def _edit_lesson_events(self) -> None:
@@ -2280,16 +2298,18 @@ class OkulZiliApp:
         self.log_text.insert("end", "\n".join(rendered))
         self.log_text.configure(state="disabled")
 
-    def _save_config(self) -> None:
+    def _save_config(self, *, show_error: bool = True) -> bool:
         try:
             self.repo.save(self.config)
         except ConfigError as exc:
-            messagebox.showerror("Kaydetme hatası", str(exc), parent=self.root)
-            return
+            if show_error:
+                messagebox.showerror("Kaydetme hatası", str(exc), parent=self.root)
+            return False
         self.engine = CalendarEngine(self.config)
         self.scheduler.update_config(self.config, self.engine)
         log_event(self.logger, "yapilandirma_kaydedildi")
         self._refresh_all()
+        return True
 
     def _open_settings(self) -> None:
         if self.role != "yonetici":
