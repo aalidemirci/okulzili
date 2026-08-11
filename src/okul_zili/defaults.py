@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
+import re
 
-from .domain import DaySchedule, EventSpec, EventType, SchoolConfig, sort_specs
+from .domain import DaySchedule, EventSpec, EventType, SchoolConfig, SessionSchedule, sort_specs
 
 
 def _event(at: datetime, event_type: EventType, label: str, sound_id: str) -> EventSpec:
@@ -19,23 +20,71 @@ def generate_day(
     preparation_enabled: bool = True,
     preparation_minutes: int = 2,
 ) -> tuple[EventSpec, ...]:
-    cursor = datetime.strptime(first_lesson, "%H:%M")
+    session = SessionSchedule(
+        first_lesson=first_lesson,
+        lesson_count=lesson_count,
+        lesson_minutes=lesson_minutes,
+        break_minutes=break_minutes,
+        lunch_after=lunch_after,
+        lunch_minutes=lunch_minutes,
+        student_bell_enabled=preparation_enabled,
+        student_bell_minutes=preparation_minutes,
+    )
+    return generate_session(session)
+
+
+def generate_session(
+    session: SessionSchedule, *, include_session_name: bool = False
+) -> tuple[EventSpec, ...]:
+    cursor = datetime.strptime(session.first_lesson, "%H:%M")
     events: list[EventSpec] = []
-    for lesson_no in range(1, lesson_count + 1):
-        if preparation_enabled:
+    completed_lessons = 0
+    for block_index, block_size in enumerate(session.effective_blocks):
+        first_lesson = completed_lessons + 1
+        last_lesson = completed_lessons + block_size
+        lesson_label = (
+            f"{first_lesson}. ders"
+            if block_size == 1
+            else f"{first_lesson}-{last_lesson}. ders bloğu"
+        )
+        prefix = f"{session.name} · " if include_session_name else ""
+        if session.student_bell_enabled:
             events.append(
-                _event(cursor - timedelta(minutes=preparation_minutes), EventType.PREPARATION, f"{lesson_no}. ders öğrenci zili", "ogrenci")
+                EventSpec(
+                    at=(cursor - timedelta(minutes=session.student_bell_minutes)).time(),
+                    event_type=EventType.PREPARATION,
+                    label=f"{prefix}{lesson_label} öğrenci zili",
+                    sound_id="ogrenci",
+                    session=session.session_id,
+                )
             )
         events.append(
-            _event(cursor, EventType.LESSON_START, f"{lesson_no}. ders öğretmen zili", "ogretmen")
+            EventSpec(
+                at=cursor.time(),
+                event_type=EventType.LESSON_START,
+                label=f"{prefix}{lesson_label} öğretmen zili",
+                sound_id="ogretmen",
+                session=session.session_id,
+            )
         )
-        cursor += timedelta(minutes=lesson_minutes)
+        cursor += timedelta(minutes=session.lesson_minutes * block_size)
         events.append(
-            _event(cursor, EventType.LESSON_END, f"{lesson_no}. ders bitişi", "teneffus")
+            EventSpec(
+                at=cursor.time(),
+                event_type=EventType.LESSON_END,
+                label=f"{prefix}{lesson_label} bitişi",
+                sound_id="teneffus",
+                session=session.session_id,
+            )
         )
-        if lesson_no == lesson_count:
+        completed_lessons = last_lesson
+        if block_index == len(session.effective_blocks) - 1:
             continue
-        cursor += timedelta(minutes=lunch_minutes if lesson_no == lunch_after else break_minutes)
+        cursor += timedelta(
+            minutes=session.lunch_minutes
+            if completed_lessons == session.lunch_after
+            else session.break_minutes
+        )
     return sort_specs(events)
 
 
@@ -72,7 +121,7 @@ def build_school_config(
         student_bell_minutes=preparation_minutes,
     )
     return SchoolConfig(
-        schema_version=3,
+        schema_version=4,
         school_name=school_name,
         timezone="Europe/Istanbul",
         preparation_enabled=preparation_enabled,
@@ -106,19 +155,50 @@ def default_config() -> SchoolConfig:
 
 
 def generate_from_day_schedule(schedule: DaySchedule) -> tuple[EventSpec, ...]:
-    return generate_day(
-        first_lesson=schedule.first_lesson,
-        lesson_count=schedule.lesson_count,
-        lesson_minutes=schedule.lesson_minutes,
-        break_minutes=schedule.break_minutes,
-        lunch_after=schedule.lunch_after,
-        lunch_minutes=schedule.lunch_minutes,
-        preparation_enabled=schedule.student_bell_enabled,
-        preparation_minutes=schedule.student_bell_minutes,
+    sessions = schedule.effective_sessions
+    return sort_specs(
+        event
+        for session in sessions
+        for event in generate_session(
+            session, include_session_name=len(sessions) > 1
+        )
     )
 
 
 def infer_day_schedule(events: tuple[EventSpec, ...]) -> DaySchedule | None:
+    session_ids = tuple(
+        dict.fromkeys(
+            item.session
+            for item in sorted(events, key=lambda item: item.at)
+            if item.event_type is EventType.LESSON_START
+        )
+    )
+    if not session_ids:
+        return None
+    sessions: list[SessionSchedule] = []
+    for session_id in session_ids:
+        session_events = tuple(item for item in events if item.session == session_id)
+        inferred = _infer_session_schedule(session_events, session_id)
+        if inferred is None:
+            return None
+        sessions.append(inferred)
+    first = sessions[0]
+    return DaySchedule(
+        first_lesson=first.first_lesson,
+        lesson_count=first.lesson_count,
+        lesson_minutes=first.lesson_minutes,
+        break_minutes=first.break_minutes,
+        lunch_after=first.lunch_after,
+        lunch_minutes=first.lunch_minutes,
+        student_bell_enabled=first.student_bell_enabled,
+        student_bell_minutes=first.student_bell_minutes,
+        sessions=tuple(sessions) if len(sessions) > 1 else (),
+    )
+
+
+def _infer_session_schedule(
+    events: tuple[EventSpec, ...], session_id: str
+) -> SessionSchedule | None:
     starts = sorted(
         (item for item in events if item.event_type is EventType.LESSON_START),
         key=lambda item: item.at,
@@ -129,9 +209,19 @@ def infer_day_schedule(events: tuple[EventSpec, ...]) -> DaySchedule | None:
     )
     if not starts or len(starts) != len(ends):
         return None
+    block_sizes: list[int] = []
+    for index, item in enumerate(starts, start=1):
+        match = re.search(r"(\d+)(?:-(\d+))?\. ders", item.label)
+        if match:
+            first = int(match.group(1))
+            last = int(match.group(2) or first)
+            block_sizes.append(last - first + 1)
+        else:
+            block_sizes.append(1)
     anchor = date(2000, 1, 1)
     to_datetime = lambda value: datetime.combine(anchor, value)
-    lesson_minutes = int((to_datetime(ends[0].at) - to_datetime(starts[0].at)).total_seconds() // 60)
+    first_block_minutes = int((to_datetime(ends[0].at) - to_datetime(starts[0].at)).total_seconds() // 60)
+    lesson_minutes = first_block_minutes // block_sizes[0]
     gaps = [
         int((to_datetime(starts[index + 1].at) - to_datetime(ends[index].at)).total_seconds() // 60)
         for index in range(len(starts) - 1)
@@ -150,15 +240,19 @@ def infer_day_schedule(events: tuple[EventSpec, ...]) -> DaySchedule | None:
             0,
             int((to_datetime(starts[0].at) - to_datetime(preparations[0].at)).total_seconds() // 60),
         )
-    return DaySchedule(
+    names = {"sabah": "Sabah", "ogle": "Öğleden sonra", "normal": "Normal"}
+    return SessionSchedule(
+        session_id=session_id,
+        name=names.get(session_id, session_id.replace("_", " ").title()),
         first_lesson=starts[0].at.strftime("%H:%M"),
-        lesson_count=len(starts),
+        lesson_count=sum(block_sizes),
         lesson_minutes=lesson_minutes,
         break_minutes=break_minutes,
         lunch_after=lunch_after,
         lunch_minutes=lunch_minutes if lunch_after else break_minutes,
         student_bell_enabled=bool(preparations),
         student_bell_minutes=student_minutes,
+        block_sizes=tuple(block_sizes) if any(size > 1 for size in block_sizes) else (),
     )
 
 

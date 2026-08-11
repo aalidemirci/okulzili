@@ -1,5 +1,15 @@
 # Sürüm Notları
 
+## 0.4.0 — İkili eğitim ve blok dersler
+
+- Günler tekli veya sabah/öğleden sonra iki oturumlu eğitim modeliyle düzenlenebilir.
+- Her oturumun başlangıç saati, ders sayısı, süreleri ve öğrenci zili farkı bağımsızdır.
+- `2+2+1+1` gibi blok desenleriyle blok içinde gereksiz ara zilleri kaldırılır.
+- Oturum çakışması, aynı dakikadaki geçiş zilleri, blok içine yerleştirilen öğle arası ve kısa teneffüsler kaydetmeden önce engellenir.
+- Program tablosu oturum ve blok adlarını birlikte gösterir; uzun çizelgelerde kendi kaydırma çubuğunu kullanır.
+- Şema v4 eski tekli eğitim programlarını değiştirmeden açar ve gerektiğinde çoklu oturum yapısına geçirir.
+- 124 otomatik test ve gerçek Windows arayüz doğrulaması tamamlandı.
+
 ## 0.3.2 — Derli toplu ve uyarlanabilir ana sayfa
 
 - Ana sayfa kartları geniş ekranda tek bakışta görülecek biçimde sıkılaştırıldı.
