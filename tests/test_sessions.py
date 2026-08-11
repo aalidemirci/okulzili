@@ -135,6 +135,35 @@ class SessionAndBlockScheduleTests(unittest.TestCase):
         )
         self.assertTrue(any("bloğunun içine" in item for item in session.validate()))
 
+    def test_dual_sessions_can_have_independent_long_breaks_between_blocks(self) -> None:
+        schedule = DaySchedule(
+            sessions=(
+                SessionSchedule(
+                    session_id="sabah", name="Sabah", first_lesson="08:00",
+                    lesson_count=4, lesson_minutes=40, break_minutes=10,
+                    lunch_after=2, lunch_minutes=30, block_sizes=(2, 2),
+                ),
+                SessionSchedule(
+                    session_id="ogle", name="Öğleden sonra", first_lesson="13:00",
+                    lesson_count=4, lesson_minutes=40, break_minutes=10,
+                    lunch_after=0, lunch_minutes=10, block_sizes=(2, 2),
+                ),
+            )
+        )
+        starts = [
+            item for item in generate_from_day_schedule(schedule)
+            if item.event_type is EventType.LESSON_START
+        ]
+        self.assertEqual(
+            [time(8, 0), time(9, 50)],
+            [item.at for item in starts if item.session == "sabah"],
+        )
+        self.assertEqual(
+            [time(13, 0), time(14, 30)],
+            [item.at for item in starts if item.session == "ogle"],
+        )
+        self.assertEqual([], schedule.validate())
+
     def test_student_and_teacher_bells_cannot_share_the_same_minute(self) -> None:
         session = SessionSchedule(student_bell_enabled=True, student_bell_minutes=0)
         self.assertTrue(any("aynı dakikaya" in item for item in session.validate()))

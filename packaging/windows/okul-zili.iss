@@ -1,5 +1,5 @@
 #define MyAppName "Okul Zili"
-#define MyAppVersion "0.6.0"
+#define MyAppVersion "0.6.2"
 #define MyAppExeName "OkulZili.exe"
 
 [Setup]

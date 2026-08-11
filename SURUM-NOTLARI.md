@@ -1,5 +1,19 @@
 # Sürüm Notları
 
+## 0.6.2 — Ders zilleri sayfasında tek genel kaydırma
+
+- Ders zilleri sayfasının başlık, otomatik hesaplama formu ve sonuç tablosu tek bir genel dikey kaydırma yüzeyine alındı.
+- Sonuç tablosunun erişilmesi zor iç kaydırma çubuğu kaldırıldı; tablo bütün satırlarını açar ve sayfa kaydırmasıyla birlikte hareket eder.
+- Paketli Windows arayüz kontrolü artık sayfanın genel kaydırma kullandığını ve tabloda ikinci bir dikey kaydırma bulunmadığını doğrular.
+
+## 0.6.1 — Pencere güvenliği, uzun ara ve tören akışı
+
+- Zil saatleri dâhil bütün kipli pencereler görünür olmadan uygulama girişini kilitlemeyecek ortak bir pencere yaşam döngüsüne geçirildi.
+- İkili eğitimde sabah ve öğleden sonra oturumlarına ayrı ayrı, blok sınırında uzun teneffüs tanımlamak için alanlar ve açıklamalar netleştirildi.
+- Ana sayfadaki tören provası akışına **Saygı + marş** seçeneği eklendi.
+- İlk dakikası sessiz kalan eski **Saygı duruşu + İstiklâl Marşı** kullanıcı kopyası, yüklenen örnek paketle bir kez güvenle yenilenir; sesli özel kullanıcı dosyaları korunur.
+- Pardus için tek `all` mimarili Debian paketi üretilir.
+
 ## 0.6.0 — Kaynak ses paketi ve ana ses kontrolü
 
 - Kullanıcının `src/zilsesleri` klasörüne eklediği MEB, Cumhurbaşkanlığı, AFAD ve tören kayıtları PCM WAV biçimine dönüştürülerek çevrimdışı pakete gömüldü.

@@ -32,10 +32,10 @@
 
 1. **Haftalık program** sekmesinde günü seçin.
 2. **Eğitim modeli** alanından tekli veya ikili eğitimi seçin. İkili eğitimde önce **Sabah**, sonra **Öğleden sonra** oturumunu düzenleyin.
-3. Her oturum için ilk ders, ders sayısı, ders/teneffüs süreleri ve öğrenci zili farkını girin.
+3. Her oturum için ilk ders, ders sayısı, ders/teneffüs süreleri ve öğrenci zili farkını girin. İkili eğitimde uzun teneffüs her oturum için ayrı ayarlanır: **Uzun ara kaçıncı dersten sonra?** alanına blok sınırındaki ders numarasını, yanındaki alana süreyi yazın; uzun ara yoksa konumu `0` yapın.
 4. Normal dersler için **Blok düzeni** alanını boş bırakın. Blok dersler için `2+2+1+1` gibi, toplamı ders sayısına eşit bir desen yazın.
 5. Blok içindeki ders sınırlarında öğretmen değişimini bildirmek için **Blok içi sınıf değişim zili** seçeneğini açık bırakın. Bu zil teneffüs oluşturmaz ve beş saniye çalar.
-6. **Oturumu hesapla ve kaydet** düğmesine basın. Oturum çakışmaları ve blok içine düşen öğle araları kaydedilmez; ekrandaki uyarıya göre saatleri düzeltin.
+6. **Oturumu hesapla ve kaydet** düğmesine basın. Oturum çakışmaları ve blok içine düşen uzun aralar kaydedilmez; uzun arayı `2+2+2` düzeninde yalnızca 2. veya 4. ders sonu gibi bir blok sınırına taşıyın.
 7. Tablodaki bir satıra çift tıklayarak yalnızca o blok veya dersin üretilmiş zil saatlerini elle düzeltebilirsiniz.
 8. **Günlere uygula** ile aynı tekli/ikili ve blok düzenini seçtiğiniz diğer günlere kopyalayabilirsiniz.
 

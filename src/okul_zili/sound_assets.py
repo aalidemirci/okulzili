@@ -335,3 +335,29 @@ def upgrade_bundled_sounds_v06(base_dir: Path) -> bool:
                 upgraded = restore_generated_sound(sound_id, destination) or upgraded
     marker.write_text("0.6.0\n", encoding="utf-8")
     return upgraded
+
+
+def _has_audible_first_minute(path: Path, minimum_peak: int = 500) -> bool:
+    """Return false only for a valid 16-bit WAV whose opening is effectively silent."""
+    try:
+        with wave.open(str(path), "rb") as source:
+            if source.getsampwidth() != 2:
+                return True
+            frame_count = min(source.getnframes(), source.getframerate() * 60)
+            samples = array("h", source.readframes(frame_count))
+    except (OSError, EOFError, wave.Error):
+        return True
+    return bool(samples) and max(abs(item) for item in samples) >= minimum_peak
+
+
+def upgrade_bundled_sounds_v061(base_dir: Path) -> bool:
+    """Replace the silent ceremony copy once, without touching audible custom files."""
+    marker = base_dir / "ses-paketi-v061.tamam"
+    if marker.exists():
+        return False
+    destination = base_dir / "sesler" / "saygi_1dk_istiklal.wav"
+    upgraded = False
+    if not destination.is_file() or not _has_audible_first_minute(destination):
+        upgraded = restore_bundled_sound("saygi_1dk_istiklal", destination)
+    marker.write_text("0.6.1\n", encoding="utf-8")
+    return upgraded
