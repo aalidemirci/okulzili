@@ -1,0 +1,13 @@
+[Unit]
+Description=Okul Zili masaüstü uygulaması
+After=graphical-session.target sound.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/okul-zili
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+

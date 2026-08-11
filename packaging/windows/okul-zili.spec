@@ -1,0 +1,62 @@
+# -*- mode: python ; coding: utf-8 -*-
+import os
+from pathlib import Path
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+
+root = Path(SPEC).resolve().parents[2]
+python_root = root / "build" / "python" / "cpython-3.12.13-windows-x86_64-none"
+os.environ["TCL_LIBRARY"] = str(root / "build" / "tcl86")
+os.environ["TK_LIBRARY"] = str(root / "build" / "tk86")
+
+a = Analysis(
+    [str(root / "packaging" / "windows" / "entrypoint.py")],
+    pathex=[str(root / "src")],
+    binaries=[
+        (str(python_root / "DLLs" / "_tkinter.pyd"), "."),
+        (str(python_root / "DLLs" / "tcl86t.dll"), "."),
+        (str(python_root / "DLLs" / "tk86t.dll"), "."),
+    ],
+    datas=[
+        (str(python_root / "Lib" / "tkinter"), "tkinter"),
+        (str(root / "build" / "tcl86"), "_tcl_data"),
+        (str(root / "build" / "tk86"), "_tk_data"),
+        (str(root / "src" / "okul_zili" / "assets"), "okul_zili/assets"),
+        (str(root / "LICENSE"), "."),
+        (str(root / "NOTICE"), "."),
+        (str(root / "README.md"), "."),
+        (str(root / "KURULUM.md"), "."),
+        (str(root / "DONANIM.md"), "."),
+        (str(root / "KULLANIM.md"), "."),
+        (str(root / "SORUN-GIDERME.md"), "."),
+        (str(root / "MIMARI.md"), "."),
+        (str(root / "SURUM-NOTLARI.md"), "."),
+        (str(root / "BAGIMLILIKLAR.md"), "."),
+        (str(root / "GEREKSINIM-IZLENEBILIRLIK.md"), "."),
+        (str(root / "SAHA-KABUL.md"), "."),
+        (str(root / "SES-KAYNAKLARI.md"), "."),
+        (str(root / "THIRD_PARTY_LICENSES"), "THIRD_PARTY_LICENSES"),
+        *collect_data_files("customtkinter"),
+    ],
+    hiddenimports=["tkinter", "miniaudio", "_cffi_backend", "PIL.Image", "PIL.ImageDraw", *collect_submodules("pystray")],
+    runtime_hooks=[str(root / "packaging" / "windows" / "runtime-tk.py")],
+    noarchive=False,
+)
+pyz = PYZ(a.pure)
+exe = EXE(
+    pyz,
+    a.scripts,
+    [],
+    exclude_binaries=True,
+    name="OkulZili",
+    console=False,
+    disable_windowed_traceback=False,
+    icon=str(root / "assets" / "branding" / "okul-zili.ico"),
+)
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.datas,
+    strip=False,
+    upx=False,
+    name="OkulZili-Windows-x64",
+)

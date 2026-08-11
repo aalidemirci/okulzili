@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "okul-zili"
+version = "0.3.0"
+description = "Tamamen çevrimdışı çalışan Türkçe okul zili sistemi"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{name = "Okul Zili Projesi"}]
+license = {file = "LICENSE"}
+dependencies = [
+  "Pillow>=10,<13",
+  "six>=1.16,<2",
+  "miniaudio>=1.71,<2",
+  "customtkinter>=5.2.2,<6",
+]
+
+[project.scripts]
+okul-zili = "okul_zili.app:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+okul_zili = ["assets/*.png"]
+
+[tool.setuptools.data-files]
+"share/okul-zili/licenses" = ["THIRD_PARTY_LICENSES/*"]
+"share/doc/okul-zili" = ["LICENSE", "NOTICE"]

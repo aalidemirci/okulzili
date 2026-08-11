@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Okul Zili Otomatik Başlatma
+Comment=Okul Zili kullanıcı hizmetini başlatır
+Exec=systemctl --user start okul-zili.service
+Terminal=false
+X-GNOME-Autostart-enabled=true
+

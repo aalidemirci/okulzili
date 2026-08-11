@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.uv-cache/
+.coverage
+build/
+dist/
+.venv/
+.build-tools/
+.build-inno/
+.build-python/
+runtime/
+*.log
+*.bak

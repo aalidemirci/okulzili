@@ -1,0 +1,172 @@
+from __future__ import annotations
+
+from pathlib import Path
+import tempfile
+import threading
+import unittest
+from unittest import mock
+
+from okul_zili.audio import AudioError, PlatformAudioBackend, PlaybackManager, validate_wave
+from tests.helpers import MockAudioBackend, write_wave
+
+
+class AudioTests(unittest.TestCase):
+    def test_windows_device_name_resolves_to_real_waveout_index(self) -> None:
+        devices = ("Dahili Hoparlör", "USB Ses Kartı")
+        self.assertEqual(
+            1,
+            PlatformAudioBackend._windows_device_index("usb ses kartı", devices),
+        )
+        self.assertEqual(
+            -1,
+            PlatformAudioBackend._windows_device_index("varsayilan", devices),
+        )
+        with self.assertRaises(AudioError):
+            PlatformAudioBackend._windows_device_index("yok", devices)
+
+    def test_windows_availability_requires_device_to_be_openable(self) -> None:
+        backend = PlatformAudioBackend()
+        backend.system = "windows"
+        with mock.patch.object(
+            backend, "list_devices", return_value=("USB Ses Kartı",)
+        ), mock.patch.object(
+            backend, "_windows_device_can_open", return_value=False
+        ) as probe:
+            self.assertFalse(backend.is_device_available("USB Ses Kartı"))
+            probe.assert_called_once_with(0)
+
+    def test_valid_wave_plays_normally(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "zil.wav"
+            write_wave(path)
+            backend = MockAudioBackend()
+            result = PlaybackManager(backend).play(path, "varsayilan")
+            self.assertTrue(result.success)
+            self.assertFalse(result.used_fallback)
+            self.assertEqual([("prepare", ""), ("device", "varsayilan"), ("file", "zil.wav")], backend.calls)
+
+    def test_missing_file_uses_fallback_beep(self) -> None:
+        backend = MockAudioBackend()
+        result = PlaybackManager(backend).play(Path("yok.wav"), "varsayilan")
+        self.assertTrue(result.success)
+        self.assertTrue(result.used_fallback)
+        self.assertIn(("beep", "varsayilan"), backend.calls)
+
+    def test_corrupt_file_uses_fallback_beep(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "bozuk.wav"
+            path.write_text("ses değil", encoding="utf-8")
+            backend = MockAudioBackend()
+            result = PlaybackManager(backend).play(path, "varsayilan")
+            self.assertTrue(result.used_fallback)
+
+    def test_playback_start_failure_uses_fallback_beep(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "zil.wav"
+            write_wave(path)
+            backend = MockAudioBackend(file_failure=True)
+            result = PlaybackManager(backend).play(path, "varsayilan")
+            self.assertTrue(result.success)
+            self.assertTrue(result.used_fallback)
+            self.assertIn(("beep", "varsayilan"), backend.calls)
+
+    def test_playback_and_fallback_failure_stays_critical(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "zil.wav"
+            write_wave(path)
+            backend = MockAudioBackend(file_failure=True, beep_failure=True)
+            result = PlaybackManager(backend).play(path, "varsayilan")
+            self.assertFalse(result.success)
+            self.assertIn("yedek bip başarısız", result.message)
+
+    def test_missing_device_is_critical_and_cannot_beep(self) -> None:
+        backend = MockAudioBackend(available=False)
+        result = PlaybackManager(backend).play(Path("zil.wav"), "usb-kart")
+        self.assertFalse(result.success)
+        self.assertIn("cihaz", result.message.lower())
+        self.assertNotIn(("beep", "usb-kart"), backend.calls)
+
+    def test_missing_selected_device_beeps_on_available_default_output(self) -> None:
+        backend = MockAudioBackend(available_devices={"varsayilan"})
+        result = PlaybackManager(backend).play(Path("zil.wav"), "usb-kart")
+        self.assertTrue(result.success)
+        self.assertTrue(result.used_fallback)
+        self.assertIn(("beep", "varsayilan"), backend.calls)
+        self.assertIn("varsayılan çıkış", result.message)
+
+    def test_wave_validation_rejects_empty_file(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "bos.wav"
+            path.write_bytes(b"")
+            self.assertFalse(validate_wave(path)[0])
+
+    def test_second_simultaneous_play_is_rejected(self) -> None:
+        class BlockingBackend(MockAudioBackend):
+            def __init__(self) -> None:
+                super().__init__()
+                self.started = threading.Event()
+                self.release = threading.Event()
+
+            def play_file(self, path: Path, device_id: str) -> None:
+                self.calls.append(("file", path.name))
+                self.started.set()
+                self.release.wait(timeout=2)
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "zil.wav"
+            write_wave(path)
+            backend = BlockingBackend()
+            manager = PlaybackManager(backend)
+            first_result = []
+            worker = threading.Thread(target=lambda: first_result.append(manager.play(path, "varsayilan")))
+            worker.start()
+            self.assertTrue(backend.started.wait(timeout=1))
+            second = manager.play(path, "varsayilan")
+            backend.release.set()
+            worker.join(timeout=2)
+            self.assertFalse(second.success)
+            self.assertIn("çift çalma", second.message)
+            self.assertTrue(first_result[0].success)
+
+    def test_active_playback_can_be_stopped_without_fallback_beep(self) -> None:
+        class StoppableBackend(MockAudioBackend):
+            def __init__(self) -> None:
+                super().__init__()
+                self.started = threading.Event()
+                self.release = threading.Event()
+
+            def play_file(self, path: Path, device_id: str) -> None:
+                self.calls.append(("file", path.name))
+                self.started.set()
+                self.release.wait(timeout=2)
+
+            def stop_playback(self) -> None:
+                super().stop_playback()
+                self.release.set()
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "zil.wav"
+            write_wave(path)
+            backend = StoppableBackend()
+            manager = PlaybackManager(backend)
+            result = []
+            worker = threading.Thread(target=lambda: result.append(manager.play(path, "varsayilan")))
+            worker.start()
+            self.assertTrue(backend.started.wait(timeout=1))
+            self.assertTrue(manager.stop())
+            worker.join(timeout=2)
+            self.assertFalse(manager.busy)
+            self.assertTrue(result[0].success)
+            self.assertTrue(result[0].stopped)
+            self.assertIn("durduruldu", result[0].message)
+            self.assertNotIn(("beep", "varsayilan"), backend.calls)
+
+    def test_stop_without_active_playback_is_noop(self) -> None:
+        backend = MockAudioBackend()
+        manager = PlaybackManager(backend)
+        self.assertFalse(manager.stop())
+        self.assertNotIn(("stop", ""), backend.calls)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'" />
+    <meta name="description" content="Okul Zili kurulum, ilk yapılandırma, ders programı ve dosya doğrulama kılavuzu." />
+    <meta name="theme-color" content="#082f3f" />
+    <title>Kullanım Kılavuzu — Okul Zili</title>
+    <link rel="icon" href="assets/logo.png" />
+    <link rel="stylesheet" href="assets/styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#icerik">İçeriğe geç</a>
+    <header class="site-header"><a class="brand" href="index.html"><img src="assets/logo.png" width="46" height="46" alt="" /><span><strong>Okul Zili</strong><small>Akıllı zamanlama</small></span></a><nav aria-label="Ana menü"><a href="index.html#ozellikler">Özellikler</a><a href="index.html#indir">İndir</a><a href="kilavuz.html" aria-current="page">Kılavuz</a><a href="gizlilik.html">Gizlilik</a></nav></header>
+    <main id="icerik" class="document-layout">
+      <aside class="document-nav" aria-label="Kılavuz içindekiler"><strong>İçindekiler</strong><a href="#paket-secimi">Paket seçimi</a><a href="#kurulum">Windows kurulumu</a><a href="#ilk-acilis">İlk açılış</a><a href="#program">Ders programı</a><a href="#takvim">Takvim ve tatiller</a><a href="#ses">Ses güvenliği</a><a href="#dosya-dogrulama">Dosya doğrulama</a><a href="#sorun-giderme">Sorun giderme</a></aside>
+      <article class="document">
+        <p class="eyebrow">Kullanım kılavuzu</p><h1>Kurulumdan ilk zile kadar</h1>
+        <div class="info-box"><strong>Program çevrimdışı çalışır.</strong><p>Kurulum ve yapılandırma tamamlandıktan sonra normal zil akışı için internet bağlantısı gerekmez.</p></div>
+        <h2 id="paket-secimi">Hangi paketi seçmeliyim?</h2>
+        <div class="guide-table" role="table" aria-label="Paket seçenekleri"><div role="row"><strong role="cell">Windows kurulum</strong><span role="cell">Okul bilgisayarında kalıcı kullanım için önerilen seçenektir. Başlat menüsü, görev çubuğu ve otomatik başlatma desteğini kurar.</span></div><div role="row"><strong role="cell">Windows taşınabilir</strong><span role="cell">Kurulum yapılamayan bilgisayarlar, deneme veya USB üzerinden kullanım için arşivdir.</span></div></div>
+        <h2 id="kurulum">Windows kurulumu</h2><ol><li><code>OkulZili-Kurulum-&lt;sürüm&gt;.exe</code> dosyasını GitHub Releases alanından indirin.</li><li>Dosyanın SHA-256 değerini doğrulayın.</li><li>Kurulum sihirbazındaki adımları tamamlayın.</li><li>Başlat menüsünden <strong>Okul Zili</strong> uygulamasını açın.</li></ol>
+        <h2 id="ilk-acilis">İlk açılış</h2><ol><li>4–12 rakamdan oluşan yönetici PIN'i belirleyin.</li><li>Okul adını, ilk ders saatini, ders sayısını ve süreleri girin.</li><li>Zil ve anons için kullanılacak ses cihazını seçin.</li><li>Örnek sesleri test edin; yanlış yayında üst bölümdeki <strong>Sesi durdur</strong> düğmesini kullanın.</li></ol>
+        <h2 id="program">Ders programını hazırlama</h2><p><strong>Haftalık program</strong> ekranında günü seçin. İlk ders, ders sayısı ve süresi, teneffüs, öğle arası konumu ve süresini girip <strong>Programı hesapla</strong> düğmesine basın.</p><p>Öğrenci/öğretmen zili kullanılacaksa seçeneği açıp öğrenci zilinin öğretmen zilinden kaç dakika önce çalacağını yazın. Hazırlanan günü diğer günlere kopyalamak için <strong>Günlere uygula</strong> seçeneğini kullanın.</p><p>Tablodaki bir ders satırına çift tıklayarak yalnızca seçili gün için öğrenci zili, öğretmen zili veya ders bitiş saatini düzeltebilirsiniz.</p>
+        <h2 id="takvim">Takvim ve tatiller</h2><p>Akademik takvim ekranından ders yılı, dönem, ara tatil ve yarıyıl tarihlerini düzenleyin. Sabit Türkiye resmî tatilleri uygulama tarafından yerel olarak hesaplanır. Ramazan ve Kurban Bayramı tarihleri yönetim panelinden ayrıca girilir.</p><div class="warning-card"><strong>Takvimi her eğitim yılı başında doğrulayın</strong><p>Yerel kararlar, idari tatiller ve telafi günleri kurumunuza özeldir; bunları Tatil ve törenler ekranına ekleyin.</p></div>
+        <h2 id="ses">Ses ve yayın güvenliği</h2><ul><li>Ses önizlemesini istediğiniz an <strong>Sesi durdur</strong> düğmesiyle kesin.</li><li>Tören ve tatbikat yayınları başlamadan önce onay penceresini dikkatle okuyun.</li><li>Ses cihazını değiştirdikten sonra Sistem kontrolü ekranını çalıştırın.</li><li>Okulda kullanım hakkı bulunmayan müzik veya anons dosyalarını programa eklemeyin.</li></ul>
+        <h2 id="dosya-dogrulama">İndirilen dosyayı doğrulama</h2><p>Sürümle birlikte yayımlanan <code>SHA256SUMS-&lt;sürüm&gt;.txt</code> dosyasındaki değer ile indirdiğiniz paketin özetini karşılaştırın.</p><h3>Windows PowerShell</h3><pre><code>Get-FileHash .\OkulZili-Kurulum-&lt;sürüm&gt;.exe -Algorithm SHA256</code></pre><p>Çıktıdaki değer, sağlama toplamı dosyasındaki ilgili satırla aynı olmalıdır.</p>
+        <h2 id="sorun-giderme">Sık karşılaşılan durumlar</h2><h3>Ses cihazı bulunamadı</h3><p>Kabloyu ve Windows ses ayarlarını kontrol edin. Uygulamada Yönetim → Okul ve cihaz ayarları bölümünden cihazı yeniden seçin.</p><h3>Program ekranı küçük görünüyor</h3><p>Pencereyi büyütün veya <code>F11</code> ile tam ekrana geçin. Uygulama Windows ekran ölçeklemesini destekler.</p><h3>Zil çalmadı</h3><p>Sistem kontrolü ekranında cihaz, ses dosyası, etkin program ve takvim denetimlerinin sonucunu inceleyin. Olay günlüğü teknik nedeni gösterir.</p>
+        <p class="legal-note">Daha ayrıntılı belgeler için depodaki <a href="https://github.com/aalidemirci/okulzili/blob/main/KULLANIM.md" rel="noopener">kullanım kılavuzuna</a> ve <a href="https://github.com/aalidemirci/okulzili/blob/main/SORUN-GIDERME.md" rel="noopener">sorun giderme belgesine</a> bakın.</p>
+      </article>
+    </main>
+    <footer><div class="footer-brand"><img src="assets/logo.png" width="42" height="42" alt="" /><div><strong>Okul Zili</strong><p>Okul gününün ritmi, otomatik ve güvenli.</p></div></div><div class="footer-links"><a href="index.html">Ana sayfa</a><a href="gizlilik.html">Gizlilik</a><a href="mailto:aalidemirci@gmail.com">İletişim</a></div></footer>
+  </body>
+</html>

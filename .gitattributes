@@ -1,0 +1,17 @@
+* text=auto
+.gitattributes text eol=lf
+
+*.sh text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.desktop text eol=lf
+*.service text eol=lf
+packaging/linux/okul-zili text eol=lf
+packaging/linux/postinst text eol=lf
+packaging/linux/prerm text eol=lf
+
+*.ps1 text eol=crlf
+*.png binary
+*.ico binary
+*.exe binary
+*.zip binary

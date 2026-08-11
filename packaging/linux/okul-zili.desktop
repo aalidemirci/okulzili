@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Okul Zili
+Comment=Çevrimdışı okul zili ve anons sistemi
+Exec=/usr/bin/okul-zili
+Icon=okul-zili
+Terminal=false
+Categories=Education;Utility;

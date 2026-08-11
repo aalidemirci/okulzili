@@ -1,0 +1,65 @@
+name: Web sitesini yayımla
+
+on:
+  pull_request:
+    paths:
+      - "website/**"
+      - ".github/workflows/pages.yml"
+  push:
+    branches: [main]
+    paths:
+      - "website/**"
+      - ".github/workflows/pages.yml"
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Kaynak kodu al
+        uses: actions/checkout@v7
+      - name: Site güvenlik ve içerik denetimleri
+        run: node website/scripts/validate-site.mjs
+
+  build:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Kaynak kodu al
+        uses: actions/checkout@v7
+      - name: GitHub Pages'i yapılandır
+        uses: actions/configure-pages@v5
+      - name: En yeni sürüm bilgisini hazırla
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node website/scripts/build-release-data.mjs
+      - name: Site güvenlik ve içerik denetimleri
+        run: node website/scripts/validate-site.mjs
+      - name: Site paketini yükle
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: website
+
+  deploy:
+    if: github.event_name != 'pull_request'
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: GitHub Pages'e yayımla
+        id: deployment
+        uses: actions/deploy-pages@v4
