@@ -5,11 +5,21 @@ from pathlib import Path
 import re
 import unittest
 
+from okul_zili import __version__
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 class PackagingDefinitionTests(unittest.TestCase):
+    def test_release_versions_are_synchronized(self) -> None:
+        project = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        installer = (ROOT / "packaging" / "windows" / "okul-zili.iss").read_text(encoding="utf-8")
+        linux = (ROOT / "packaging" / "linux" / "control").read_text(encoding="utf-8")
+        self.assertIn(f'version = "{__version__}"', project)
+        self.assertIn(f'#define MyAppVersion "{__version__}"', installer)
+        self.assertIn(f"Version: {__version__}", linux)
+
     def test_windows_installer_is_turkish_and_runs_sound_test_flow(self) -> None:
         script = (ROOT / "packaging" / "windows" / "okul-zili.iss").read_text(
             encoding="utf-8"
@@ -24,6 +34,7 @@ class PackagingDefinitionTests(unittest.TestCase):
         self.assertIn('"_cffi_backend"', spec)
         self.assertIn('okul-zili.ico', spec)
         self.assertIn('okul_zili/assets', spec)
+        self.assertIn('assets/sounds/*.wav', (ROOT / "pyproject.toml").read_text(encoding="utf-8"))
         self.assertIn('SetupIconFile=', script)
         self.assertIn('LICENSE', script)
         self.assertIn('NOTICE', script)

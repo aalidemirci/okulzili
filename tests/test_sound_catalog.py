@@ -7,12 +7,14 @@ from tests.helpers import write_wave
 
 
 class SoundCatalogTests(unittest.TestCase):
-    def test_lesson_bells_reference_central_ministry_announcement(self) -> None:
+    def test_lesson_bells_are_packaged_as_official_meb_sounds(self) -> None:
         self.assertTrue(MEB_CENTRAL_BELL_PAGE.startswith("https://meb.gov.tr/"))
         for sound_id in ("ogrenci", "ogretmen", "teneffus"):
             definition = SOUND_BY_ID[sound_id]
             self.assertEqual(MEB_CENTRAL_BELL_PAGE, definition.source_page)
             self.assertIsNone(definition.official_url)
+            self.assertEqual("MEB Resmî Zil Sesleri", definition.category)
+            self.assertEqual("meb_paket", definition.source_kind)
 
     def test_valid_wave_is_imported(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -16,6 +16,7 @@ Okul Zili; Windows ve Linux üzerinde çevrimdışı çalışan, Türkçe masaü
 - Ders yılı, iki dönem, ara tatiller, yarıyıl tatili ve dinî bayram tarihlerini yönetme
 - Türkiye'nin sabit resmî tatillerini ve yarım gün arife kurallarını otomatik uygulama
 - Değiştirilebilir WAV/MP3/FLAC/OGG sesleri ve merkez MEB duyurusu/üçüncü taraf dosya ayrımı
+- Paketle gelen çevrimdışı öğrenci, öğretmen ve teneffüs kayıtlarından oluşan MEB Resmî Zil Sesleri grubu
 - Hazır tören akışları, 10 Kasım senaryosu ve korumalı tatbikat sirenleri
 - İlk açılışta okul adı, başlangıç saati, ders/teneffüs ve öğle arası bilgilerini alan kurulum sihirbazı
 - Ders satırı tablosundan öğrenci, öğretmen ve bitiş saatlerini gün bazında düzeltme

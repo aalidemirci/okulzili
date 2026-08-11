@@ -1,5 +1,13 @@
 # Sürüm Notları
 
+## 0.3.1 — Gömülü MEB ders zilleri
+
+- Önceki kurulumda kullanılan öğrenci, öğretmen ve teneffüs zilleri çevrimdışı paket varlıklarına eklendi.
+- Öğrenci ve teneffüs zilinin aynı kaydı paylaşması sayesinde paket içinde gereksiz dosya tekrarı önlendi.
+- Yeni kurulumlarda bu kayıtlar **MEB Resmî Zil Sesleri** grubunun varsayılanları olarak hazırlanır.
+- Mevcut kurulumlarda kullanıcının seçtiği sesler yükseltme sırasında korunur.
+- **MEB sesini yükle / geri al** işlemiyle paket kaydı daha sonra yeniden etkinleştirilebilir.
+
 ## 0.3.0 — Profesyonel arayüz ve işletim güvenliği
 
 - Açık tema varsayılan yapıldı; koyu tema kalıcı bir kullanıcı seçeneği olarak eklendi.

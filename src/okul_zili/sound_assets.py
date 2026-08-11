@@ -4,6 +4,7 @@ import io
 import math
 from array import array
 from pathlib import Path
+import shutil
 import wave
 
 
@@ -26,6 +27,33 @@ SIRENS: dict[str, tuple[int, int, int, int]] = {
     "tatbikat_yangin.wav": (15_000, 620, 1150, 500),
     "acil_durum.wav": (10_000, 520, 1320, 700),
 }
+
+BUNDLED_SOUND_ASSETS: dict[str, str] = {
+    "ogrenci": "meb-ogrenci-teneffus.wav",
+    "ogretmen": "meb-ogretmen.wav",
+    "teneffus": "meb-ogrenci-teneffus.wav",
+}
+
+
+def bundled_sound_path(sound_id: str) -> Path | None:
+    filename = BUNDLED_SOUND_ASSETS.get(sound_id)
+    if filename is None:
+        return None
+    return Path(__file__).resolve().parent / "assets" / "sounds" / filename
+
+
+def restore_bundled_sound(sound_id: str, destination: Path) -> bool:
+    source = bundled_sound_path(sound_id)
+    if source is None or not source.is_file():
+        return False
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_name(f".{destination.name}.paket-yeni")
+    try:
+        shutil.copyfile(source, temporary)
+        temporary.replace(destination)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return True
 
 
 def _tone_wave(sequence: tuple[tuple[int, int], ...]) -> bytes:
@@ -81,6 +109,10 @@ def _siren_wave(duration_ms: int, low: int, high: int, cycle_ms: int) -> bytes:
 def ensure_generated_sounds(base_dir: Path) -> None:
     sound_dir = base_dir / "sesler"
     sound_dir.mkdir(parents=True, exist_ok=True)
+    for sound_id in BUNDLED_SOUND_ASSETS:
+        destination = sound_dir / f"{sound_id}.wav"
+        if not destination.exists():
+            restore_bundled_sound(sound_id, destination)
     for filename, sequence in TONES.items():
         destination = sound_dir / filename
         if not destination.exists():

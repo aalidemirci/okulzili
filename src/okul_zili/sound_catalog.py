@@ -30,9 +30,9 @@ MEB_NOVEMBER_TENTH_PAGE = "https://fethiye.meb.gov.tr/www/10-kasim-ataturku-anma
 
 
 SOUND_DEFINITIONS: tuple[SoundDefinition, ...] = (
-    SoundDefinition("ogrenci", "Öğrenci zili", "Ders düzeni", "Ders başlamadan ayarlanan süre önce çalar. Merkez MEB duyurusu vardır; doğrulanmış ayrı öğrenci anonsu yayımlanmamıştır.", source_page=MEB_CENTRAL_BELL_PAGE, source_kind="meb_referans"),
-    SoundDefinition("ogretmen", "Öğretmen zili", "Ders düzeni", "Ders başlangıç saatinde çalar. Merkez MEB duyurusu vardır; doğrulanmış ayrı öğretmen anonsu yayımlanmamıştır.", source_page=MEB_CENTRAL_BELL_PAGE, source_kind="meb_referans"),
-    SoundDefinition("teneffus", "Teneffüs zili", "Ders düzeni", "Ders bittiğinde çalar. Merkez MEB duyurusunda ortak zil teneffüs amacıyla tanımlanır; doğrulanmış doğrudan dosya yoktur.", source_page=MEB_CENTRAL_BELL_PAGE, source_kind="meb_referans"),
+    SoundDefinition("ogrenci", "Öğrenci zili", "MEB Resmî Zil Sesleri", "Ders başlamadan ayarlanan süre önce çalan ve paketle birlikte çevrimdışı sunulan Bakanlık zili.", source_page=MEB_CENTRAL_BELL_PAGE, source_kind="meb_paket"),
+    SoundDefinition("ogretmen", "Öğretmen zili", "MEB Resmî Zil Sesleri", "Ders başlangıç saatinde çalan ve paketle birlikte çevrimdışı sunulan Bakanlık zili.", source_page=MEB_CENTRAL_BELL_PAGE, source_kind="meb_paket"),
+    SoundDefinition("teneffus", "Teneffüs zili", "MEB Resmî Zil Sesleri", "Ders sonunda çalan ve paketle birlikte çevrimdışı sunulan Bakanlık zili.", source_page=MEB_CENTRAL_BELL_PAGE, source_kind="meb_paket"),
     SoundDefinition("istiklal_sozlu", "İstiklâl Marşı — sözlü", "Tören", "MEB İstiklâl Marşı sayfasındaki sözlü kayıt için ayrılmış yuva.", source_page=MEB_ANTHEM_PAGE, source_kind="meb_referans"),
     SoundDefinition("istiklal_sozsuz", "İstiklâl Marşı — sözsüz / bando", "MEB Resmî Zil Sesleri", "MEB kurumu sayfasından indirilebilen bando kaydı.", "https://erzin.meb.gov.tr/meb_iys_dosyalar/2025_09/17153218_istiklalmarsi.mp3", MEB_SAMPLE_PAGE, "meb_resmi"),
     SoundDefinition("saygi_1dk_istiklal", "1 dk saygı duruşu + İstiklâl Marşı", "MEB Resmî Zil Sesleri", "MEB kurumu tarafından okullar için yayımlanan birleşik tören kaydı.", "https://erzin.meb.gov.tr/meb_iys_dosyalar/2025_09/17153158_1dakikaliksaygidurusuveistiklalmarsi.mp3", MEB_SAMPLE_PAGE, "meb_resmi"),

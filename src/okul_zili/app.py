@@ -32,7 +32,7 @@ from .paths import user_data_dir
 from .pilot_log import analyze_files, format_report
 from .preflight import CheckResult, PreflightService
 from .scheduler import BellScheduler, RunState, SchedulerNotice
-from .sound_assets import ensure_generated_sounds
+from .sound_assets import ensure_generated_sounds, restore_bundled_sound
 from .sound_catalog import SOUND_BY_ID, SOUND_DEFINITIONS, download_official_sound, import_audio_file
 from .tray import TrayController
 from .ui_theme import (
@@ -1419,12 +1419,12 @@ class OkulZiliApp:
         self.rules_tree.bind("<Double-1>", lambda event: self._edit_rule())
 
     def _build_sounds(self) -> None:
-        self._page_heading(self.sounds_page, "Sesler ve sirenler", "Zil kayıtlarını değiştirin, doğrulanmış Bakanlık kaydını indirin ve tören akışlarını deneyin")
+        self._page_heading(self.sounds_page, "Sesler ve sirenler", "Paketle gelen MEB zillerini kullanın, kayıtları değiştirin ve tören akışlarını deneyin")
         toolbar = ctk.CTkFrame(self.sounds_page, fg_color="transparent")
         toolbar.pack(fill="x", pady=(0, 12))
         self.sound_admin_buttons = [
             self._action_button(toolbar, "Dosya seç", self._assign_selected_sound),
-            self._action_button(toolbar, "Bakanlık zilini indir", self._download_selected_sound, primary=True, width=164),
+            self._action_button(toolbar, "MEB sesini yükle / geri al", self._download_selected_sound, primary=True, width=190),
             self._action_button(toolbar, "Kaynağı aç", self._open_selected_source),
         ]
         for index, button in enumerate(self.sound_admin_buttons):
@@ -1506,6 +1506,24 @@ class OkulZiliApp:
         if not sound_id:
             return
         definition = SOUND_BY_ID[sound_id]
+        if definition.source_kind == "meb_paket":
+            relative = self.config.sounds.get(sound_id, f"sesler/{sound_id}.wav")
+            destination = self.data_dir / relative
+            if not restore_bundled_sound(sound_id, destination):
+                messagebox.showerror(
+                    "Paket sesi bulunamadı",
+                    "Gömülü MEB zil kaydı paket içinde bulunamadı. Kurulumu onarın veya yeniden kurun.",
+                    parent=self.root,
+                )
+                return
+            self._refresh_sounds()
+            log_event(self.logger, "meb_paket_sesi_geri_yuklendi", ses=sound_id)
+            messagebox.showinfo(
+                "Ses geri yüklendi",
+                "Paketle gelen MEB zil kaydı yeniden etkinleştirildi.",
+                parent=self.root,
+            )
+            return
         if not definition.official_url:
             messagebox.showinfo("Doğrulanmış dosya yok", "Merkez MEB duyurusu doğrulandı; ancak Bakanlığın ürettiği doğrulanabilir ayrı öğrenci/öğretmen ses dosyası yayımlanmamış. Üçüncü taraf kayıtlar otomatik indirilmez. Elinizde kurumdan alınmış dosya varsa ‘Dosya seç’ ile atayabilirsiniz.", parent=self.root)
             return
@@ -1878,6 +1896,7 @@ class OkulZiliApp:
             status = "Hazır" if path and path.is_file() else "Eksik — yedek bip kullanılacak"
             source = {
                 "meb_resmi": "MEB resmî kaynağı",
+                "meb_paket": "Paketle gelen MEB kaydı",
                 "meb_referans": "MEB kaynak referansı",
                 "uygulama": "Çevrimdışı varsayılan",
             }.get(definition.source_kind, "Kaynak belirtilmedi")
@@ -2499,12 +2518,20 @@ def main() -> int:
     if "--paket-kontrol" in sys.argv:
         import miniaudio
 
+        from .audio import validate_wave
         from .defaults import default_config
 
         config = default_config()
         CalendarEngine(config).resolve(date.today())
         if not miniaudio.__version__:
             return 8
+        with tempfile.TemporaryDirectory(prefix="okul-zili-paket-ses-") as directory:
+            data_dir = Path(directory)
+            ensure_generated_sounds(data_dir)
+            for sound_id in ("ogrenci", "ogretmen", "teneffus"):
+                valid, _detail = validate_wave(data_dir / "sesler" / f"{sound_id}.wav")
+                if not valid:
+                    return 9
         return 0
     if "--tepsi-kontrol" in sys.argv:
         tray = TrayController(
