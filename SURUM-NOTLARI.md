@@ -1,5 +1,12 @@
 # Sürüm Notları
 
+## 0.3.2 — Derli toplu ve uyarlanabilir ana sayfa
+
+- Ana sayfa kartları geniş ekranda tek bakışta görülecek biçimde sıkılaştırıldı.
+- Pencere daraldığında özet, eylem ve operasyon kartları taşmak yerine otomatik olarak alt satırlara geçiyor.
+- Kaydırma çubuğu yalnızca içerik gerçekten pencereye sığmadığında gösteriliyor.
+- Geliştirici kartındaki ad, açıklama ve iletişim düğmesi açık/koyu tema renkleriyle uyumlu hale getirildi.
+
 ## 0.3.1 — Gömülü MEB ders zilleri
 
 - Önceki kurulumda kullanılan öğrenci, öğretmen ve teneffüs zilleri çevrimdışı paket varlıklarına eklendi.

@@ -926,6 +926,7 @@ class OkulZiliApp:
         self._scheduler_failure_count = 0
         self._scheduler_last_success_at: datetime | None = None
         self._dashboard_after_id: str | None = None
+        self._dashboard_layout_after_id: str | None = None
         self.appearance_path = self.data_dir / "arayuz.json"
         self.appearance = load_appearance(self.appearance_path)
         ctk.set_appearance_mode(self.appearance)
@@ -1180,52 +1181,62 @@ class OkulZiliApp:
             button.configure(fg_color=ACCENT if active else "transparent", text_color=ACCENT_INK if active else NAV_TEXT)
 
     def _build_dashboard(self) -> None:
-        ctk.CTkLabel(self.dashboard, text="Genel durum", text_color=INK, font=ctk.CTkFont("Segoe UI Variable Display", 28, "bold"), anchor="w").pack(fill="x")
-        ctk.CTkLabel(self.dashboard, text="Bugünün akışı ve okulun zil kontrol merkezi", text_color=MUTED, font=ctk.CTkFont("Segoe UI Variable Text", 13), anchor="w").pack(fill="x", pady=(2, 18))
+        ctk.CTkLabel(self.dashboard, text="Genel durum", text_color=INK, font=ctk.CTkFont("Segoe UI Variable Display", 26, "bold"), anchor="w").pack(fill="x")
+        ctk.CTkLabel(self.dashboard, text="Bugünün akışı ve okulun zil kontrol merkezi", text_color=MUTED, font=ctk.CTkFont("Segoe UI Variable Text", 13), anchor="w").pack(fill="x", pady=(2, 12))
 
-        overview = ctk.CTkFrame(self.dashboard, fg_color="transparent")
-        overview.pack(fill="x")
-        hero = ctk.CTkFrame(overview, fg_color=ACCENT_STRONG, corner_radius=18, height=190)
-        hero.pack(fill="x")
-        hero.pack_propagate(False)
-        ctk.CTkLabel(hero, text="SONRAKİ ZİL", text_color="#99F6E4", font=ctk.CTkFont("Segoe UI Variable Text", 11, "bold"), anchor="w").pack(fill="x", padx=24, pady=(22, 0))
-        self.next_label = ctk.CTkLabel(hero, text="—", text_color="#FFFFFF", font=ctk.CTkFont("Segoe UI Variable Display", 44, "bold"), anchor="w")
-        self.next_label.pack(fill="x", padx=22, pady=(2, 0))
-        self.next_detail = ctk.CTkLabel(hero, text="", text_color="#CCFBF1", font=ctk.CTkFont("Segoe UI Variable Text", 13), anchor="w")
-        self.next_detail.pack(fill="x", padx=24)
+        self.dashboard_overview = ctk.CTkFrame(self.dashboard, fg_color="transparent")
+        self.dashboard_overview.pack(fill="x")
+        self.dashboard_overview.columnconfigure(0, weight=2)
+        self.dashboard_overview.columnconfigure(1, weight=1)
+        self.dashboard_hero = ctk.CTkFrame(self.dashboard_overview, fg_color=ACCENT_STRONG, corner_radius=16, height=138)
+        self.dashboard_hero.grid(row=0, column=0, sticky="nsew")
+        self.dashboard_hero.grid_propagate(False)
+        ctk.CTkLabel(self.dashboard_hero, text="SONRAKİ ZİL", text_color="#99F6E4", font=ctk.CTkFont("Segoe UI Variable Text", 11, "bold"), anchor="w").pack(fill="x", padx=20, pady=(12, 0))
+        self.next_label = ctk.CTkLabel(self.dashboard_hero, text="—", text_color="#FFFFFF", font=ctk.CTkFont("Segoe UI Variable Display", 38, "bold"), anchor="w")
+        self.next_label.pack(fill="x", padx=18, pady=(0, 0))
+        self.next_detail = ctk.CTkLabel(self.dashboard_hero, text="", text_color="#CCFBF1", font=ctk.CTkFont("Segoe UI Variable Text", 12), anchor="w")
+        self.next_detail.pack(fill="x", padx=20)
 
-        health = ctk.CTkFrame(overview, fg_color=SURFACE, corner_radius=18, border_width=1, border_color=BORDER, width=310, height=190)
-        health.pack(fill="x", pady=(12, 0))
-        health.pack_propagate(False)
-        ctk.CTkLabel(health, text="SİSTEM DURUMU", text_color=MUTED, font=ctk.CTkFont("Segoe UI Variable Text", 11, "bold"), anchor="w").pack(fill="x", padx=22, pady=(22, 12))
-        self.health_status_label = ctk.CTkLabel(health, text="●  Kontrol ediliyor", text_color=SUCCESS, font=ctk.CTkFont("Segoe UI Variable Display", 17, "bold"), anchor="w")
-        self.health_status_label.pack(fill="x", padx=22)
-        ctk.CTkLabel(health, text="Ses cihazı, dosyalar ve bugünün programı sürekli izleniyor.", text_color=MUTED, wraplength=260, justify="left", anchor="w", font=ctk.CTkFont("Segoe UI Variable Text", 12)).pack(fill="x", padx=22, pady=(8, 0))
+        self.dashboard_health = ctk.CTkFrame(self.dashboard_overview, fg_color=SURFACE, corner_radius=16, border_width=1, border_color=BORDER, height=138)
+        self.dashboard_health.grid(row=0, column=1, sticky="nsew", padx=(12, 0))
+        self.dashboard_health.grid_propagate(False)
+        ctk.CTkLabel(self.dashboard_health, text="SİSTEM DURUMU", text_color=MUTED, font=ctk.CTkFont("Segoe UI Variable Text", 11, "bold"), anchor="w").pack(fill="x", padx=18, pady=(12, 6))
+        self.health_status_label = ctk.CTkLabel(self.dashboard_health, text="●  Kontrol ediliyor", text_color=SUCCESS, font=ctk.CTkFont("Segoe UI Variable Display", 16, "bold"), anchor="w")
+        self.health_status_label.pack(fill="x", padx=18)
+        ctk.CTkLabel(self.dashboard_health, text="Ses cihazı, dosyalar ve bugünün programı izleniyor.", text_color=MUTED, wraplength=320, justify="left", anchor="w", font=ctk.CTkFont("Segoe UI Variable Text", 12)).pack(fill="x", padx=18, pady=(6, 0))
 
-        ctk.CTkLabel(self.dashboard, text="Hızlı eylemler", text_color=INK_SUBTLE, font=ctk.CTkFont("Segoe UI Variable Display", 16, "bold"), anchor="w").pack(fill="x", pady=(22, 10))
-        actions = ctk.CTkFrame(self.dashboard, fg_color="transparent")
-        actions.pack(fill="x")
-        primary = {"height": 50, "corner_radius": 12, "fg_color": ACCENT_STRONG, "hover_color": ACCENT_HOVER, "text_color": "#FFFFFF", "font": ctk.CTkFont("Segoe UI Variable Text", 13, "bold")}
-        secondary = {"height": 50, "corner_radius": 12, "fg_color": SURFACE, "hover_color": HOVER, "text_color": INK_SUBTLE, "border_width": 1, "border_color": BORDER, "font": ctk.CTkFont("Segoe UI Variable Text", 13, "bold")}
-        self.manual_student_button = ctk.CTkButton(actions, text="Öğrenci zilini çal", command=lambda: self._manual_play("ogrenci"), **primary)
-        self.manual_lesson_button = ctk.CTkButton(actions, text="Öğretmen zilini çal", command=lambda: self._manual_play("ogretmen"), **primary)
-        self.manual_break_button = ctk.CTkButton(actions, text="Teneffüs zilini çal", command=lambda: self._manual_play("teneffus"), **primary)
-        self.run_button = ctk.CTkButton(actions, text="Zilleri duraklat", command=self._toggle_scheduler, **secondary)
-        self.defer_button = ctk.CTkButton(actions, text="Sonraki zili 5 dk ertele", command=self._defer_next, **secondary)
-        self.mute_button = ctk.CTkButton(actions, text="Bugün zil çalma", command=self._toggle_mute_today, **secondary)
-        for index, button in enumerate((self.manual_student_button, self.manual_lesson_button, self.manual_break_button, self.run_button, self.defer_button, self.mute_button)):
-            row, column = divmod(index, 2)
-            button.grid(row=row, column=column, padx=(0 if column == 0 else 6, 6 if column == 0 else 0), pady=5, sticky="ew")
-        for column in range(2):
-            actions.columnconfigure(column, weight=1)
+        ctk.CTkLabel(self.dashboard, text="Hızlı eylemler", text_color=INK_SUBTLE, font=ctk.CTkFont("Segoe UI Variable Display", 15, "bold"), anchor="w").pack(fill="x", pady=(12, 5))
+        self.dashboard_actions = ctk.CTkFrame(self.dashboard, fg_color="transparent")
+        self.dashboard_actions.pack(fill="x")
+        primary = {"height": 38, "corner_radius": 10, "fg_color": ACCENT_STRONG, "hover_color": ACCENT_HOVER, "text_color": "#FFFFFF", "font": ctk.CTkFont("Segoe UI Variable Text", 12, "bold")}
+        secondary = {"height": 38, "corner_radius": 10, "fg_color": SURFACE, "hover_color": HOVER, "text_color": INK_SUBTLE, "border_width": 1, "border_color": BORDER, "font": ctk.CTkFont("Segoe UI Variable Text", 12, "bold")}
+        self.manual_student_button = ctk.CTkButton(self.dashboard_actions, text="Öğrenci zilini çal", command=lambda: self._manual_play("ogrenci"), **primary)
+        self.manual_lesson_button = ctk.CTkButton(self.dashboard_actions, text="Öğretmen zilini çal", command=lambda: self._manual_play("ogretmen"), **primary)
+        self.manual_break_button = ctk.CTkButton(self.dashboard_actions, text="Teneffüs zilini çal", command=lambda: self._manual_play("teneffus"), **primary)
+        self.run_button = ctk.CTkButton(self.dashboard_actions, text="Zilleri duraklat", command=self._toggle_scheduler, **secondary)
+        self.defer_button = ctk.CTkButton(self.dashboard_actions, text="Sonraki zili 5 dk ertele", command=self._defer_next, **secondary)
+        self.mute_button = ctk.CTkButton(self.dashboard_actions, text="Bugün zil çalma", command=self._toggle_mute_today, **secondary)
+        self.dashboard_action_buttons = (
+            self.manual_student_button,
+            self.manual_lesson_button,
+            self.manual_break_button,
+            self.run_button,
+            self.defer_button,
+            self.mute_button,
+        )
 
         self._build_dashboard_operations()
 
         self.alert_frame = ctk.CTkFrame(self.dashboard, fg_color=SURFACE, corner_radius=16, border_width=1, border_color=BORDER)
-        self.alert_frame.pack(fill="both", expand=True, pady=(18, 0))
-        ctk.CTkLabel(self.alert_frame, text="Uyarılar ve öneriler", text_color=INK_SUBTLE, font=ctk.CTkFont("Segoe UI Variable Display", 15, "bold"), anchor="w").pack(fill="x", padx=20, pady=(16, 4))
-        self.alert_text = ctk.CTkTextbox(self.alert_frame, height=110, wrap="word", state="disabled", fg_color=SURFACE, text_color=INK_SUBTLE, border_width=0, corner_radius=0, font=ctk.CTkFont("Segoe UI Variable Text", 12))
-        self.alert_text.pack(fill="both", expand=True, padx=12, pady=(0, 10))
+        self.alert_frame.pack(fill="x", pady=(10, 0))
+        ctk.CTkLabel(self.alert_frame, text="Uyarılar ve öneriler", text_color=INK_SUBTLE, font=ctk.CTkFont("Segoe UI Variable Display", 14, "bold"), anchor="w").pack(fill="x", padx=18, pady=(8, 0))
+        self.alert_text = ctk.CTkTextbox(self.alert_frame, height=58, wrap="word", state="disabled", fg_color=SURFACE, text_color=INK_SUBTLE, border_width=0, corner_radius=0, font=ctk.CTkFont("Segoe UI Variable Text", 12))
+        self.alert_text.pack(fill="x", padx=10, pady=(0, 5))
+        self.dashboard.bind("<Configure>", self._schedule_dashboard_layout, add="+")
+        self.dashboard._parent_canvas.bind(
+            "<Configure>", lambda _event: self.root.after_idle(self._update_dashboard_scrollbar), add="+"
+        )
+        self.root.after_idle(lambda: self._layout_dashboard(self.dashboard.winfo_width()))
 
     def _build_dashboard_operations(self) -> None:
         ctk.CTkLabel(
@@ -1234,39 +1245,112 @@ class OkulZiliApp:
             text_color=INK_SUBTLE,
             font=ctk.CTkFont("Segoe UI Variable Display", 16, "bold"),
             anchor="w",
-        ).pack(fill="x", pady=(22, 10))
-        operations = ctk.CTkFrame(self.dashboard, fg_color="transparent")
-        operations.pack(fill="x")
-        operations.columnconfigure(0, weight=1)
+        ).pack(fill="x", pady=(12, 5))
+        self.dashboard_operations = ctk.CTkFrame(self.dashboard, fg_color="transparent")
+        self.dashboard_operations.pack(fill="x")
+        self.dashboard_operations.columnconfigure(0, weight=1)
+        self.dashboard_operations.columnconfigure(1, weight=1)
 
-        ceremony = ctk.CTkFrame(operations, fg_color=SURFACE, corner_radius=16, border_width=1, border_color=BORDER)
-        ceremony.grid(row=0, column=0, sticky="ew")
-        ctk.CTkLabel(ceremony, text="Tören provası", text_color=INK, font=ctk.CTkFont("Segoe UI Variable Display", 15, "bold"), anchor="w").pack(fill="x", padx=18, pady=(16, 2))
-        ctk.CTkLabel(ceremony, text="Yayın başlamadan önce güvenlik onayı istenir.", text_color=MUTED, font=ctk.CTkFont("Segoe UI Variable Text", 12), anchor="w").pack(fill="x", padx=18, pady=(0, 10))
-        ceremony_actions = ctk.CTkFrame(ceremony, fg_color="transparent")
-        ceremony_actions.pack(fill="x", padx=14, pady=(0, 14))
+        self.dashboard_ceremony = ctk.CTkFrame(self.dashboard_operations, fg_color=SURFACE, corner_radius=14, border_width=1, border_color=BORDER)
+        self.dashboard_ceremony.grid(row=0, column=0, sticky="nsew")
+        ctk.CTkLabel(self.dashboard_ceremony, text="Tören provası", text_color=INK, font=ctk.CTkFont("Segoe UI Variable Display", 14, "bold"), anchor="w").pack(fill="x", padx=16, pady=(8, 0))
+        ctk.CTkLabel(self.dashboard_ceremony, text="Yayın öncesinde güvenlik onayı istenir.", text_color=MUTED, font=ctk.CTkFont("Segoe UI Variable Text", 11), anchor="w").pack(fill="x", padx=16, pady=(0, 4))
+        ceremony_actions = ctk.CTkFrame(self.dashboard_ceremony, fg_color="transparent")
+        ceremony_actions.pack(fill="x", padx=10, pady=(0, 7))
         ceremony_buttons = [
             self._action_button(ceremony_actions, "Sözlü marş", lambda: self._confirm_ceremony_sound("istiklal_sozlu", "Sözlü İstiklâl Marşı"), width=104),
             self._action_button(ceremony_actions, "Bando", lambda: self._confirm_ceremony_sound("istiklal_sozsuz", "Bando İstiklâl Marşı"), width=88),
             self._action_button(ceremony_actions, "10 Kasım akışı", self._confirm_november_sequence, width=128),
         ]
         for button in ceremony_buttons:
+            button.configure(height=38)
             button.pack(side="left", fill="x", expand=True, padx=4)
 
-        drills = ctk.CTkFrame(operations, fg_color=SURFACE, corner_radius=16, border_width=1, border_color=BORDER)
-        drills.grid(row=1, column=0, sticky="ew", pady=(12, 0))
-        ctk.CTkLabel(drills, text="Tatbikat", text_color=INK, font=ctk.CTkFont("Segoe UI Variable Display", 15, "bold"), anchor="w").pack(fill="x", padx=18, pady=(16, 2))
-        ctk.CTkLabel(drills, text="Alarm yalnızca onaydan sonra yayınlanır.", text_color=MUTED, font=ctk.CTkFont("Segoe UI Variable Text", 12), anchor="w").pack(fill="x", padx=18, pady=(0, 10))
-        drill_actions = ctk.CTkFrame(drills, fg_color="transparent")
-        drill_actions.pack(fill="x", padx=14, pady=(0, 14))
+        self.dashboard_drills = ctk.CTkFrame(self.dashboard_operations, fg_color=SURFACE, corner_radius=14, border_width=1, border_color=BORDER)
+        self.dashboard_drills.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
+        ctk.CTkLabel(self.dashboard_drills, text="Tatbikat", text_color=INK, font=ctk.CTkFont("Segoe UI Variable Display", 14, "bold"), anchor="w").pack(fill="x", padx=16, pady=(8, 0))
+        ctk.CTkLabel(self.dashboard_drills, text="Alarm yalnızca onaydan sonra yayınlanır.", text_color=MUTED, font=ctk.CTkFont("Segoe UI Variable Text", 11), anchor="w").pack(fill="x", padx=16, pady=(0, 4))
+        drill_actions = ctk.CTkFrame(self.dashboard_drills, fg_color="transparent")
+        drill_actions.pack(fill="x", padx=10, pady=(0, 7))
         self.dashboard_drill_buttons = [
             self._action_button(drill_actions, "Deprem", lambda: self._play_drill("tatbikat_deprem"), danger=True, width=84),
             self._action_button(drill_actions, "Tahliye", lambda: self._play_drill("tatbikat_tahliye"), danger=True, width=84),
             self._action_button(drill_actions, "Yangın", lambda: self._play_drill("tatbikat_yangin"), danger=True, width=84),
         ]
         for button in self.dashboard_drill_buttons:
+            button.configure(height=38)
             button.pack(side="left", fill="x", expand=True, padx=4)
         self.dashboard_operational_buttons = [*ceremony_buttons, *self.dashboard_drill_buttons]
+
+    def _schedule_dashboard_layout(self, event: tk.Event) -> None:
+        if self._dashboard_layout_after_id is not None:
+            try:
+                self.root.after_cancel(self._dashboard_layout_after_id)
+            except tk.TclError:
+                pass
+        self._dashboard_layout_after_id = self.root.after(
+            80, lambda width=event.width: self._layout_dashboard(width)
+        )
+
+    def _layout_dashboard(self, width: int) -> None:
+        self._dashboard_layout_after_id = None
+        wide, action_columns = self._dashboard_layout_spec(width)
+
+        self.dashboard_hero.grid_forget()
+        self.dashboard_health.grid_forget()
+        self.dashboard_overview.columnconfigure(1, weight=1 if wide else 0)
+        self.dashboard_hero.grid(row=0, column=0, sticky="nsew")
+        if wide:
+            self.dashboard_health.grid(row=0, column=1, sticky="nsew", padx=(12, 0))
+        else:
+            self.dashboard_health.grid(row=1, column=0, sticky="ew", pady=(10, 0))
+
+        for column in range(3):
+            self.dashboard_actions.columnconfigure(column, weight=1 if column < action_columns else 0)
+        for index, button in enumerate(self.dashboard_action_buttons):
+            button.grid_forget()
+            row, column = divmod(index, action_columns)
+            button.grid(
+                row=row,
+                column=column,
+                padx=(0 if column == 0 else 4, 0 if column == action_columns - 1 else 4),
+                pady=4,
+                sticky="ew",
+            )
+
+        self.dashboard_ceremony.grid_forget()
+        self.dashboard_drills.grid_forget()
+        self.dashboard_operations.columnconfigure(1, weight=1 if wide else 0)
+        self.dashboard_ceremony.grid(row=0, column=0, sticky="nsew")
+        if wide:
+            self.dashboard_drills.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
+        else:
+            self.dashboard_drills.grid(row=1, column=0, sticky="ew", pady=(10, 0))
+        self.root.after_idle(self._update_dashboard_scrollbar)
+
+    def _update_dashboard_scrollbar(self) -> None:
+        """Show dashboard scrolling only when the content genuinely overflows."""
+        if not self.root.winfo_exists():
+            return
+        canvas = self.dashboard._parent_canvas
+        scrollbar = self.dashboard._scrollbar
+        bounds = canvas.bbox("all")
+        content_height = 0 if bounds is None else bounds[3] - bounds[1]
+        overflow = content_height > canvas.winfo_height() + 12
+        if overflow:
+            scrollbar.grid()
+        else:
+            canvas.yview_moveto(0)
+            scrollbar.grid_remove()
+
+    @staticmethod
+    def _dashboard_layout_spec(width: int) -> tuple[bool, int]:
+        """Return the card mode and action-column count for a viewport width."""
+        if width >= 900:
+            return True, 3
+        if width >= 560:
+            return False, 2
+        return False, 1
 
     @staticmethod
     def _page_heading(parent: tk.Misc, title: str, subtitle: str) -> None:
@@ -1646,11 +1730,11 @@ class OkulZiliApp:
 
         developer = ctk.CTkFrame(self.about_page, fg_color=SURFACE, corner_radius=16, border_width=1, border_color=BORDER)
         developer.pack(fill="x", pady=(0, 14))
-        ctk.CTkLabel(developer, text="Geliştirici", text_color=INK, font=ctk.CTkFont("Segoe UI Variable Display", 20, "bold"), anchor="w").pack(fill="x", padx=22, pady=(20, 8))
-        ctk.CTkLabel(developer, text=DEVELOPER_NAME, text_color="#F2F8FA", font=ctk.CTkFont("Segoe UI Variable Text", 16, "bold"), anchor="w").pack(fill="x", padx=22)
-        email_button = self._action_button(developer, f"✉  {DEVELOPER_EMAIL}", lambda: webbrowser.open(f"mailto:{DEVELOPER_EMAIL}"), width=230)
+        ctk.CTkLabel(developer, text="Geliştirici", text_color=ACCENT, font=ctk.CTkFont("Segoe UI Variable Display", 16, "bold"), anchor="w").pack(fill="x", padx=22, pady=(18, 5))
+        ctk.CTkLabel(developer, text=DEVELOPER_NAME, text_color=INK, font=ctk.CTkFont("Segoe UI Variable Display", 19, "bold"), anchor="w").pack(fill="x", padx=22)
+        email_button = self._action_button(developer, f"✉  {DEVELOPER_EMAIL}", lambda: webbrowser.open(f"mailto:{DEVELOPER_EMAIL}"), primary=True, width=230)
         email_button.pack(anchor="w", padx=22, pady=(10, 10))
-        ctk.CTkLabel(developer, text="Talep, öneri, hata bildirimi ve şikâyetlerinizi bu e-posta adresine iletebilirsiniz.", text_color=INK_SUBTLE, font=ctk.CTkFont("Segoe UI Variable Text", 13), anchor="w", justify="left", wraplength=900).pack(fill="x", padx=22, pady=(0, 20))
+        ctk.CTkLabel(developer, text="Talep, öneri, hata bildirimi ve şikâyetlerinizi bu e-posta adresine iletebilirsiniz.", text_color=MUTED, font=ctk.CTkFont("Segoe UI Variable Text", 13), anchor="w", justify="left", wraplength=900).pack(fill="x", padx=22, pady=(0, 18))
 
         license_card = ctk.CTkFrame(self.about_page, fg_color=SURFACE, corner_radius=16, border_width=1, border_color=BORDER)
         license_card.pack(fill="x", pady=(0, 14))

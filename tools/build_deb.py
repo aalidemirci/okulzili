@@ -7,7 +7,7 @@ import tarfile
 import time
 
 
-VERSION = "0.2.0"
+VERSION = "0.3.2"
 
 
 def _tar_xz(entries: list[tuple[Path | None, str, int, bytes | None]]) -> bytes:
