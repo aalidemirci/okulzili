@@ -11,7 +11,7 @@ from .defaults import default_config, infer_day_schedule
 from .domain import SchoolConfig
 
 
-CURRENT_SCHEMA_VERSION = 4
+CURRENT_SCHEMA_VERSION = 5
 
 
 class ConfigError(RuntimeError):
@@ -39,6 +39,12 @@ def migrate(raw: dict[str, Any]) -> dict[str, Any]:
     if version == 3:
         migrated["schema_version"] = 4
         version = 4
+    if version == 4:
+        migrated["schema_version"] = 5
+        migrated.setdefault("recess_music_enabled", False)
+        migrated.setdefault("recess_music_volume", 20)
+        migrated.setdefault("recess_music_track", "muzik_bach_prelud")
+        version = 5
     if version != CURRENT_SCHEMA_VERSION:
         raise ConfigError(f"Desteklenmeyen yapılandırma sürümü: {version}")
     # Yeni ses yuvalarını eski v2 kurulumlarına sessizce ekle; kullanıcının

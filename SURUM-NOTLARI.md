@@ -1,5 +1,16 @@
 # Sürüm Notları
 
+## 1.0.0 — Final masaüstü düzeni ve güvenli yayın katmanı
+
+- Giriş penceresi Windows ekran ölçeklemesinde eylem düğmelerini gizlemeyecek şekilde büyütüldü; profil ve PIN alanları eşit yüksekliğe getirildi.
+- Haftalık programda otomatik hesaplama bölümü sonuç tablosunun üstüne alındı ve iç içe kaydırma kaldırıldı.
+- Teneffüs müziği ayrı, düşük öncelikli oynatıcıya taşındı; varsayılan kapalı, varsayılan ses %20 ve güvenli üst sınır %40'tır.
+- Teneffüs müziği sıradaki zilden bir saniye önce ve her türlü elle/tören/tatbikat yayınında otomatik kesilir.
+- Kamu malı Bach ve Beethoven bestelerinden uygulama tarafından sentezlenen iki sözsüz parça çevrimdışı havuza eklendi.
+- AFAD'ın resmî tarifine göre üç dakikalık sarı, kırmızı ve KBRN ikazları çevrimdışı sentezlenir; okul içi tatbikat seslerinden ayrı gösterilir.
+- Uzun sirenlerin ilk kurulum üretimi döngü önbelleklemesiyle hızlandırıldı; sürekli çalışan zamanlayıcıya ek periyodik yük getirmez.
+- Yapılandırma şeması v5'e yükseltildi; eski kurulumlar müzik kapalı kalacak şekilde otomatik taşınır.
+
 ## 0.5.0 — Blok içi sınıf değişim zili
 
 - Blok derslerin içindeki her normal ders sınırına ayrı bir “blok içi sınıf değişimi” olayı eklenir.

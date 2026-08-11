@@ -22,3 +22,23 @@ Uygulama; öğrenci, öğretmen ve teneffüs kayıtlarının yanında doğrudan 
 10 Kasım senaryosu saat 09.05 için iki dakikalık sireni tamamlar, ardından sözsüz/bando İstiklâl Marşı kaydını çalar. Diğer saygı duruşlarında süre bir dakikadır. Gerçek tören öncesinde ses çıkışı, amplifikatör seviyesi ve dosyalar **Ön kontrol** ile doğrulanmalıdır.
 
 Tatbikat sesleri normal ders zillerinden belirgin biçimde farklıdır. Alarm düğmeleri onay ister; okulun yazılı afet/acil durum planı devreye alınmadan kullanılmamalıdır. Uygulama fiziksel yangın alarmı veya sertifikalı acil anons sisteminin yerine geçmez.
+
+## AFAD ikazları
+
+Paket, AFAD'ın resmî **İkaz ve Alarm İşaretleri** sayfasındaki süre ve ses karakteri tariflerinden üç çevrimdışı ses üretir. Kayıtlar başka bir ses dosyasından kopyalanmaz; uygulama tarafından matematiksel olarak sentezlenir ve kullanıcı tarafından değiştirilebilir veya **Varsayılana döndür** ile yeniden üretilebilir.
+
+- Sarı ikaz: üç dakika süreli düz siren.
+- Kırmızı alarm: üç dakika süreli yükselip alçalan dalgalı siren.
+- KBRN alarmı: üç dakika süreli kesikli siren.
+- Resmî tarif: [AFAD — İkaz ve Alarm İşaretleri](https://www.afad.gov.tr/ikaz-alarm-isaretleri)
+
+Bu sivil savunma işaretleri, okul içi deprem/tahliye/yangın prova düğmelerinden ayrı tutulur; işaretlerin anlamları birbirine karıştırılmaz.
+
+## Teneffüs müziği
+
+Teneffüs müziği varsayılan olarak kapalı ve etkinleştirildiğinde %20 ses düzeyindedir; arayüz güvenlik amacıyla en fazla %40'a izin verir. Bir sonraki zil başlamadan bir saniye önce veya herhangi bir elle/tatbikat/tören yayını başlatıldığında müzik kesilir. Havuzdaki kayıtlar başka icralardan alınmış ses kayıtları değildir:
+
+- Johann Sebastian Bach, BWV 846 Do Majör Prelüd — kamu malı besteden uygulama tarafından sentezlenen kısa sözsüz düzenleme. [Nota kaynağı (IMSLP)](https://imslp.org/wiki/Prelude_and_Fugue_in_C_major%2C_BWV_846_(Bach%2C_Johann_Sebastian))
+- Ludwig van Beethoven, 9. Senfoni “Neşeye Övgü” teması — kamu malı besteden uygulama tarafından sentezlenen kısa sözsüz düzenleme. [Nota kaynağı (IMSLP)](https://imslp.org/wiki/Symphony_No.9%2C_Op.125_(Beethoven%2C_Ludwig_van))
+
+MEB sayfalarında yayımlanan marş dosyalarının çevrimiçi erişilebilir olması yeniden dağıtım izni anlamına gelmediğinden, açık yeniden dağıtım izni doğrulanmayan kayıtlar kurulum paketine kopyalanmaz. Uygulama resmî kaynak sayfasını gösterir ve kullanıcı kendi kurumunca kullanım hakkı bulunan kaydı ilgili yuvaya atayabilir.

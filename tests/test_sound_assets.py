@@ -51,6 +51,17 @@ class BundledSoundAssetTests(unittest.TestCase):
             ensure_generated_sounds(root)
             self.assertEqual(before, custom.read_bytes())
 
+    def test_afad_alerts_are_three_minutes_and_music_is_bundled_offline(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            ensure_generated_sounds(root)
+            for sound_id in ("afad_sari_ikaz", "afad_kirmizi_alarm", "afad_kbrn_alarm"):
+                with wave.open(str(root / "sesler" / f"{sound_id}.wav"), "rb") as source:
+                    self.assertAlmostEqual(180.0, source.getnframes() / source.getframerate(), places=2)
+            for sound_id in ("muzik_bach_prelud", "muzik_ode_to_joy"):
+                valid, detail = validate_wave(root / "sesler" / f"{sound_id}.wav")
+                self.assertTrue(valid, detail)
+
 
 if __name__ == "__main__":
     unittest.main()

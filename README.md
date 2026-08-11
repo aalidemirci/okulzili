@@ -60,7 +60,7 @@ Ayrıntılı kurulum için [KURULUM.md](KURULUM.md), günlük kullanım için [K
 
 ## Seslerin lisansı
 
-İlk açılışta oluşturulan örnek zil sesleri uygulamanın matematiksel olarak ürettiği basit tonlardır; telifli müzik içermez. Kullanıcı kendi müzik veya anons dosyalarının kullanım hakkından sorumludur.
+İlk açılışta oluşturulan örnek zil ve AFAD ikaz sesleri uygulamanın matematiksel olarak ürettiği tonlardır. Teneffüs havuzundaki sözsüz parçalar kamu malı bestelerden yerel olarak sentezlenir; üçüncü taraf icra kaydı içermez. Ayrıntılı kaynak ve kullanım notları [SES-KAYNAKLARI.md](SES-KAYNAKLARI.md) dosyasındadır. Kullanıcı kendi müzik veya anons dosyalarının kullanım hakkından sorumludur.
 
 Sistem tepsisi için LGPLv3 lisanslı `pystray` 0.19.5 kaynakları paketlenir. Lisans metinleri `THIRD_PARTY_LICENSES` dizinindedir. Pillow ve six lisansları dağıtım oluşturulurken ilgili paketlerden kurulum paketine eklenir.
 

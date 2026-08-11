@@ -28,6 +28,42 @@ SIRENS: dict[str, tuple[int, int, int, int]] = {
     "acil_durum.wav": (10_000, 520, 1320, 700),
 }
 
+# Sivil savunma işaretleri AFAD'ın yayımladığı üç dakikalık tariflere göre
+# uygulama tarafından sentezlenir. Bunlar üçüncü taraf bir ses kaydının kopyası
+# değildir ve ilk çalıştırmada çevrimdışı hazırlanır.
+AFAD_ALERTS = {
+    "afad_sari_ikaz.wav": "steady",
+    "afad_kirmizi_alarm.wav": "wave",
+    "afad_kbrn_alarm.wav": "interrupted",
+}
+
+# Besteleri kamu malı olan iki kısa, sözsüz düzenleme. Kayıtlar başka bir
+# icradan alınmaz; aşağıdaki nota dizilerinden yerel olarak sentezlenir.
+MUSIC_MELODIES: dict[str, tuple[tuple[int, int], ...]] = {
+    "muzik_bach_prelud.wav": tuple(
+        (note, 220)
+        for chord in (
+            (60, 64, 67, 72, 64, 67, 72, 76),
+            (60, 62, 69, 74, 62, 69, 74, 77),
+            (59, 62, 67, 74, 62, 67, 74, 79),
+            (60, 64, 67, 72, 64, 67, 72, 76),
+            (57, 60, 64, 69, 60, 64, 69, 72),
+            (55, 59, 62, 67, 59, 62, 67, 71),
+        )
+        for note in chord
+    ),
+    "muzik_ode_to_joy.wav": tuple(
+        (note, duration)
+        for _ in range(2)
+        for note, duration in (
+            (64, 360), (64, 360), (65, 360), (67, 360),
+            (67, 360), (65, 360), (64, 360), (62, 360),
+            (60, 360), (60, 360), (62, 360), (64, 360),
+            (64, 540), (62, 180), (62, 720),
+        )
+    ),
+}
+
 BUNDLED_SOUND_ASSETS: dict[str, str] = {
     "ogrenci": "meb-ogrenci-teneffus.wav",
     "ogretmen": "meb-ogretmen.wav",
@@ -101,18 +137,24 @@ def _siren_wave(duration_ms: int, low: int, high: int, cycle_ms: int) -> bytes:
     sample_rate = 22_050
     frames = int(sample_rate * duration_ms / 1000)
     cycle_frames = max(1, int(sample_rate * cycle_ms / 1000))
-    samples = array("h")
+    block = array("h")
     phase = 0.0
-    for index in range(frames):
-        position = (index % cycle_frames) / cycle_frames
+    for index in range(cycle_frames):
+        position = index / cycle_frames
         triangle = 1.0 - abs(2.0 * position - 1.0)
         frequency = low + (high - low) * triangle
         phase += 2 * math.pi * frequency / sample_rate
         pulse = 1.0
         if duration_ms < 60_000 and (index // max(1, cycle_frames // 3)) % 3 == 2:
             pulse = 0.12
-        fade = min(1.0, index / 500, (frames - index) / 500)
-        samples.append(int(9_000 * pulse * fade * math.sin(phase)))
+        block.append(int(9_000 * pulse * math.sin(phase)))
+    repeats = (frames + cycle_frames - 1) // cycle_frames
+    samples = (block * repeats)[:frames]
+    fade_frames = min(500, frames // 2)
+    for index in range(fade_frames):
+        factor = index / max(1, fade_frames)
+        samples[index] = int(samples[index] * factor)
+        samples[-index - 1] = int(samples[-index - 1] * factor)
     output = io.BytesIO()
     with wave.open(output, "wb") as target:
         target.setnchannels(1)
@@ -120,6 +162,86 @@ def _siren_wave(duration_ms: int, low: int, high: int, cycle_ms: int) -> bytes:
         target.setframerate(sample_rate)
         target.writeframes(samples.tobytes())
     return output.getvalue()
+
+
+def _afad_alert_wave(kind: str, duration_ms: int = 180_000) -> bytes:
+    sample_rate = 8_000
+    frames = int(sample_rate * duration_ms / 1000)
+    cycle_seconds = 8 if kind == "wave" else (2 if kind == "interrupted" else 1)
+    cycle_frames = sample_rate * cycle_seconds
+    block = array("h")
+    phase = 0.0
+    for index in range(cycle_frames):
+        seconds = index / sample_rate
+        if kind == "wave":
+            position = (seconds % 8.0) / 8.0
+            frequency = 430 + 260 * (1.0 - abs(2.0 * position - 1.0))
+            amplitude = 7_000
+        elif kind == "interrupted":
+            frequency = 620
+            amplitude = 7_000 if int(seconds) % 2 == 0 else 0
+        else:
+            frequency = 520
+            amplitude = 7_000
+        phase += 2 * math.pi * frequency / sample_rate
+        block.append(int(amplitude * math.sin(phase)))
+    repeats = (frames + cycle_frames - 1) // cycle_frames
+    samples = (block * repeats)[:frames]
+    fade_frames = min(500, frames // 2)
+    for index in range(fade_frames):
+        factor = index / max(1, fade_frames)
+        samples[index] = int(samples[index] * factor)
+        samples[-index - 1] = int(samples[-index - 1] * factor)
+    output = io.BytesIO()
+    with wave.open(output, "wb") as target:
+        target.setnchannels(1)
+        target.setsampwidth(2)
+        target.setframerate(sample_rate)
+        target.writeframes(samples.tobytes())
+    return output.getvalue()
+
+
+def _music_wave(notes: tuple[tuple[int, int], ...], repeats: int = 1) -> bytes:
+    sample_rate = 22_050
+    samples = array("h")
+    for _ in range(repeats):
+        for midi_note, duration_ms in notes:
+            frequency = 440.0 * (2.0 ** ((midi_note - 69) / 12.0))
+            frames = int(sample_rate * duration_ms / 1000)
+            for index in range(frames):
+                envelope = min(1.0, index / 260, (frames - index) / 500)
+                fundamental = math.sin(2 * math.pi * frequency * index / sample_rate)
+                overtone = 0.18 * math.sin(4 * math.pi * frequency * index / sample_rate)
+                samples.append(int(6_000 * envelope * (fundamental + overtone)))
+    output = io.BytesIO()
+    with wave.open(output, "wb") as target:
+        target.setnchannels(1)
+        target.setsampwidth(2)
+        target.setframerate(sample_rate)
+        target.writeframes(samples.tobytes())
+    return output.getvalue()
+
+
+def restore_generated_sound(sound_id: str, destination: Path) -> bool:
+    filename = f"{sound_id}.wav"
+    if filename in TONES:
+        data = _tone_wave(TONES[filename])
+    elif filename in SIRENS:
+        data = _siren_wave(*SIRENS[filename])
+    elif filename in AFAD_ALERTS:
+        data = _afad_alert_wave(AFAD_ALERTS[filename])
+    elif filename in MUSIC_MELODIES:
+        data = _music_wave(MUSIC_MELODIES[filename])
+    else:
+        return False
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_name(f".{destination.name}.paket-yeni")
+    try:
+        temporary.write_bytes(data)
+        temporary.replace(destination)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return True
 
 
 def ensure_generated_sounds(base_dir: Path) -> None:
@@ -137,3 +259,11 @@ def ensure_generated_sounds(base_dir: Path) -> None:
         destination = sound_dir / filename
         if not destination.exists():
             destination.write_bytes(_siren_wave(*parameters))
+    for filename, kind in AFAD_ALERTS.items():
+        destination = sound_dir / filename
+        if not destination.exists():
+            destination.write_bytes(_afad_alert_wave(kind))
+    for filename, notes in MUSIC_MELODIES.items():
+        destination = sound_dir / filename
+        if not destination.exists():
+            destination.write_bytes(_music_wave(notes))
