@@ -34,4 +34,4 @@ cp -R "$PROJECT_ROOT/THIRD_PARTY_LICENSES" "$BUILD_ROOT/usr/share/doc/okul-zili/
 
 chmod 0755 "$BUILD_ROOT/DEBIAN/postinst" "$BUILD_ROOT/DEBIAN/prerm" "$BUILD_ROOT/usr/bin/okul-zili" "$BUILD_ROOT/usr/share/okul-zili/tools/verify-linux-install.sh" "$BUILD_ROOT/usr/share/okul-zili/tools/analyze_pilot_log.py"
 find "$BUILD_ROOT" -type d -exec chmod 0755 {} \;
-dpkg-deb --root-owner-group --build "$BUILD_ROOT" "$OUTPUT_DIR/okul-zili_0.3.1_all.deb"
+dpkg-deb --root-owner-group --build "$BUILD_ROOT" "$OUTPUT_DIR/okul-zili_0.3.2_all.deb"

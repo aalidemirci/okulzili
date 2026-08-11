@@ -5,6 +5,7 @@ import json
 import pytest
 
 from okul_zili.ui_theme import load_appearance, save_appearance
+from okul_zili.app import OkulZiliApp
 
 
 def test_appearance_defaults_to_light(tmp_path) -> None:
@@ -30,3 +31,11 @@ def test_invalid_saved_appearance_falls_back_to_light(tmp_path, payload) -> None
 def test_invalid_appearance_cannot_be_saved(tmp_path) -> None:
     with pytest.raises(ValueError):
         save_appearance(tmp_path / "arayuz.json", "system")
+
+
+@pytest.mark.parametrize(
+    ("width", "expected"),
+    [(420, (False, 1)), (559, (False, 1)), (560, (False, 2)), (899, (False, 2)), (900, (True, 3))],
+)
+def test_dashboard_layout_reflows_for_available_width(width, expected) -> None:
+    assert OkulZiliApp._dashboard_layout_spec(width) == expected

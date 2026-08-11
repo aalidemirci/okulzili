@@ -5,7 +5,7 @@ Bu kılavuz teknik olmayan okul personeli için hazırlanmıştır. Kuruluma ba�
 ## Windows 10 ve Windows 11
 
 1. Size verilen `OkulZili-Kurulum.exe` dosyasını USB bellekten bilgisayara kopyalayın.
-2. Dosyaya çift tıklayın. Windows koruma uyarısı gösterirse dosyanın okul yönetiminin teslim ettiği kopya olduğunu ve yanında verilen `SHA256SUMS.txt` değeriyle eşleştiğini doğrulayın. Sonra **Ek bilgi → Yine de çalıştır** yolunu kullanın. Mevcut 0.1.0 deneme paketi kod imzalı değildir; bu nedenle SmartScreen uyarısı beklenir.
+2. Dosyaya çift tıklayın. Windows koruma uyarısı gösterirse dosyanın okul yönetiminin teslim ettiği kopya olduğunu ve yanında verilen `SHA256SUMS.txt` değeriyle eşleştiğini doğrulayın. Sonra **Ek bilgi → Yine de çalıştır** yolunu kullanın. Paket kod imzalı değildir; bu nedenle SmartScreen uyarısı beklenir.
 3. Kurulum dilinde Türkçeyi seçin ve **İleri** düğmelerini izleyin.
 4. “Oturum açıldığında Okul Zili'ni başlat” görevinin seçili olduğundan emin olun.
 5. **Kur** düğmesine basın. Kurulum internet bağlantısı istemez.
