@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date, datetime, timedelta
 import re
 
@@ -283,4 +284,30 @@ def set_preparation_bells(
                 )
                 without_preparation = sort_specs((*without_preparation, *preparations))
         updated[weekday] = without_preparation
+    return updated
+
+
+def copy_schedule_to_days(
+    config: SchoolConfig, source_day: int, targets: tuple[int, ...]
+) -> SchoolConfig:
+    """Copy one immutable day program and its calculation settings safely."""
+    if source_day not in range(7):
+        raise ValueError("Kaynak gün geçersiz.")
+    invalid_targets = [day for day in targets if day not in range(7) or day == source_day]
+    if invalid_targets:
+        raise ValueError("Hedef günlerden biri geçersiz veya kaynak günle aynı.")
+    source_events = config.weekly_schedule.get(source_day, ())
+    source_settings = config.day_schedules.get(source_day) or infer_day_schedule(source_events)
+    if not source_events or source_settings is None:
+        raise ValueError("Kaynak günde kopyalanabilecek bir ders programı yok.")
+
+    weekly = dict(config.weekly_schedule)
+    schedules = dict(config.day_schedules)
+    for target in dict.fromkeys(targets):
+        weekly[target] = tuple(source_events)
+        schedules[target] = source_settings
+    updated = replace(config, weekly_schedule=weekly, day_schedules=schedules)
+    errors = updated.validate()
+    if errors:
+        raise ValueError("\n".join(errors))
     return updated
