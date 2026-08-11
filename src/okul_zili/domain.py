@@ -37,7 +37,9 @@ class RulePriority(IntEnum):
 
 
 @dataclass(frozen=True, slots=True)
-class DaySchedule:
+class SessionSchedule:
+    session_id: str = "normal"
+    name: str = "Normal"
     first_lesson: str = "08:20"
     lesson_count: int = 8
     lesson_minutes: int = 40
@@ -46,10 +48,18 @@ class DaySchedule:
     lunch_minutes: int = 45
     student_bell_enabled: bool = True
     student_bell_minutes: int = 2
+    block_sizes: tuple[int, ...] = ()
 
-    def validate(self, weekday: int | None = None) -> list[str]:
-        prefix = f"{weekday}. gün: " if weekday is not None else ""
+    @property
+    def effective_blocks(self) -> tuple[int, ...]:
+        return self.block_sizes or (1,) * self.lesson_count
+
+    def validate(self, prefix: str = "") -> list[str]:
         errors: list[str] = []
+        if not self.session_id.strip():
+            errors.append(f"{prefix}oturum kimliği boş olamaz.")
+        if not self.name.strip():
+            errors.append(f"{prefix}oturum adı boş olamaz.")
         try:
             time.fromisoformat(self.first_lesson)
         except ValueError:
@@ -66,6 +76,124 @@ class DaySchedule:
             errors.append(f"{prefix}öğle arası 0–240 dakika olmalıdır.")
         if not 0 <= self.student_bell_minutes <= 30:
             errors.append(f"{prefix}öğrenci zili farkı 0–30 dakika olmalıdır.")
+        if self.student_bell_enabled and self.student_bell_minutes == 0:
+            errors.append(f"{prefix}öğrenci ve öğretmen zilleri aynı dakikaya ayarlanamaz.")
+        blocks = self.effective_blocks
+        if any(size < 1 for size in blocks) or sum(blocks) != self.lesson_count:
+            errors.append(f"{prefix}blok düzeninin toplamı ders sayısına eşit olmalıdır.")
+        boundaries: list[int] = []
+        completed = 0
+        for size in blocks:
+            completed += size
+            boundaries.append(completed)
+        if self.lunch_after and self.lunch_after not in boundaries:
+            errors.append(f"{prefix}öğle arası bir ders bloğunun içine yerleştirilemez.")
+        for boundary in boundaries[:-1]:
+            gap = self.lunch_minutes if boundary == self.lunch_after else self.break_minutes
+            if self.student_bell_enabled and self.student_bell_minutes > gap:
+                errors.append(
+                    f"{prefix}{boundary}. dersten sonraki ara, öğrenci zili farkından kısa olamaz."
+                )
+        return errors
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "session_id": self.session_id,
+            "name": self.name,
+            "first_lesson": self.first_lesson,
+            "lesson_count": self.lesson_count,
+            "lesson_minutes": self.lesson_minutes,
+            "break_minutes": self.break_minutes,
+            "lunch_after": self.lunch_after,
+            "lunch_minutes": self.lunch_minutes,
+            "student_bell_enabled": self.student_bell_enabled,
+            "student_bell_minutes": self.student_bell_minutes,
+            "block_sizes": list(self.block_sizes),
+        }
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, object]) -> "SessionSchedule":
+        return cls(
+            session_id=str(raw.get("session_id", "normal")),
+            name=str(raw.get("name", "Normal")),
+            first_lesson=str(raw.get("first_lesson", "08:20")),
+            lesson_count=int(raw.get("lesson_count", 8)),
+            lesson_minutes=int(raw.get("lesson_minutes", 40)),
+            break_minutes=int(raw.get("break_minutes", 10)),
+            lunch_after=int(raw.get("lunch_after", 4)),
+            lunch_minutes=int(raw.get("lunch_minutes", 45)),
+            student_bell_enabled=bool(raw.get("student_bell_enabled", True)),
+            student_bell_minutes=int(raw.get("student_bell_minutes", 2)),
+            block_sizes=tuple(int(item) for item in raw.get("block_sizes", [])),  # type: ignore[arg-type]
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class DaySchedule:
+    first_lesson: str = "08:20"
+    lesson_count: int = 8
+    lesson_minutes: int = 40
+    break_minutes: int = 10
+    lunch_after: int = 4
+    lunch_minutes: int = 45
+    student_bell_enabled: bool = True
+    student_bell_minutes: int = 2
+    sessions: tuple[SessionSchedule, ...] = ()
+
+    @property
+    def effective_sessions(self) -> tuple[SessionSchedule, ...]:
+        if self.sessions:
+            return self.sessions
+        return (
+            SessionSchedule(
+                first_lesson=self.first_lesson,
+                lesson_count=self.lesson_count,
+                lesson_minutes=self.lesson_minutes,
+                break_minutes=self.break_minutes,
+                lunch_after=self.lunch_after,
+                lunch_minutes=self.lunch_minutes,
+                student_bell_enabled=self.student_bell_enabled,
+                student_bell_minutes=self.student_bell_minutes,
+            ),
+        )
+
+    @property
+    def is_dual(self) -> bool:
+        return len(self.effective_sessions) > 1
+
+    def validate(self, weekday: int | None = None) -> list[str]:
+        prefix = f"{weekday}. gün: " if weekday is not None else ""
+        sessions = self.effective_sessions
+        errors: list[str] = []
+        identifiers = [item.session_id.casefold() for item in sessions]
+        if len(identifiers) != len(set(identifiers)):
+            errors.append(f"{prefix}oturum kimlikleri benzersiz olmalıdır.")
+        for session in sessions:
+            errors.extend(session.validate(f"{prefix}{session.name}: "))
+
+        bounds: list[tuple[int, int, str]] = []
+        for session in sessions:
+            try:
+                parsed = time.fromisoformat(session.first_lesson)
+            except ValueError:
+                continue
+            cursor = parsed.hour * 60 + parsed.minute
+            start = cursor
+            completed = 0
+            for index, size in enumerate(session.effective_blocks):
+                cursor += size * session.lesson_minutes
+                completed += size
+                if index < len(session.effective_blocks) - 1:
+                    cursor += session.lunch_minutes if completed == session.lunch_after else session.break_minutes
+            if cursor >= 24 * 60:
+                errors.append(f"{prefix}{session.name}: program aynı gün içinde bitmelidir.")
+            bounds.append((start, cursor, session.name))
+        bounds.sort()
+        for previous, current in zip(bounds, bounds[1:]):
+            if current[0] <= previous[1]:
+                errors.append(
+                    f"{prefix}{previous[2]} ile {current[2]} oturumları veya geçiş zilleri çakışıyor."
+                )
         return errors
 
     def to_dict(self) -> dict[str, object]:
@@ -78,6 +206,7 @@ class DaySchedule:
             "lunch_minutes": self.lunch_minutes,
             "student_bell_enabled": self.student_bell_enabled,
             "student_bell_minutes": self.student_bell_minutes,
+            "sessions": [item.to_dict() for item in self.sessions],
         }
 
     @classmethod
@@ -91,6 +220,10 @@ class DaySchedule:
             lunch_minutes=int(raw.get("lunch_minutes", 45)),
             student_bell_enabled=bool(raw.get("student_bell_enabled", True)),
             student_bell_minutes=int(raw.get("student_bell_minutes", 2)),
+            sessions=tuple(
+                SessionSchedule.from_dict(item)
+                for item in raw.get("sessions", [])  # type: ignore[union-attr]
+            ),
         )
 
 
@@ -324,7 +457,7 @@ class SchoolConfig:
 
     def validate(self) -> list[str]:
         errors: list[str] = []
-        if self.schema_version != 3:
+        if self.schema_version != 4:
             errors.append("Desteklenmeyen yapılandırma sürümü.")
         if not self.school_name.strip():
             errors.append("Okul adı boş olamaz.")

@@ -11,7 +11,7 @@ from okul_zili.defaults import default_config
 
 
 class ConfigTests(unittest.TestCase):
-    def test_v1_to_v3_migration(self) -> None:
+    def test_v1_to_v4_migration(self) -> None:
         raw = default_config().to_dict()
         raw["schema_version"] = 1
         raw.pop("timezone")
@@ -19,13 +19,23 @@ class ConfigTests(unittest.TestCase):
         raw.pop("academic_calendar")
         raw["exceptions"] = raw.pop("date_rules")
         migrated = migrate(raw)
-        self.assertEqual(3, migrated["schema_version"])
+        self.assertEqual(4, migrated["schema_version"])
         self.assertEqual("Europe/Istanbul", migrated["timezone"])
         self.assertIn("date_rules", migrated)
         self.assertIsNone(migrated["announcement_device"])
         self.assertEqual({}, migrated["grace_seconds_by_type"])
         self.assertEqual({}, migrated["day_schedules"])
         self.assertIsNone(migrated["academic_calendar"])
+
+    def test_v3_single_schedule_migrates_without_changing_lesson_times(self) -> None:
+        raw = default_config().to_dict()
+        raw["schema_version"] = 3
+        original_week = raw["weekly_schedule"]
+
+        migrated = migrate(raw)
+
+        self.assertEqual(4, migrated["schema_version"])
+        self.assertEqual(original_week, migrated["weekly_schedule"])
 
     def test_atomic_round_trip_and_backup(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -38,7 +48,7 @@ class ConfigTests(unittest.TestCase):
             repo.save(config)
             self.assertTrue(path.with_suffix(".json.bak").exists())
             parsed = json.loads(path.read_text(encoding="utf-8"))
-            self.assertEqual(3, parsed["schema_version"])
+            self.assertEqual(4, parsed["schema_version"])
 
     def test_corrupt_primary_recovers_from_last_good_backup(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

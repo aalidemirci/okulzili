@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 import json
 from pathlib import Path
 import queue
@@ -25,7 +25,7 @@ from .calendar_engine import CalendarEngine
 from .ceremonies import CEREMONY_SCENARIOS, ceremony_events
 from .config import ConfigError, ConfigRepository
 from .defaults import build_school_config, generate_from_day_schedule, infer_day_schedule, set_preparation_bells
-from .domain import AcademicCalendar, DateRange, DateRule, DaySchedule, EventSpec, EventType, ExceptionKind, SchoolConfig, sort_specs
+from .domain import AcademicCalendar, DateRange, DateRule, DaySchedule, EventSpec, EventType, ExceptionKind, SchoolConfig, SessionSchedule, sort_specs
 from .event_log import configure_logging, log_event
 from .instance import SingleInstanceLock
 from .paths import user_data_dir
@@ -193,7 +193,7 @@ class EventEditor(ctk.CTkToplevel):
             ("Tür", ctk.CTkComboBox(form, variable=self.type_var, values=[item.value for item in EventType], state="readonly", height=40, corner_radius=10, fg_color=SURFACE, border_color=BORDER, button_color=TEAL)),
             ("Açıklama", ctk.CTkEntry(form, textvariable=self.label_var, height=40, corner_radius=10, fg_color=SURFACE, border_color=BORDER)),
             ("Ses kimliği", ctk.CTkEntry(form, textvariable=self.sound_var, height=40, corner_radius=10, fg_color=SURFACE, border_color=BORDER)),
-            ("Oturum", ctk.CTkComboBox(form, variable=self.session_var, values=["normal", "sabah", "öğleden sonra", "ortak"], state="readonly", height=40, corner_radius=10, fg_color=SURFACE, border_color=BORDER, button_color=TEAL)),
+            ("Oturum", ctk.CTkComboBox(form, variable=self.session_var, values=["normal", "sabah", "ogle", "ortak"], state="readonly", height=40, corner_radius=10, fg_color=SURFACE, border_color=BORDER, button_color=TEAL)),
         )
         for row, (label, widget) in enumerate(fields):
             ctk.CTkLabel(form, text=label, anchor="w", text_color=INK_SUBTLE, font=ctk.CTkFont("Segoe UI Variable Text", 12, "bold")).grid(row=row, column=0, sticky="w", pady=9, padx=(0, 18))
@@ -1093,6 +1093,23 @@ class OkulZiliApp:
             padding=(14, 13),
             relief="flat",
         )
+        style.configure(
+            "Schedule.Treeview",
+            rowheight=34,
+            font=("Segoe UI Variable Text", 11),
+            background=resolve(SURFACE),
+            fieldbackground=resolve(SURFACE),
+            foreground=resolve(INK_SUBTLE),
+            borderwidth=0,
+        )
+        style.configure(
+            "Schedule.Treeview.Heading",
+            font=("Segoe UI Variable Display Semibold", 10),
+            background=resolve(SURFACE_ALT),
+            foreground=resolve(MUTED),
+            padding=(10, 9),
+            relief="flat",
+        )
         style.map(
             "Treeview",
             background=[("selected", resolve(ACCENT))],
@@ -1388,41 +1405,76 @@ class OkulZiliApp:
             columns=("lesson", "student", "teacher", "end", "break"),
             show="headings",
             selectmode="browse",
+            style="Schedule.Treeview",
         )
-        columns = (("lesson", "Ders", 105), ("student", "Öğrenci zili", 110), ("teacher", "Öğretmen zili", 110), ("end", "Ders bitişi", 110), ("break", "Sonraki ara", 125))
+        columns = (("lesson", "Oturum / ders", 190), ("student", "Öğrenci zili", 110), ("teacher", "Öğretmen zili", 110), ("end", "Ders bitişi", 110), ("break", "Sonraki ara", 125))
         for key, label, width in columns:
             self.schedule_tree.heading(key, text=label)
-            self.schedule_tree.column(key, width=width, minwidth=90, stretch=False, anchor="center" if key != "lesson" else "w")
-        self.schedule_tree.pack(fill="both", expand=True, padx=1, pady=1)
+            self.schedule_tree.column(key, width=width, minwidth=90, stretch=True, anchor="center" if key != "lesson" else "w")
+        schedule_scrollbar = ctk.CTkScrollbar(
+            table_card, orientation="vertical", command=self.schedule_tree.yview,
+            fg_color=SURFACE, button_color=BORDER, button_hover_color=MUTED, width=12,
+        )
+        schedule_scrollbar.pack(side="right", fill="y", padx=(0, 2), pady=2)
+        self.schedule_tree.configure(yscrollcommand=schedule_scrollbar.set)
+        self.schedule_tree.pack(side="left", fill="both", expand=True, padx=(1, 0), pady=1)
         self.schedule_tree.bind("<Double-1>", lambda event: self._edit_lesson_events())
 
-        form = ctk.CTkScrollableFrame(workspace, fg_color=SURFACE, corner_radius=16, border_width=1, border_color=BORDER, height=300)
+        form = ctk.CTkScrollableFrame(workspace, fg_color=SURFACE, corner_radius=16, border_width=1, border_color=BORDER, height=210)
         self.schedule_form = form
         table_card.pack_forget()
         form.pack(side="bottom", fill="x", pady=(14, 0))
         table_card.pack(side="top", fill="both", expand=True)
         ctk.CTkLabel(form, text="Otomatik hesaplama", text_color=INK, font=ctk.CTkFont("Segoe UI Variable Display", 17, "bold"), anchor="w").pack(fill="x", padx=18, pady=(18, 2))
-        ctk.CTkLabel(form, text="Seçili günün temel ders akışı", text_color=MUTED, font=ctk.CTkFont("Segoe UI Variable Text", 12), anchor="w").pack(fill="x", padx=18, pady=(0, 10))
+        ctk.CTkLabel(form, text="Seçili günün eğitim modeli, oturumları ve blok düzeni", text_color=MUTED, font=ctk.CTkFont("Segoe UI Variable Text", 12), anchor="w").pack(fill="x", padx=18, pady=(0, 10))
+        mode_row = ctk.CTkFrame(form, fg_color="transparent")
+        mode_row.pack(fill="x", padx=18, pady=(0, 6))
+        mode_row.columnconfigure((0, 1), weight=1)
+        self.education_mode_var = tk.StringVar(value="Tekli eğitim")
+        self.session_var = tk.StringVar(value="Normal")
+        ctk.CTkLabel(mode_row, text="Eğitim modeli", text_color=MUTED, font=ctk.CTkFont("Segoe UI Variable Text", 12, "bold"), anchor="w").grid(row=0, column=0, sticky="ew", padx=(0, 5))
+        ctk.CTkLabel(mode_row, text="Düzenlenen oturum", text_color=MUTED, font=ctk.CTkFont("Segoe UI Variable Text", 12, "bold"), anchor="w").grid(row=0, column=1, sticky="ew", padx=(5, 0))
+        self.education_mode_box = ctk.CTkComboBox(
+            mode_row, variable=self.education_mode_var, values=["Tekli eğitim", "İkili eğitim"],
+            state="readonly", height=40, fg_color=INPUT, border_color=BORDER,
+            button_color=ACCENT_STRONG, command=self._on_education_mode_changed,
+        )
+        self.education_mode_box.grid(row=1, column=0, sticky="ew", padx=(0, 5), pady=(3, 0))
+        self.session_box = ctk.CTkComboBox(
+            mode_row, variable=self.session_var, values=["Normal"], state="disabled",
+            height=40, fg_color=INPUT, border_color=BORDER, button_color=ACCENT_STRONG,
+            command=self._on_session_changed,
+        )
+        self.session_box.grid(row=1, column=1, sticky="ew", padx=(5, 0), pady=(3, 0))
         self.day_form_vars = {
             "first_lesson": tk.StringVar(), "lesson_count": tk.StringVar(), "lesson_minutes": tk.StringVar(),
             "break_minutes": tk.StringVar(), "lunch_after": tk.StringVar(), "lunch_minutes": tk.StringVar(),
-            "student_bell_minutes": tk.StringVar(),
+            "student_bell_minutes": tk.StringVar(), "block_sizes": tk.StringVar(),
         }
-        for key, label in (
+        fields_grid = ctk.CTkFrame(form, fg_color="transparent")
+        fields_grid.pack(fill="x", padx=13, pady=(2, 0))
+        fields_grid.columnconfigure((0, 1, 2), weight=1)
+        for index, (key, label) in enumerate((
             ("first_lesson", "İlk ders (SS:DD)"), ("lesson_count", "Ders sayısı"),
             ("lesson_minutes", "Ders süresi (dk)"), ("break_minutes", "Teneffüs (dk)"),
             ("lunch_after", "Öğle arası kaçıncı dersten sonra"), ("lunch_minutes", "Öğle arası (dk)"),
-        ):
-            ctk.CTkLabel(form, text=label, text_color=MUTED, font=ctk.CTkFont("Segoe UI Variable Text", 12, "bold"), anchor="w").pack(fill="x", padx=18, pady=(7, 3))
-            ctk.CTkEntry(form, textvariable=self.day_form_vars[key], height=42, corner_radius=9, fg_color=INPUT, border_color=BORDER, font=ctk.CTkFont("Segoe UI Variable Text", 13)).pack(fill="x", padx=18)
+            ("block_sizes", "Blok düzeni (ör. 2+2+1+1; normal ders için boş)"),
+        )):
+            field = ctk.CTkFrame(fields_grid, fg_color="transparent")
+            field.grid(row=index // 3, column=index % 3, sticky="ew", padx=5, pady=4)
+            ctk.CTkLabel(field, text=label, text_color=MUTED, font=ctk.CTkFont("Segoe UI Variable Text", 11, "bold"), anchor="w").pack(fill="x", pady=(0, 2))
+            ctk.CTkEntry(field, textvariable=self.day_form_vars[key], height=38, corner_radius=9, fg_color=INPUT, border_color=BORDER, font=ctk.CTkFont("Segoe UI Variable Text", 12)).pack(fill="x")
         self.student_bell_var = tk.BooleanVar(value=True)
-        ctk.CTkSwitch(form, text="Öğrenci / öğretmen zili", variable=self.student_bell_var, command=self._toggle_student_offset, progress_color=TEAL, text_color=INK_SUBTLE, font=ctk.CTkFont("Segoe UI Variable Text", 12)).pack(fill="x", padx=18, pady=(14, 2))
-        self.student_offset_label = ctk.CTkLabel(form, text="Öğrenci zili kaç dakika önce?", text_color=MUTED, font=ctk.CTkFont("Segoe UI Variable Text", 12, "bold"), anchor="w")
-        self.student_offset_label.pack(fill="x", padx=18, pady=(7, 3))
-        self.student_offset_entry = ctk.CTkEntry(form, textvariable=self.day_form_vars["student_bell_minutes"], height=42, corner_radius=9, fg_color=INPUT, border_color=BORDER, font=ctk.CTkFont("Segoe UI Variable Text", 13))
-        self.student_offset_entry.pack(fill="x", padx=18)
-        self.calculate_button = _primary_button(form, "Programı hesapla", self._regenerate_schedule, 180)
-        self.calculate_button.pack(fill="x", padx=18, pady=(18, 16))
+        bell_row = ctk.CTkFrame(form, fg_color=SURFACE_ALT, corner_radius=10)
+        bell_row.pack(fill="x", padx=18, pady=(8, 0))
+        ctk.CTkSwitch(bell_row, text="Öğrenci / öğretmen zili", variable=self.student_bell_var, command=self._toggle_student_offset, progress_color=TEAL, text_color=INK_SUBTLE, font=ctk.CTkFont("Segoe UI Variable Text", 12, "bold")).pack(side="left", padx=12, pady=10)
+        self.student_offset_entry = ctk.CTkEntry(bell_row, textvariable=self.day_form_vars["student_bell_minutes"], width=72, height=34, corner_radius=8, fg_color=INPUT, border_color=BORDER, font=ctk.CTkFont("Segoe UI Variable Text", 12))
+        self.student_offset_entry.pack(side="right", padx=12, pady=8)
+        self.student_offset_label = ctk.CTkLabel(bell_row, text="Öğrenci zili kaç dakika önce?", text_color=MUTED, font=ctk.CTkFont("Segoe UI Variable Text", 11, "bold"))
+        self.student_offset_label.pack(side="right", padx=(8, 0))
+        ctk.CTkLabel(form, text="Blok içinde ara zili çalmaz; yalnızca blok başlangıcı ve bitişi planlanır.", text_color=MUTED, font=ctk.CTkFont("Segoe UI Variable Text", 11), anchor="w").pack(fill="x", padx=18, pady=(6, 0))
+        self.calculate_button = _primary_button(form, "Oturumu hesapla ve kaydet", self._regenerate_schedule, 210)
+        self.calculate_button.pack(anchor="e", padx=18, pady=(8, 12))
         self.schedule_admin_buttons.append(self.calculate_button)
         self._load_day_form()
 
@@ -1804,37 +1856,129 @@ class OkulZiliApp:
         weekday = WEEKDAYS.index(self.day_var.get())
         events = self.config.weekly_schedule.get(weekday, ())
         starts = sorted((item for item in events if item.event_type is EventType.LESSON_START), key=lambda item: item.at)
-        ends = sorted((item for item in events if item.event_type is EventType.LESSON_END), key=lambda item: item.at)
-        preparations = sorted((item for item in events if item.event_type is EventType.PREPARATION), key=lambda item: item.at)
+        ends_by_session = {
+            session_id: sorted(
+                (item for item in events if item.event_type is EventType.LESSON_END and item.session == session_id),
+                key=lambda item: item.at,
+            )
+            for session_id in {item.session for item in starts}
+        }
+        preparations_by_session = {
+            session_id: sorted(
+                (item for item in events if item.event_type is EventType.PREPARATION and item.session == session_id),
+                key=lambda item: item.at,
+            )
+            for session_id in {item.session for item in starts}
+        }
         settings = self.config.day_schedules.get(weekday) or infer_day_schedule(events)
+        session_settings = {
+            item.session_id: item for item in settings.effective_sessions
+        } if settings else {}
+        session_positions: dict[str, int] = {}
         for index, start in enumerate(starts):
-            student = preparations[index].at.strftime("%H:%M") if index < len(preparations) else "—"
-            end = ends[index].at.strftime("%H:%M") if index < len(ends) else "—"
-            if index == len(starts) - 1:
+            position = session_positions.get(start.session, 0)
+            session_positions[start.session] = position + 1
+            preparations = preparations_by_session.get(start.session, [])
+            ends = ends_by_session.get(start.session, [])
+            student = preparations[position].at.strftime("%H:%M") if position < len(preparations) else "—"
+            end = ends[position].at.strftime("%H:%M") if position < len(ends) else "—"
+            session = session_settings.get(start.session)
+            if session is None or position == len(session.effective_blocks) - 1:
                 next_break = "—"
-            elif settings and index + 1 == settings.lunch_after:
-                next_break = f"Öğle · {settings.lunch_minutes} dk"
             else:
-                next_break = f"{settings.break_minutes if settings else '—'} dk"
+                completed = sum(session.effective_blocks[: position + 1])
+                next_break = (
+                    f"Öğle · {session.lunch_minutes} dk"
+                    if completed == session.lunch_after
+                    else f"{session.break_minutes} dk"
+                )
+            row_label = start.label.removesuffix(" öğretmen zili")
             self.schedule_tree.insert(
                 "",
                 "end",
                 iid=str(index),
-                values=(f"{index + 1}. ders", student, start.at.strftime("%H:%M"), end, next_break),
+                values=(row_label, student, start.at.strftime("%H:%M"), end, next_break),
             )
 
     def _on_day_changed(self) -> None:
-        self._load_day_form()
+        self.session_var.set("Normal")
+        self._load_day_form(reset_mode=True)
         self._refresh_schedule()
 
-    def _load_day_form(self) -> None:
+    def _on_education_mode_changed(self, selected: str) -> None:
+        if selected == "İkili eğitim":
+            self.session_box.configure(values=["Sabah", "Öğleden sonra"], state="readonly")
+            self.session_var.set("Sabah")
+        else:
+            self.session_box.configure(values=["Normal"], state="disabled")
+            self.session_var.set("Normal")
+        self._load_day_form(reset_mode=False)
+
+    def _on_session_changed(self, _selected: str) -> None:
+        self._load_day_form(reset_mode=False)
+
+    @staticmethod
+    def _suggest_afternoon_start(session: SessionSchedule) -> str:
+        cursor = datetime.strptime(session.first_lesson, "%H:%M")
+        completed = 0
+        for index, size in enumerate(session.effective_blocks):
+            cursor += timedelta(minutes=size * session.lesson_minutes)
+            completed += size
+            if index < len(session.effective_blocks) - 1:
+                cursor += timedelta(
+                    minutes=session.lunch_minutes
+                    if completed == session.lunch_after
+                    else session.break_minutes
+                )
+        cursor += timedelta(minutes=20)
+        minute = ((cursor.minute + 4) // 5) * 5
+        if minute == 60:
+            cursor = cursor.replace(minute=0) + timedelta(hours=1)
+        else:
+            cursor = cursor.replace(minute=minute)
+        return cursor.strftime("%H:%M")
+
+    def _sessions_for_mode(self, schedule: DaySchedule, mode: str) -> tuple[SessionSchedule, ...]:
+        current = schedule.effective_sessions
+        if mode == "Tekli eğitim":
+            source = current[0]
+            return (replace(source, session_id="normal", name="Normal"),)
+        if len(current) > 1:
+            return current
+        morning = replace(current[0], session_id="sabah", name="Sabah")
+        afternoon = replace(
+            current[0],
+            session_id="ogle",
+            name="Öğleden sonra",
+            first_lesson=self._suggest_afternoon_start(morning),
+            lunch_after=0,
+            lunch_minutes=current[0].break_minutes,
+        )
+        return morning, afternoon
+
+    def _load_day_form(self, *, reset_mode: bool = True) -> None:
         if not hasattr(self, "day_form_vars"):
             return
         weekday = WEEKDAYS.index(self.day_var.get())
         schedule = self.config.day_schedules.get(weekday) or infer_day_schedule(self.config.weekly_schedule.get(weekday, ())) or DaySchedule(student_bell_enabled=False)
+        if reset_mode:
+            mode = "İkili eğitim" if schedule.is_dual else "Tekli eğitim"
+            self.education_mode_var.set(mode)
+            self.session_box.configure(
+                values=["Sabah", "Öğleden sonra"] if schedule.is_dual else ["Normal"],
+                state="readonly" if schedule.is_dual else "disabled",
+            )
+            self.session_var.set("Sabah" if schedule.is_dual else "Normal")
+        mode = self.education_mode_var.get()
+        sessions = self._sessions_for_mode(schedule, mode)
+        selected_name = self.session_var.get()
+        session = next((item for item in sessions if item.name == selected_name), sessions[0])
         for key in ("first_lesson", "lesson_count", "lesson_minutes", "break_minutes", "lunch_after", "lunch_minutes", "student_bell_minutes"):
-            self.day_form_vars[key].set(str(getattr(schedule, key)))
-        self.student_bell_var.set(schedule.student_bell_enabled)
+            self.day_form_vars[key].set(str(getattr(session, key)))
+        self.day_form_vars["block_sizes"].set(
+            "+".join(str(item) for item in session.block_sizes)
+        )
+        self.student_bell_var.set(session.student_bell_enabled)
         self._toggle_student_offset()
 
     def _toggle_student_offset(self) -> None:
@@ -1844,12 +1988,49 @@ class OkulZiliApp:
 
     def _day_schedule_from_form(self) -> DaySchedule:
         value = lambda key: self.day_form_vars[key].get().strip()
-        schedule = DaySchedule(
+        block_text = value("block_sizes").replace(",", "+").replace(" ", "")
+        try:
+            block_sizes = tuple(int(item) for item in block_text.split("+") if item) if block_text else ()
+        except ValueError as exc:
+            raise ValueError("Blok düzeni 2+2+1 gibi pozitif sayılardan oluşmalıdır.") from exc
+        selected_name = self.session_var.get()
+        selected_id = {"Sabah": "sabah", "Öğleden sonra": "ogle"}.get(selected_name, "normal")
+        selected_session = SessionSchedule(
+            session_id=selected_id, name=selected_name,
             first_lesson=value("first_lesson"), lesson_count=int(value("lesson_count")),
             lesson_minutes=int(value("lesson_minutes")), break_minutes=int(value("break_minutes")),
             lunch_after=int(value("lunch_after")), lunch_minutes=int(value("lunch_minutes")),
             student_bell_enabled=self.student_bell_var.get(), student_bell_minutes=int(value("student_bell_minutes") or "2"),
+            block_sizes=block_sizes,
         )
+        weekday = WEEKDAYS.index(self.day_var.get())
+        existing = self.config.day_schedules.get(weekday) or DaySchedule()
+        if self.education_mode_var.get() == "İkili eğitim":
+            sessions = list(self._sessions_for_mode(existing, "İkili eğitim"))
+            selected_index = next(
+                (index for index, item in enumerate(sessions) if item.session_id == selected_id), 0
+            )
+            sessions[selected_index] = selected_session
+            first = sessions[0]
+            schedule = DaySchedule(
+                first_lesson=first.first_lesson, lesson_count=first.lesson_count,
+                lesson_minutes=first.lesson_minutes, break_minutes=first.break_minutes,
+                lunch_after=first.lunch_after, lunch_minutes=first.lunch_minutes,
+                student_bell_enabled=first.student_bell_enabled,
+                student_bell_minutes=first.student_bell_minutes,
+                sessions=tuple(sessions),
+            )
+        else:
+            schedule = DaySchedule(
+                first_lesson=selected_session.first_lesson,
+                lesson_count=selected_session.lesson_count,
+                lesson_minutes=selected_session.lesson_minutes,
+                break_minutes=selected_session.break_minutes,
+                lunch_after=selected_session.lunch_after,
+                lunch_minutes=selected_session.lunch_minutes,
+                student_bell_enabled=selected_session.student_bell_enabled,
+                student_bell_minutes=selected_session.student_bell_minutes,
+            )
         errors = schedule.validate()
         if errors:
             raise ValueError("\n".join(errors))
@@ -1868,7 +2049,16 @@ class OkulZiliApp:
         schedules[weekday] = settings
         weekly = dict(self.config.weekly_schedule)
         weekly[weekday] = generate_from_day_schedule(settings)
-        self.config = replace(self.config, day_schedules=schedules, weekly_schedule=weekly, preparation_enabled=any(item.student_bell_enabled for item in schedules.values()))
+        self.config = replace(
+            self.config,
+            day_schedules=schedules,
+            weekly_schedule=weekly,
+            preparation_enabled=any(
+                session.student_bell_enabled
+                for item in schedules.values()
+                for session in item.effective_sessions
+            ),
+        )
         self._save_config()
 
     def _copy_schedule(self) -> None:
@@ -1898,13 +2088,23 @@ class OkulZiliApp:
         lesson_index = int(selected[0])
         day_events = self.config.weekly_schedule.get(weekday, ())
         starts = [(index, item) for index, item in enumerate(day_events) if item.event_type is EventType.LESSON_START]
-        ends = [(index, item) for index, item in enumerate(day_events) if item.event_type is EventType.LESSON_END]
-        students = [(index, item) for index, item in enumerate(day_events) if item.event_type is EventType.PREPARATION]
         if lesson_index >= len(starts):
             return
         teacher_index, teacher = starts[lesson_index]
-        end_index, lesson_end = ends[lesson_index] if lesson_index < len(ends) else (None, None)
-        student_index, student = students[lesson_index] if lesson_index < len(students) else (None, None)
+        same_session_starts = [item for item in starts if item[1].session == teacher.session]
+        session_position = next(
+            index for index, item in enumerate(same_session_starts) if item[0] == teacher_index
+        )
+        ends = [
+            (index, item) for index, item in enumerate(day_events)
+            if item.event_type is EventType.LESSON_END and item.session == teacher.session
+        ]
+        students = [
+            (index, item) for index, item in enumerate(day_events)
+            if item.event_type is EventType.PREPARATION and item.session == teacher.session
+        ]
+        end_index, lesson_end = ends[session_position] if session_position < len(ends) else (None, None)
+        student_index, student = students[session_position] if session_position < len(students) else (None, None)
         def save(new_student: EventSpec | None, new_teacher: EventSpec, new_end: EventSpec | None) -> None:
             items = list(day_events)
             items[teacher_index] = new_teacher
@@ -1931,11 +2131,19 @@ class OkulZiliApp:
             if new_student is None and student is None:
                 student_text = dialog.student_var.get().strip()
                 if student_text:
-                    new_student = EventSpec(time.fromisoformat(student_text), EventType.PREPARATION, f"{lesson_index + 1}. ders öğrenci zili", "ogrenci")
+                    new_student = EventSpec(
+                        time.fromisoformat(student_text), EventType.PREPARATION,
+                        teacher.label.replace("öğretmen zili", "öğrenci zili"),
+                        "ogrenci", session=teacher.session,
+                    )
             if new_end is None and lesson_end is None:
                 end_text = dialog.end_var.get().strip()
                 if end_text:
-                    new_end = EventSpec(time.fromisoformat(end_text), EventType.LESSON_END, f"{lesson_index + 1}. ders bitişi", "teneffus")
+                    new_end = EventSpec(
+                        time.fromisoformat(end_text), EventType.LESSON_END,
+                        teacher.label.replace("öğretmen zili", "bitişi"),
+                        "teneffus", session=teacher.session,
+                    )
             save(new_student, new_teacher, new_end)
         dialog = LessonTimesDialog(self.root, lesson_index + 1, student, teacher, lesson_end, normalize_student)
 
@@ -2097,7 +2305,14 @@ class OkulZiliApp:
         grace: int,
     ) -> None:
         day_schedules = {
-            day: replace(item, student_bell_enabled=preparation_enabled)
+            day: replace(
+                item,
+                student_bell_enabled=preparation_enabled,
+                sessions=tuple(
+                    replace(session, student_bell_enabled=preparation_enabled)
+                    for session in item.sessions
+                ),
+            )
             for day, item in self.config.day_schedules.items()
         }
         schedule = {

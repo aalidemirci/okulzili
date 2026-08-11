@@ -31,10 +31,14 @@
 ## Program zili düzenleme
 
 1. **Haftalık program** sekmesinde günü seçin.
-2. Bir satıra çift tıklayın veya **Düzenle** düğmesini kullanın.
-3. Saati `SS:DD` biçiminde yazın.
-4. Silme işlemini yalnızca doğru gün ve satırı seçtiğinizden emin olduktan sonra yapın.
-5. Ses değiştirmek için satırı seçip **Ses dosyası ata** düğmesini kullanın. Yalnızca WAV dosyası seçin.
+2. **Eğitim modeli** alanından tekli veya ikili eğitimi seçin. İkili eğitimde önce **Sabah**, sonra **Öğleden sonra** oturumunu düzenleyin.
+3. Her oturum için ilk ders, ders sayısı, ders/teneffüs süreleri ve öğrenci zili farkını girin.
+4. Normal dersler için **Blok düzeni** alanını boş bırakın. Blok dersler için `2+2+1+1` gibi, toplamı ders sayısına eşit bir desen yazın.
+5. **Oturumu hesapla ve kaydet** düğmesine basın. Oturum çakışmaları ve blok içine düşen öğle araları kaydedilmez; ekrandaki uyarıya göre saatleri düzeltin.
+6. Tablodaki bir satıra çift tıklayarak yalnızca o blok veya dersin üretilmiş zil saatlerini elle düzeltebilirsiniz.
+7. **Günlere uygula** ile aynı tekli/ikili ve blok düzenini seçtiğiniz diğer günlere kopyalayabilirsiniz.
+
+Blok ders sırasında iç ders sınırlarında zil çalmaz. Öğrenci zili blok başlamadan belirlenen dakika kadar önce, öğretmen zili blok başlangıcında ve teneffüs zili blok bitiminde çalar.
 
 ## Tören, sınav veya kısaltılmış gün
 

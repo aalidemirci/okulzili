@@ -35,9 +35,9 @@ Tek olay ertelemesi olay kimliğini değiştirmeden etkin zamanı ileri taşır 
 
 ## Yapılandırma
 
-`ayarlar.json` şema sürümü taşır. Yazma önce geçici dosyaya yapılır, disk eşitlemesinden sonra atomik değiştirme uygulanır ve önceki kopya `.bak` olarak korunur. v1/v2 yapılandırmaları v3 alanlarına göç ettirilir; mevcut olaylardan günün ders girdileri çıkarılır. Bilinmeyen ileri sürümler açılmaz.
+`ayarlar.json` şema sürümü taşır. Yazma önce geçici dosyaya yapılır, disk eşitlemesinden sonra atomik değiştirme uygulanır ve önceki kopya `.bak` olarak korunur. v1/v2/v3 yapılandırmaları v4 alanlarına göç ettirilir; mevcut olaylardan günün ders girdileri çıkarılır. Bilinmeyen ileri sürümler açılmaz.
 
-Şema v3, üretilmiş haftalık olayların yanında gün bazlı `DaySchedule` girdilerini ve isteğe bağlı `AcademicCalendar` kaydını tutar. Takvim tanımlandığında haftalık olaylar yalnızca etkin dönemlerde üretilir; ara tatiller, sabit resmî tatiller ve kullanıcı tarafından doğrulanan Ramazan/Kurban tarihleri ders zillerini bastırır. Tarihe özel tören ve telafi kuralları bu kapanışların üzerinde uygulanabilir.
+Şema v4, üretilmiş haftalık olayların yanında gün bazlı `DaySchedule` girdilerini ve isteğe bağlı `AcademicCalendar` kaydını tutar. `DaySchedule`, eski tekli eğitim alanlarını korurken isteğe bağlı bir `SessionSchedule` listesi taşıyabilir. Her oturum bağımsız başlangıç/süre ayarlarına ve toplamı ders sayısına eşit bir blok dizisine sahiptir. Blok başına tek başlangıç ve bitiş olayı üretilir; oturum kimliği olay kimliğinin parçasıdır. Takvim tanımlandığında haftalık olaylar yalnızca etkin dönemlerde üretilir; ara tatiller, sabit resmî tatiller ve kullanıcı tarafından doğrulanan Ramazan/Kurban tarihleri ders zillerini bastırır. Tarihe özel tören ve telafi kuralları bu kapanışların üzerinde uygulanabilir.
 
 Paylaşım yedeği ZIP tabanlı `.okulzili` kapsayıcısıdır. Manifest her yapılandırma ve ses dosyası için SHA-256 taşır. İçe aktarma mutlak/üst dizin yollarını reddeder, bütünlüğü doğrular ve yalnızca veri dizini içindeki sesleri değiştirir. PIN ile günlükler paylaşım yedeğine alınmaz.
 
