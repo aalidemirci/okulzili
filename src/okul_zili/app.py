@@ -77,6 +77,7 @@ LICENSE_URL = "https://polyformproject.org/licenses/noncommercial/1.0.0"
 EVENT_LABELS = {
     EventType.PREPARATION: "Hazırlık",
     EventType.LESSON_START: "Ders başlangıcı",
+    EventType.BLOCK_TRANSITION: "Blok içi sınıf değişimi",
     EventType.LESSON_END: "Ders bitişi",
     EventType.BREAK_END: "Teneffüs bitişi",
     EventType.ANNOUNCEMENT: "Anons",
@@ -1426,12 +1427,12 @@ class OkulZiliApp:
         table_card.pack(side="top", fill="both", expand=True)
         self.schedule_tree = ttk.Treeview(
             table_card,
-            columns=("lesson", "student", "teacher", "end", "break"),
+            columns=("lesson", "student", "teacher", "transition", "end", "break"),
             show="headings",
             selectmode="browse",
             style="Schedule.Treeview",
         )
-        columns = (("lesson", "Oturum / ders", 190), ("student", "Öğrenci zili", 110), ("teacher", "Öğretmen zili", 110), ("end", "Ders bitişi", 110), ("break", "Sonraki ara", 125))
+        columns = (("lesson", "Oturum / ders", 190), ("student", "Öğrenci zili", 105), ("teacher", "Öğretmen zili", 105), ("transition", "Blok içi kısa zil", 125), ("end", "Blok bitişi", 105), ("break", "Sonraki ara", 115))
         for key, label, width in columns:
             self.schedule_tree.heading(key, text=label)
             self.schedule_tree.column(key, width=width, minwidth=90, stretch=True, anchor="center" if key != "lesson" else "w")
@@ -1496,7 +1497,23 @@ class OkulZiliApp:
         self.student_offset_entry.pack(side="right", padx=12, pady=8)
         self.student_offset_label = ctk.CTkLabel(bell_row, text="Öğrenci zili kaç dakika önce?", text_color=MUTED, font=ctk.CTkFont("Segoe UI Variable Text", 11, "bold"))
         self.student_offset_label.pack(side="right", padx=(8, 0))
-        ctk.CTkLabel(form, text="Blok içinde ara zili çalmaz; yalnızca blok başlangıcı ve bitişi planlanır.", text_color=MUTED, font=ctk.CTkFont("Segoe UI Variable Text", 11), anchor="w").pack(fill="x", padx=18, pady=(6, 0))
+        self.block_transition_bell_var = tk.BooleanVar(value=True)
+        block_bell_row = ctk.CTkFrame(form, fg_color=SURFACE_ALT, corner_radius=10)
+        block_bell_row.pack(fill="x", padx=18, pady=(8, 0))
+        ctk.CTkSwitch(
+            block_bell_row,
+            text="Blok içi sınıf değişim zili",
+            variable=self.block_transition_bell_var,
+            progress_color=TEAL,
+            text_color=INK_SUBTLE,
+            font=ctk.CTkFont("Segoe UI Variable Text", 12, "bold"),
+        ).pack(side="left", padx=12, pady=10)
+        ctk.CTkLabel(
+            block_bell_row,
+            text="Her ders sınırında MEB teneffüs zilinin 5 saniyelik kısa sürümü",
+            text_color=MUTED,
+            font=ctk.CTkFont("Segoe UI Variable Text", 11),
+        ).pack(side="right", padx=12)
         self.calculate_button = _primary_button(form, "Oturumu hesapla ve kaydet", self._regenerate_schedule, 210)
         self.calculate_button.pack(anchor="e", padx=18, pady=(8, 12))
         self.schedule_admin_buttons.append(self.calculate_button)
@@ -1894,6 +1911,13 @@ class OkulZiliApp:
             )
             for session_id in {item.session for item in starts}
         }
+        transitions_by_session = {
+            session_id: sorted(
+                (item for item in events if item.event_type is EventType.BLOCK_TRANSITION and item.session == session_id),
+                key=lambda item: item.at,
+            )
+            for session_id in {item.session for item in starts}
+        }
         settings = self.config.day_schedules.get(weekday) or infer_day_schedule(events)
         session_settings = {
             item.session_id: item for item in settings.effective_sessions
@@ -1906,6 +1930,14 @@ class OkulZiliApp:
             ends = ends_by_session.get(start.session, [])
             student = preparations[position].at.strftime("%H:%M") if position < len(preparations) else "—"
             end = ends[position].at.strftime("%H:%M") if position < len(ends) else "—"
+            transition = "—"
+            if position < len(ends):
+                internal = [
+                    item.at.strftime("%H:%M")
+                    for item in transitions_by_session.get(start.session, [])
+                    if start.at < item.at < ends[position].at
+                ]
+                transition = ", ".join(internal) if internal else "—"
             session = session_settings.get(start.session)
             if session is None or position == len(session.effective_blocks) - 1:
                 next_break = "—"
@@ -1921,7 +1953,7 @@ class OkulZiliApp:
                 "",
                 "end",
                 iid=str(index),
-                values=(row_label, student, start.at.strftime("%H:%M"), end, next_break),
+                values=(row_label, student, start.at.strftime("%H:%M"), transition, end, next_break),
             )
 
     def _on_day_changed(self) -> None:
@@ -2003,6 +2035,7 @@ class OkulZiliApp:
             "+".join(str(item) for item in session.block_sizes)
         )
         self.student_bell_var.set(session.student_bell_enabled)
+        self.block_transition_bell_var.set(session.block_transition_bell_enabled)
         self._toggle_student_offset()
 
     def _toggle_student_offset(self) -> None:
@@ -2026,6 +2059,7 @@ class OkulZiliApp:
             lunch_after=int(value("lunch_after")), lunch_minutes=int(value("lunch_minutes")),
             student_bell_enabled=self.student_bell_var.get(), student_bell_minutes=int(value("student_bell_minutes") or "2"),
             block_sizes=block_sizes,
+            block_transition_bell_enabled=self.block_transition_bell_var.get(),
         )
         weekday = WEEKDAYS.index(self.day_var.get())
         existing = self.config.day_schedules.get(weekday) or DaySchedule()
@@ -2054,6 +2088,7 @@ class OkulZiliApp:
                 lunch_minutes=selected_session.lunch_minutes,
                 student_bell_enabled=selected_session.student_bell_enabled,
                 student_bell_minutes=selected_session.student_bell_minutes,
+                sessions=(selected_session,) if selected_session.block_sizes else (),
             )
         errors = schedule.validate()
         if errors:
@@ -2848,7 +2883,7 @@ def main() -> int:
         with tempfile.TemporaryDirectory(prefix="okul-zili-paket-ses-") as directory:
             data_dir = Path(directory)
             ensure_generated_sounds(data_dir)
-            for sound_id in ("ogrenci", "ogretmen", "teneffus"):
+            for sound_id in ("ogrenci", "ogretmen", "teneffus", "blok_gecis"):
                 valid, _detail = validate_wave(data_dir / "sesler" / f"{sound_id}.wav")
                 if not valid:
                     return 9

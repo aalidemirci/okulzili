@@ -9,7 +9,7 @@ from tests.helpers import write_wave
 class SoundCatalogTests(unittest.TestCase):
     def test_lesson_bells_are_packaged_as_official_meb_sounds(self) -> None:
         self.assertTrue(MEB_CENTRAL_BELL_PAGE.startswith("https://meb.gov.tr/"))
-        for sound_id in ("ogrenci", "ogretmen", "teneffus"):
+        for sound_id in ("ogrenci", "ogretmen", "teneffus", "blok_gecis"):
             definition = SOUND_BY_ID[sound_id]
             self.assertEqual(MEB_CENTRAL_BELL_PAGE, definition.source_page)
             self.assertIsNone(definition.official_url)

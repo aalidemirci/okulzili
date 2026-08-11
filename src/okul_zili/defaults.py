@@ -68,6 +68,18 @@ def generate_session(
                 session=session.session_id,
             )
         )
+        if session.block_transition_bell_enabled and block_size > 1:
+            for lesson_offset in range(1, block_size):
+                transition_lesson = first_lesson + lesson_offset - 1
+                events.append(
+                    EventSpec(
+                        at=(cursor + timedelta(minutes=session.lesson_minutes * lesson_offset)).time(),
+                        event_type=EventType.BLOCK_TRANSITION,
+                        label=f"{prefix}{transition_lesson}. ders sonu · blok içi sınıf değişimi",
+                        sound_id="blok_gecis",
+                        session=session.session_id,
+                    )
+                )
         cursor += timedelta(minutes=session.lesson_minutes * block_size)
         events.append(
             EventSpec(
@@ -132,6 +144,7 @@ def build_school_config(
             "ogrenci": "sesler/ogrenci.wav",
             "ogretmen": "sesler/ogretmen.wav",
             "teneffus": "sesler/teneffus.wav",
+            "blok_gecis": "sesler/blok_gecis.wav",
             "anons": "sesler/anons.wav",
             "istiklal_sozlu": "sesler/istiklal_sozlu.wav",
             "istiklal_sozsuz": "sesler/istiklal_sozsuz.wav",
@@ -193,7 +206,11 @@ def infer_day_schedule(events: tuple[EventSpec, ...]) -> DaySchedule | None:
         lunch_minutes=first.lunch_minutes,
         student_bell_enabled=first.student_bell_enabled,
         student_bell_minutes=first.student_bell_minutes,
-        sessions=tuple(sessions) if len(sessions) > 1 else (),
+        sessions=(
+            tuple(sessions)
+            if len(sessions) > 1 or any(item.block_sizes for item in sessions)
+            else ()
+        ),
     )
 
 
@@ -254,6 +271,9 @@ def _infer_session_schedule(
         student_bell_enabled=bool(preparations),
         student_bell_minutes=student_minutes,
         block_sizes=tuple(block_sizes) if any(size > 1 for size in block_sizes) else (),
+        block_transition_bell_enabled=any(
+            item.event_type is EventType.BLOCK_TRANSITION for item in events
+        ),
     )
 
 
