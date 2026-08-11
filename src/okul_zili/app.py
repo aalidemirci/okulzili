@@ -33,7 +33,7 @@ from .pilot_log import analyze_files, format_report
 from .preflight import CheckResult, PreflightService
 from .recess_music import RecessMusicManager
 from .scheduler import BellScheduler, RunState, SchedulerNotice
-from .sound_assets import ensure_generated_sounds, restore_bundled_sound, restore_generated_sound
+from .sound_assets import ensure_generated_sounds, restore_bundled_sound, restore_generated_sound, upgrade_bundled_sounds_v06
 from .sound_catalog import SOUND_BY_ID, SOUND_DEFINITIONS, download_official_sound, import_audio_file
 from .tray import TrayController
 from .ui_theme import (
@@ -590,10 +590,10 @@ class SoundTestDialog(ctk.CTkToplevel):
 
 
 class SettingsDialog(ctk.CTkToplevel):
-    def __init__(self, parent: tk.Misc, config: SchoolConfig, devices: tuple[str, ...], on_save: Callable[[str, bool, str, str | None, int], None]) -> None:
+    def __init__(self, parent: tk.Misc, config: SchoolConfig, devices: tuple[str, ...], on_save: Callable[[str, bool, str, str | None, int, int], None]) -> None:
         super().__init__(parent)
         self.title("Temel ayarlar")
-        self.geometry("690x620")
+        self.geometry("690x690")
         self.resizable(True, True)
         self.configure(fg_color=CANVAS)
         self.transient(parent)
@@ -606,6 +606,7 @@ class SettingsDialog(ctk.CTkToplevel):
             value=config.announcement_device or "zil ile aynı"
         )
         self.grace_var = tk.StringVar(value=str(config.grace_seconds))
+        self.bell_volume_var = tk.DoubleVar(value=config.bell_volume)
         card = ctk.CTkFrame(self, fg_color=SURFACE, corner_radius=18, border_width=1, border_color=BORDER)
         card.pack(fill="both", expand=True, padx=24, pady=24)
         _dialog_title(card, "Temel ayarlar", "Okul kimliğini, zil davranışını ve kullanılacak ses çıkışlarını yönetin.")
@@ -621,9 +622,26 @@ class SettingsDialog(ctk.CTkToplevel):
         for row, (label, widget) in enumerate(fields):
             ctk.CTkLabel(form, text=label, anchor="w", text_color=INK_SUBTLE, font=ctk.CTkFont("Segoe UI Variable Text", 12, "bold")).grid(row=row, column=0, sticky="w", padx=(0, 18), pady=9)
             widget.grid(row=row, column=1, sticky="ew", pady=9)
-        ctk.CTkSwitch(form, text="Öğrenci ve öğretmen zili ayrı çalsın", variable=self.preparation_var, progress_color=TEAL, button_hover_color=TEAL_HOVER, text_color=INK).grid(row=4, column=0, columnspan=2, sticky="w", pady=(18, 10))
+        volume_row = ctk.CTkFrame(form, fg_color=SURFACE_ALT, corner_radius=10)
+        volume_row.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(12, 4))
+        volume_row.grid_columnconfigure(1, weight=1)
+        ctk.CTkLabel(volume_row, text="Zil ses düzeyi", text_color=INK_SUBTLE, font=ctk.CTkFont("Segoe UI Variable Text", 12, "bold")).grid(row=0, column=0, padx=(14, 12), pady=12)
+        self.bell_volume_label = ctk.CTkLabel(volume_row, text=f"%{config.bell_volume}", width=46, text_color=INK, font=ctk.CTkFont("Segoe UI Variable Text", 12, "bold"))
+        self.bell_volume_label.grid(row=0, column=2, padx=(10, 14), pady=12)
+        ctk.CTkSlider(
+            volume_row,
+            from_=0,
+            to=100,
+            number_of_steps=20,
+            variable=self.bell_volume_var,
+            command=lambda value: self.bell_volume_label.configure(text=f"%{int(round(value))}"),
+            progress_color=TEAL,
+            button_color=ACCENT_STRONG,
+            button_hover_color=ACCENT_HOVER,
+        ).grid(row=0, column=1, sticky="ew", pady=12)
+        ctk.CTkSwitch(form, text="Öğrenci ve öğretmen zili ayrı çalsın", variable=self.preparation_var, progress_color=TEAL, button_hover_color=TEAL_HOVER, text_color=INK).grid(row=5, column=0, columnspan=2, sticky="w", pady=(12, 8))
         info = ctk.CTkFrame(form, fg_color=SUCCESS_BG, corner_radius=10)
-        info.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        info.grid(row=6, column=0, columnspan=2, sticky="ew", pady=(8, 0))
         ctk.CTkLabel(info, text="ⓘ  USB ses kartını adına göre seçerseniz, çıkarıldığında sistem kontrolü kritik uyarı verir.", text_color=SUCCESS, justify="left", wraplength=550).pack(fill="x", padx=14, pady=12)
         buttons = ctk.CTkFrame(card, fg_color="transparent")
         buttons.pack(fill="x", padx=26, pady=(18, 24))
@@ -646,7 +664,14 @@ class SettingsDialog(ctk.CTkToplevel):
         announcement_device = (
             None if announcement_device_text == "zil ile aynı" else announcement_device_text
         )
-        self.on_save(school, self.preparation_var.get(), device, announcement_device, grace)
+        self.on_save(
+            school,
+            self.preparation_var.get(),
+            device,
+            announcement_device,
+            grace,
+            int(round(self.bell_volume_var.get())),
+        )
         self.destroy()
 
 
@@ -917,6 +942,7 @@ class OkulZiliApp:
         self.data_dir = data_dir or user_data_dir()
         self.data_dir.mkdir(parents=True, exist_ok=True)
         ensure_generated_sounds(self.data_dir)
+        upgrade_bundled_sounds_v06(self.data_dir)
         self.repo = ConfigRepository(self.data_dir / "ayarlar.json")
         self.auth = auth or AuthRepository(self.data_dir / "profiller.json")
         self.logger = configure_logging(self.data_dir / "gunlukler" / "okul-zili.jsonl")
@@ -1307,8 +1333,9 @@ class OkulZiliApp:
         ceremony_actions = ctk.CTkFrame(self.dashboard_ceremony, fg_color="transparent")
         ceremony_actions.pack(fill="x", padx=10, pady=(0, 7))
         ceremony_buttons = [
-            self._action_button(ceremony_actions, "Sözlü marş", lambda: self._confirm_ceremony_sound("istiklal_sozlu", "Sözlü İstiklâl Marşı"), width=104),
-            self._action_button(ceremony_actions, "Bando", lambda: self._confirm_ceremony_sound("istiklal_sozsuz", "Bando İstiklâl Marşı"), width=88),
+            self._action_button(ceremony_actions, "MEB sözlü", lambda: self._confirm_ceremony_sound("istiklal_sozlu", "MEB sözlü İstiklâl Marşı"), width=96),
+            self._action_button(ceremony_actions, "MEB bando", lambda: self._confirm_ceremony_sound("istiklal_sozsuz", "MEB bando İstiklâl Marşı"), width=96),
+            self._action_button(ceremony_actions, "CB sözlü", lambda: self._confirm_ceremony_sound("istiklal_cb_orijinal", "Cumhurbaşkanlığı sözlü İstiklâl Marşı"), width=96),
             self._action_button(ceremony_actions, "10 Kasım akışı", self._confirm_november_sequence, width=128),
         ]
         for button in ceremony_buttons:
@@ -1322,9 +1349,9 @@ class OkulZiliApp:
         drill_actions = ctk.CTkFrame(self.dashboard_drills, fg_color="transparent")
         drill_actions.pack(fill="x", padx=10, pady=(0, 7))
         self.dashboard_drill_buttons = [
-            self._action_button(drill_actions, "Deprem", lambda: self._play_drill("tatbikat_deprem"), danger=True, width=84),
-            self._action_button(drill_actions, "Tahliye", lambda: self._play_drill("tatbikat_tahliye"), danger=True, width=84),
-            self._action_button(drill_actions, "Yangın", lambda: self._play_drill("tatbikat_yangin"), danger=True, width=84),
+            self._action_button(drill_actions, "Sarı ikaz", lambda: self._play_drill("afad_sari_ikaz"), danger=True, width=84),
+            self._action_button(drill_actions, "Kırmızı alarm", lambda: self._play_drill("afad_kirmizi_alarm"), danger=True, width=104),
+            self._action_button(drill_actions, "KBRN", lambda: self._play_drill("afad_kbrn_alarm"), danger=True, width=84),
         ]
         for button in self.dashboard_drill_buttons:
             button.configure(height=38)
@@ -1743,7 +1770,7 @@ class OkulZiliApp:
             log_event(self.logger, "uretilen_ses_geri_yuklendi", ses=sound_id)
             messagebox.showinfo("Ses geri yüklendi", "Çevrimdışı paket varsayılanı yeniden üretildi.", parent=self.root)
             return
-        if definition.source_kind == "meb_paket":
+        if definition.source_kind in {"meb_paket", "resmi_kayit_paket"}:
             relative = self.config.sounds.get(sound_id, f"sesler/{sound_id}.wav")
             destination = self.data_dir / relative
             if not restore_bundled_sound(sound_id, destination):
@@ -1820,10 +1847,10 @@ class OkulZiliApp:
     def _confirm_november_sequence(self) -> None:
         if messagebox.askyesno(
             "10 Kasım tören provası",
-            "İki dakikalık saygı duruşu sesi ve ardından bando İstiklâl Marşı yayınlanacaktır. Akış başlatılsın mı?",
+            "Paketle gelen iki dakikalık siren ve İstiklâl Marşı tek parça olarak yayınlanacaktır. Akış başlatılsın mı?",
             parent=self.root,
         ):
-            self._manual_sequence(("saygi_2dk", "istiklal_sozsuz"), "10 Kasım tören provası")
+            self._manual_sequence(("on_kasim_butun",), "10 Kasım tören provası")
 
     def _manual_sequence(self, sound_ids: tuple[str, ...], label: str) -> None:
         if not self._require_permission("gunluk_eylem"):
@@ -1832,7 +1859,7 @@ class OkulZiliApp:
         def worker() -> None:
             for sound_id in sound_ids:
                 path = self.data_dir / self.config.sounds.get(sound_id, "")
-                result = self.playback.play(path, self.config.selected_device)
+                result = self.playback.play(path, self.config.selected_device, self.config.bell_volume)
                 self._enqueue_notice(SchedulerNotice("bilgi" if result.success and not result.used_fallback else "kritik", f"{label}: {result.message}", result=result))
                 if not result.success or result.stopped:
                     break
@@ -2307,6 +2334,7 @@ class OkulZiliApp:
                 "meb_referans": "MEB kaynak referansı",
                 "uygulama": "Çevrimdışı varsayılan",
                 "resmi_desene_gore": "Resmî tarife göre yerel üretim",
+                "resmi_kayit_paket": "Paketle gelen resmî kayıt",
                 "kamu_mali_sentez": "Kamu malı beste — yerel sentez",
             }.get(definition.source_kind, "Kaynak belirtilmedi")
             self.sound_tree.insert("", "end", iid=definition.sound_id, values=(definition.category, definition.label, status, source))
@@ -2422,6 +2450,7 @@ class OkulZiliApp:
         device: str,
         announcement_device: str | None,
         grace: int,
+        bell_volume: int,
     ) -> None:
         day_schedules = {
             day: replace(
@@ -2445,6 +2474,7 @@ class OkulZiliApp:
             selected_device=device,
             announcement_device=announcement_device,
             grace_seconds=grace,
+            bell_volume=bell_volume,
             weekly_schedule=schedule,
             day_schedules=day_schedules,
         )
@@ -2640,7 +2670,7 @@ class OkulZiliApp:
             else self.config.selected_device
         )
         def worker() -> None:
-            result = self.playback.play(path, device)
+            result = self.playback.play(path, device, self.config.bell_volume)
             notice = SchedulerNotice("bilgi" if result.success and not result.used_fallback else "kritik", result.message, result=result)
             self._enqueue_notice(notice)
         threading.Thread(target=worker, name="manuel-zil", daemon=True).start()
@@ -2981,6 +3011,7 @@ def main() -> int:
 
         from .audio import validate_wave
         from .defaults import default_config
+        from .sound_assets import BUNDLED_SOUND_ASSETS
 
         config = default_config()
         CalendarEngine(config).resolve(date.today())
@@ -2989,7 +3020,7 @@ def main() -> int:
         with tempfile.TemporaryDirectory(prefix="okul-zili-paket-ses-") as directory:
             data_dir = Path(directory)
             ensure_generated_sounds(data_dir)
-            for sound_id in ("ogrenci", "ogretmen", "teneffus", "blok_gecis"):
+            for sound_id in BUNDLED_SOUND_ASSETS:
                 valid, _detail = validate_wave(data_dir / "sesler" / f"{sound_id}.wav")
                 if not valid:
                     return 9

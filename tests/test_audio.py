@@ -5,12 +5,36 @@ import tempfile
 import threading
 import unittest
 from unittest import mock
+import wave
+from array import array
 
 from okul_zili.audio import AudioError, PlatformAudioBackend, PlaybackManager, validate_wave
 from tests.helpers import MockAudioBackend, write_wave
 
 
 class AudioTests(unittest.TestCase):
+    def test_volume_control_scales_pcm_without_changing_source(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "zil.wav"
+            write_wave(path)
+            original = path.read_bytes()
+
+            class InspectBackend(MockAudioBackend):
+                peak = 0
+
+                def play_file(self, adjusted: Path, device_id: str) -> None:
+                    with wave.open(str(adjusted), "rb") as source:
+                        samples = array("h", source.readframes(source.getnframes()))
+                    self.peak = max(abs(item) for item in samples)
+                    super().play_file(adjusted, device_id)
+
+            full = InspectBackend()
+            half = InspectBackend()
+            PlaybackManager(full).play(path, "varsayilan", 100)
+            PlaybackManager(half).play(path, "varsayilan", 50)
+            self.assertLessEqual(half.peak, full.peak * 0.51)
+            self.assertEqual(original, path.read_bytes())
+
     def test_windows_device_name_resolves_to_real_waveout_index(self) -> None:
         devices = ("Dahili Hoparlör", "USB Ses Kartı")
         self.assertEqual(

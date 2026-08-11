@@ -5,10 +5,10 @@ from okul_zili.ceremonies import ceremony_events
 
 
 class CeremonyTests(unittest.TestCase):
-    def test_november_tenth_is_ordered_silence_then_anthem(self) -> None:
+    def test_november_tenth_uses_single_prepared_recording(self) -> None:
         events = ceremony_events("on_kasim", time(9, 5))
-        self.assertEqual(["saygi_2dk", "istiklal_sozsuz"], [item.sound_id for item in events])
-        self.assertEqual([0, 1], [item.sequence for item in events])
+        self.assertEqual(["on_kasim_butun"], [item.sound_id for item in events])
+        self.assertEqual([0], [item.sequence for item in events])
 
     def test_single_anthem_scenario(self) -> None:
         events = ceremony_events("istiklal_sozlu", time(10, 0))

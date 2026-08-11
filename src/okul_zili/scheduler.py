@@ -260,7 +260,11 @@ class BellScheduler:
                 # Teneffüs müziği gibi düşük öncelikli yayınlar, zil ses cihazı
                 # açılmadan hemen önce kesilir.
                 self.before_play()
-                result = self.playback.play(path, config.device_for(event.event_type))
+                result = self.playback.play(
+                    path,
+                    config.device_for(event.event_type),
+                    config.bell_volume,
+                )
                 self.state.mark(event.event_id)
                 level = "bilgi" if result.success and not result.used_fallback else "kritik"
                 notice = SchedulerNotice(level, result.message, event, result)

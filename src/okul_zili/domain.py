@@ -461,10 +461,11 @@ class SchoolConfig:
     recess_music_enabled: bool = False
     recess_music_volume: int = 20
     recess_music_track: str = "muzik_bach_prelud"
+    bell_volume: int = 100
 
     def validate(self) -> list[str]:
         errors: list[str] = []
-        if self.schema_version != 5:
+        if self.schema_version != 6:
             errors.append("Desteklenmeyen yapılandırma sürümü.")
         if not self.school_name.strip():
             errors.append("Okul adı boş olamaz.")
@@ -472,6 +473,8 @@ class SchoolConfig:
             errors.append("Kaçırılan zil toleransı 0–3600 saniye olmalıdır.")
         if not 0 <= self.recess_music_volume <= 40:
             errors.append("Teneffüs müziği ses düzeyi %0–40 arasında olmalıdır.")
+        if not 0 <= self.bell_volume <= 100:
+            errors.append("Zil ses düzeyi %0–100 arasında olmalıdır.")
         if self.recess_music_track not in self.sounds:
             errors.append("Seçili teneffüs müziği ses havuzunda bulunamadı.")
         valid_event_types = {item.value for item in EventType}
@@ -546,6 +549,7 @@ class SchoolConfig:
             "recess_music_enabled": self.recess_music_enabled,
             "recess_music_volume": self.recess_music_volume,
             "recess_music_track": self.recess_music_track,
+            "bell_volume": self.bell_volume,
         }
 
     @classmethod
@@ -586,6 +590,7 @@ class SchoolConfig:
             recess_music_enabled=bool(raw.get("recess_music_enabled", False)),
             recess_music_volume=int(raw.get("recess_music_volume", 20)),
             recess_music_track=str(raw.get("recess_music_track", "muzik_bach_prelud")),
+            bell_volume=int(raw.get("bell_volume", 100)),
         )
 
 

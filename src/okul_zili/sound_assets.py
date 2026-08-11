@@ -65,10 +65,20 @@ MUSIC_MELODIES: dict[str, tuple[tuple[int, int], ...]] = {
 }
 
 BUNDLED_SOUND_ASSETS: dict[str, str] = {
-    "ogrenci": "meb-ogrenci-teneffus.wav",
-    "ogretmen": "meb-ogretmen.wav",
-    "teneffus": "meb-ogrenci-teneffus.wav",
-    "blok_gecis": "meb-ogrenci-teneffus.wav",
+    "ogrenci": "meb-ogrenci-anons.wav",
+    "ogretmen": "meb-ogretmen-anons.wav",
+    "teneffus": "meb-zil-anonssuz.wav",
+    "blok_gecis": "meb-zil-anonssuz.wav",
+    "istiklal_sozlu": "meb-istiklal-sozlu.wav",
+    "istiklal_sozsuz": "meb-istiklal-bando.wav",
+    "istiklal_cb_egitimsiz": "cb-istiklal-egitimsiz-sozlu.wav",
+    "istiklal_cb_orijinal": "cb-istiklal-orijinal-sozlu.wav",
+    "saygi_1dk_istiklal": "saygi-istiklal.wav",
+    "saygi_ti": "saygi-durusu-ti.wav",
+    "on_kasim_butun": "kasim-2dk-siren-istiklal.wav",
+    "afad_sari_ikaz": "afad-sari-ikaz.wav",
+    "afad_kirmizi_alarm": "afad-kirmizi-ikaz.wav",
+    "afad_kbrn_alarm": "afad-siyah-ikaz.wav",
 }
 
 BUNDLED_SOUND_MAX_SECONDS = {"blok_gecis": 5}
@@ -133,7 +143,7 @@ def _tone_wave(sequence: tuple[tuple[int, int], ...]) -> bytes:
     return output.getvalue()
 
 
-def _siren_wave(duration_ms: int, low: int, high: int, cycle_ms: int) -> bytes:
+def _siren_wave(duration_ms: int, low: int, high: int, cycle_ms: int, amplitude: int = 24_000) -> bytes:
     sample_rate = 22_050
     frames = int(sample_rate * duration_ms / 1000)
     cycle_frames = max(1, int(sample_rate * cycle_ms / 1000))
@@ -147,7 +157,7 @@ def _siren_wave(duration_ms: int, low: int, high: int, cycle_ms: int) -> bytes:
         pulse = 1.0
         if duration_ms < 60_000 and (index // max(1, cycle_frames // 3)) % 3 == 2:
             pulse = 0.12
-        block.append(int(9_000 * pulse * math.sin(phase)))
+        block.append(int(amplitude * pulse * math.sin(phase)))
     repeats = (frames + cycle_frames - 1) // cycle_frames
     samples = (block * repeats)[:frames]
     fade_frames = min(500, frames // 2)
@@ -164,7 +174,7 @@ def _siren_wave(duration_ms: int, low: int, high: int, cycle_ms: int) -> bytes:
     return output.getvalue()
 
 
-def _afad_alert_wave(kind: str, duration_ms: int = 180_000) -> bytes:
+def _afad_alert_wave(kind: str, duration_ms: int = 180_000, level: int = 24_000) -> bytes:
     sample_rate = 8_000
     frames = int(sample_rate * duration_ms / 1000)
     cycle_seconds = 8 if kind == "wave" else (2 if kind == "interrupted" else 1)
@@ -176,13 +186,13 @@ def _afad_alert_wave(kind: str, duration_ms: int = 180_000) -> bytes:
         if kind == "wave":
             position = (seconds % 8.0) / 8.0
             frequency = 430 + 260 * (1.0 - abs(2.0 * position - 1.0))
-            amplitude = 7_000
+            amplitude = level
         elif kind == "interrupted":
             frequency = 620
-            amplitude = 7_000 if int(seconds) % 2 == 0 else 0
+            amplitude = level if int(seconds) % 2 == 0 else 0
         else:
             frequency = 520
-            amplitude = 7_000
+            amplitude = level
         phase += 2 * math.pi * frequency / sample_rate
         block.append(int(amplitude * math.sin(phase)))
     repeats = (frames + cycle_frames - 1) // cycle_frames
@@ -267,3 +277,61 @@ def ensure_generated_sounds(base_dir: Path) -> None:
         destination = sound_dir / filename
         if not destination.exists():
             destination.write_bytes(_music_wave(notes))
+
+
+def upgrade_bundled_sounds_v06(base_dir: Path) -> bool:
+    """Upgrade untouched v0.5 defaults while preserving user-selected files."""
+    marker = base_dir / "ses-paketi-v06.tamam"
+    if marker.exists():
+        return False
+    sound_dir = base_dir / "sesler"
+    legacy_assets = {
+        "ogrenci": "meb-ogrenci-teneffus.wav",
+        "ogretmen": "meb-ogretmen.wav",
+        "teneffus": "meb-ogrenci-teneffus.wav",
+        "blok_gecis": "meb-ogrenci-teneffus.wav",
+    }
+    upgraded = False
+    for sound_id, filename in legacy_assets.items():
+        destination = sound_dir / f"{sound_id}.wav"
+        legacy = Path(__file__).resolve().parent / "assets" / "sounds" / filename
+        if not destination.is_file() or not legacy.is_file():
+            continue
+        expected = legacy.read_bytes()
+        if sound_id == "blok_gecis":
+            buffer = io.BytesIO()
+            with wave.open(str(legacy), "rb") as source:
+                frames = source.readframes(min(source.getnframes(), source.getframerate() * 5))
+                parameters = source.getparams()
+            with wave.open(buffer, "wb") as target:
+                target.setparams(parameters)
+                target.writeframes(frames)
+            expected = buffer.getvalue()
+        if destination.read_bytes() == expected:
+            upgraded = restore_bundled_sound(sound_id, destination) or upgraded
+
+    placeholder_bytes: dict[str, bytes] = {
+        sound_id.removesuffix(".wav"): _tone_wave(sequence)
+        for sound_id, sequence in TONES.items()
+    }
+    placeholder_bytes.update(
+        {
+            sound_id.removesuffix(".wav"): _siren_wave(*parameters, amplitude=9_000)
+            for sound_id, parameters in SIRENS.items()
+        }
+    )
+    placeholder_bytes.update(
+        {
+            sound_id.removesuffix(".wav"): _afad_alert_wave(kind, level=7_000)
+            for sound_id, kind in AFAD_ALERTS.items()
+        }
+    )
+    for sound_id, old_data in placeholder_bytes.items():
+        destination = sound_dir / f"{sound_id}.wav"
+        if destination.is_file() and destination.read_bytes() == old_data:
+            if sound_id in BUNDLED_SOUND_ASSETS:
+                upgraded = restore_bundled_sound(sound_id, destination) or upgraded
+            else:
+                upgraded = restore_generated_sound(sound_id, destination) or upgraded
+    marker.write_text("0.6.0\n", encoding="utf-8")
+    return upgraded
