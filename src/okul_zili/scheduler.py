@@ -137,6 +137,7 @@ class BellScheduler:
         state: RunState,
         clock: Clock | None = None,
         notify: Callable[[SchedulerNotice], None] | None = None,
+        before_play: Callable[[], None] | None = None,
     ) -> None:
         self.config = config
         self.engine = engine
@@ -145,6 +146,7 @@ class BellScheduler:
         self.state = state
         self.clock = clock or SystemClock()
         self.notify = notify or (lambda notice: None)
+        self.before_play = before_play or (lambda: None)
         self._last_now: datetime | None = None
         self._last_monotonic: float | None = None
         self._lock = threading.RLock()
@@ -255,6 +257,9 @@ class BellScheduler:
                     continue
                 path_text = config.sounds.get(event.sound_id, "")
                 path = self.base_dir / path_text
+                # Teneffüs müziği gibi düşük öncelikli yayınlar, zil ses cihazı
+                # açılmadan hemen önce kesilir.
+                self.before_play()
                 result = self.playback.play(path, config.device_for(event.event_type))
                 self.state.mark(event.event_id)
                 level = "bilgi" if result.success and not result.used_fallback else "kritik"

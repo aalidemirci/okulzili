@@ -27,6 +27,9 @@ MEB_CENTRAL_BELL_PAGE = "https://meb.gov.tr/bakan-selcuk-ilkogretim-icin-hazirla
 MEB_SAMPLE_PAGE = "https://erzin.meb.gov.tr/www/ornek-okul-zil-sesleri/icerik/1140/tr"
 MEB_ANTHEM_PAGE = "https://www.meb.gov.tr/istiklalmarsi/istiklalmarsi/Sesler"
 MEB_NOVEMBER_TENTH_PAGE = "https://fethiye.meb.gov.tr/www/10-kasim-ataturku-anma-gununde-calinacak-ataturkun-sevdigi-sarkilar/icerik/8811"
+AFAD_ALERT_PAGE = "https://www.afad.gov.tr/ikaz-alarm-isaretleri"
+BACH_SCORE_PAGE = "https://imslp.org/wiki/Prelude_and_Fugue_in_C_major%2C_BWV_846_(Bach%2C_Johann_Sebastian)"
+BEETHOVEN_SCORE_PAGE = "https://imslp.org/wiki/Symphony_No.9%2C_Op.125_(Beethoven%2C_Ludwig_van)"
 
 
 SOUND_DEFINITIONS: tuple[SoundDefinition, ...] = (
@@ -42,6 +45,11 @@ SOUND_DEFINITIONS: tuple[SoundDefinition, ...] = (
     SoundDefinition("tatbikat_tahliye", "Tahliye", "Tatbikat", "Binanın kontrollü boşaltılması için kesikli uyarı."),
     SoundDefinition("tatbikat_yangin", "Yangın", "Tatbikat", "Yangın ve tahliye tatbikatı için hızlı alarm."),
     SoundDefinition("acil_durum", "Genel acil durum", "Tatbikat", "Diğer zillerden açıkça ayrılan acil durum uyarısı."),
+    SoundDefinition("afad_sari_ikaz", "AFAD sarı ikaz — 3 dk düz siren", "Sivil savunma", "AFAD'ın hava saldırısı ihtimali için tarif ettiği üç dakikalık düz siren, uygulama tarafından çevrimdışı sentezlenir.", source_page=AFAD_ALERT_PAGE, source_kind="resmi_desene_gore"),
+    SoundDefinition("afad_kirmizi_alarm", "AFAD kırmızı alarm — 3 dk dalgalı siren", "Sivil savunma", "AFAD'ın hava saldırısı tehlikesi için tarif ettiği üç dakikalık yükselip alçalan siren, uygulama tarafından çevrimdışı sentezlenir.", source_page=AFAD_ALERT_PAGE, source_kind="resmi_desene_gore"),
+    SoundDefinition("afad_kbrn_alarm", "AFAD KBRN alarmı — 3 dk kesikli siren", "Sivil savunma", "AFAD'ın kimyasal, biyolojik, radyolojik ve nükleer tehlike için tarif ettiği üç dakikalık kesikli siren, uygulama tarafından çevrimdışı sentezlenir.", source_page=AFAD_ALERT_PAGE, source_kind="resmi_desene_gore"),
+    SoundDefinition("muzik_bach_prelud", "Bach — Do Majör Prelüd", "Teneffüs Müziği", "Kamu malı besteden uygulama tarafından sentezlenen hafif, sözsüz düzenleme.", source_page=BACH_SCORE_PAGE, source_kind="kamu_mali_sentez"),
+    SoundDefinition("muzik_ode_to_joy", "Beethoven — Neşeye Övgü", "Teneffüs Müziği", "Kamu malı besteden uygulama tarafından sentezlenen hafif, sözsüz düzenleme.", source_page=BEETHOVEN_SCORE_PAGE, source_kind="kamu_mali_sentez"),
     SoundDefinition("anons", "Anons başlangıcı", "Sistem", "Kayıtlı anons öncesi kısa dikkat sesi."),
 )
 

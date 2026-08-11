@@ -458,15 +458,22 @@ class SchoolConfig:
     date_rules: list[DateRule] = field(default_factory=list)
     grace_seconds: int = 90
     grace_seconds_by_type: dict[str, int] = field(default_factory=dict)
+    recess_music_enabled: bool = False
+    recess_music_volume: int = 20
+    recess_music_track: str = "muzik_bach_prelud"
 
     def validate(self) -> list[str]:
         errors: list[str] = []
-        if self.schema_version != 4:
+        if self.schema_version != 5:
             errors.append("Desteklenmeyen yapılandırma sürümü.")
         if not self.school_name.strip():
             errors.append("Okul adı boş olamaz.")
         if not 0 <= self.grace_seconds <= 3600:
             errors.append("Kaçırılan zil toleransı 0–3600 saniye olmalıdır.")
+        if not 0 <= self.recess_music_volume <= 40:
+            errors.append("Teneffüs müziği ses düzeyi %0–40 arasında olmalıdır.")
+        if self.recess_music_track not in self.sounds:
+            errors.append("Seçili teneffüs müziği ses havuzunda bulunamadı.")
         valid_event_types = {item.value for item in EventType}
         for event_type, seconds in self.grace_seconds_by_type.items():
             if event_type not in valid_event_types:
@@ -536,6 +543,9 @@ class SchoolConfig:
             "date_rules": [rule.to_dict() for rule in self.date_rules],
             "grace_seconds": self.grace_seconds,
             "grace_seconds_by_type": dict(sorted(self.grace_seconds_by_type.items())),
+            "recess_music_enabled": self.recess_music_enabled,
+            "recess_music_volume": self.recess_music_volume,
+            "recess_music_track": self.recess_music_track,
         }
 
     @classmethod
@@ -573,6 +583,9 @@ class SchoolConfig:
                 str(key): int(value)
                 for key, value in dict(raw.get("grace_seconds_by_type", {})).items()
             },
+            recess_music_enabled=bool(raw.get("recess_music_enabled", False)),
+            recess_music_volume=int(raw.get("recess_music_volume", 20)),
+            recess_music_track=str(raw.get("recess_music_track", "muzik_bach_prelud")),
         )
 
 

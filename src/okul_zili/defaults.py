@@ -134,7 +134,7 @@ def build_school_config(
         student_bell_minutes=preparation_minutes,
     )
     return SchoolConfig(
-        schema_version=4,
+        schema_version=5,
         school_name=school_name,
         timezone="Europe/Istanbul",
         preparation_enabled=preparation_enabled,
@@ -154,6 +154,11 @@ def build_school_config(
             "tatbikat_tahliye": "sesler/tatbikat_tahliye.wav",
             "tatbikat_yangin": "sesler/tatbikat_yangin.wav",
             "acil_durum": "sesler/acil_durum.wav",
+            "afad_sari_ikaz": "sesler/afad_sari_ikaz.wav",
+            "afad_kirmizi_alarm": "sesler/afad_kirmizi_alarm.wav",
+            "afad_kbrn_alarm": "sesler/afad_kbrn_alarm.wav",
+            "muzik_bach_prelud": "sesler/muzik_bach_prelud.wav",
+            "muzik_ode_to_joy": "sesler/muzik_ode_to_joy.wav",
         },
         weekly_schedule={weekday: day for weekday in range(5)},
         day_schedules={weekday: day_settings for weekday in range(5)},
@@ -161,6 +166,9 @@ def build_school_config(
         date_rules=[],
         grace_seconds=90,
         grace_seconds_by_type={},
+        recess_music_enabled=False,
+        recess_music_volume=20,
+        recess_music_track="muzik_bach_prelud",
     )
 
 

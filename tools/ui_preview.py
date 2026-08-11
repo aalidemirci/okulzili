@@ -85,6 +85,7 @@ def main() -> None:
                 app._shutdown_event.set()
                 app._scheduler_wake_event.set()
                 app.playback.stop()
+                app.recess_music.stop()
                 app.tray.stop()
                 root.destroy()
 

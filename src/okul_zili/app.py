@@ -31,8 +31,9 @@ from .instance import SingleInstanceLock
 from .paths import user_data_dir
 from .pilot_log import analyze_files, format_report
 from .preflight import CheckResult, PreflightService
+from .recess_music import RecessMusicManager
 from .scheduler import BellScheduler, RunState, SchedulerNotice
-from .sound_assets import ensure_generated_sounds, restore_bundled_sound
+from .sound_assets import ensure_generated_sounds, restore_bundled_sound, restore_generated_sound
 from .sound_catalog import SOUND_BY_ID, SOUND_DEFINITIONS, download_official_sound, import_audio_file
 from .tray import TrayController
 from .ui_theme import (
@@ -473,7 +474,11 @@ class LoginDialog(ctk.CTkToplevel):
     def __init__(self, parent: tk.Misc, auth: AuthRepository) -> None:
         super().__init__(parent)
         self.title("Okul Zili — Giriş")
-        self.geometry("460x410")
+        # The action row used to fall below the fixed 410 px client area on
+        # Windows systems using display scaling.  Keep enough intrinsic room
+        # for the complete form and still allow the user to enlarge it.
+        self.geometry("500x540")
+        self.minsize(460, 510)
         self.resizable(True, True)
         self.configure(fg_color=CANVAS)
         self.transient(parent)
@@ -490,9 +495,9 @@ class LoginDialog(ctk.CTkToplevel):
         ctk.CTkLabel(form, text="Tekrar hoş geldiniz", text_color=INK, font=ctk.CTkFont("Segoe UI Variable Display", 22, "bold")).pack()
         ctk.CTkLabel(form, text="Devam etmek için profilinizi seçip PIN'inizi girin.", text_color=MUTED, font=ctk.CTkFont("Segoe UI Variable Text", 12), wraplength=320).pack(pady=(4, 18))
         ctk.CTkLabel(form, text="Profil", text_color=INK_SUBTLE, anchor="w", font=ctk.CTkFont("Segoe UI Variable Text", 12, "bold")).pack(fill="x", padx=28)
-        ctk.CTkComboBox(form, variable=self.role_var, values=list(roles), state="readonly", height=42, corner_radius=10, fg_color=SURFACE, border_color=BORDER, button_color=ACCENT_STRONG).pack(fill="x", padx=28, pady=(5, 12))
+        ctk.CTkComboBox(form, variable=self.role_var, values=list(roles), state="readonly", height=44, corner_radius=10, fg_color=SURFACE, border_color=BORDER, button_color=ACCENT_STRONG).pack(fill="x", padx=28, pady=(5, 12))
         ctk.CTkLabel(form, text="PIN", text_color=INK_SUBTLE, anchor="w", font=ctk.CTkFont("Segoe UI Variable Text", 12, "bold")).pack(fill="x", padx=28)
-        pin_entry = ctk.CTkEntry(form, textvariable=self.pin_var, show="●", height=40, corner_radius=10, fg_color=SURFACE, border_color=BORDER, placeholder_text="PIN'inizi girin")
+        pin_entry = ctk.CTkEntry(form, textvariable=self.pin_var, show="●", height=44, corner_radius=10, fg_color=SURFACE, border_color=BORDER, placeholder_text="PIN'inizi girin")
         pin_entry.pack(fill="x", padx=28, pady=(5, 16))
         buttons = ctk.CTkFrame(form, fg_color="transparent")
         buttons.pack(fill="x", padx=28, pady=(0, 24))
@@ -932,6 +937,7 @@ class OkulZiliApp:
                 log_event(self.logger, "zil_rolleri_gecisi_basarisiz", level="kritik", hata=str(exc))
         self.backend = PlatformAudioBackend()
         self.playback = PlaybackManager(self.backend)
+        self.recess_music = RecessMusicManager(self.data_dir / "onbellek" / "teneffus-muzigi")
         self.engine = CalendarEngine(self.config)
         self.notice_queue: queue.Queue[SchedulerNotice] = queue.Queue(maxsize=500)
         self._dropped_notice_count = 0
@@ -942,6 +948,7 @@ class OkulZiliApp:
             self.data_dir,
             RunState(self.data_dir / "calisma-durumu.json"),
             notify=self._enqueue_notice,
+            before_play=self._stop_recess_music_silently,
         )
         self.scheduler_running = True
         self._has_critical_alert = False
@@ -1445,11 +1452,11 @@ class OkulZiliApp:
         self.schedule_tree.pack(side="left", fill="both", expand=True, padx=(1, 0), pady=1)
         self.schedule_tree.bind("<Double-1>", lambda event: self._edit_lesson_events())
 
-        form = ctk.CTkScrollableFrame(workspace, fg_color=SURFACE, corner_radius=16, border_width=1, border_color=BORDER, height=210)
+        # Automatic calculation is the primary task on this page.  It must be
+        # visible before the result table and must not have a nested scrollbar.
+        form = ctk.CTkFrame(workspace, fg_color=SURFACE, corner_radius=16, border_width=1, border_color=BORDER)
         self.schedule_form = form
-        table_card.pack_forget()
-        form.pack(side="bottom", fill="x", pady=(14, 0))
-        table_card.pack(side="top", fill="both", expand=True)
+        form.pack(side="top", fill="x", pady=(0, 14), before=table_card)
         ctk.CTkLabel(form, text="Otomatik hesaplama", text_color=INK, font=ctk.CTkFont("Segoe UI Variable Display", 17, "bold"), anchor="w").pack(fill="x", padx=18, pady=(18, 2))
         ctk.CTkLabel(form, text="Seçili günün eğitim modeli, oturumları ve blok düzeni", text_color=MUTED, font=ctk.CTkFont("Segoe UI Variable Text", 12), anchor="w").pack(fill="x", padx=18, pady=(0, 10))
         mode_row = ctk.CTkFrame(form, fg_color="transparent")
@@ -1601,13 +1608,34 @@ class OkulZiliApp:
         toolbar.pack(fill="x", pady=(0, 12))
         self.sound_admin_buttons = [
             self._action_button(toolbar, "Dosya seç", self._assign_selected_sound),
-            self._action_button(toolbar, "MEB sesini yükle / geri al", self._download_selected_sound, primary=True, width=190),
+            self._action_button(toolbar, "Varsayılana döndür", self._download_selected_sound, primary=True, width=154),
             self._action_button(toolbar, "Kaynağı aç", self._open_selected_source),
         ]
         for index, button in enumerate(self.sound_admin_buttons):
             button.pack(side="left", padx=(0 if index == 0 else 8, 0))
         self._action_button(toolbar, "■  Sesi durdur", self._stop_audio, danger=True, width=124).pack(side="right")
         self._action_button(toolbar, "Seçili sesi dene", self._play_selected_sound, width=138).pack(side="right", padx=(0, 8))
+
+        music_card = ctk.CTkFrame(self.sounds_page, fg_color=SURFACE, corner_radius=14, border_width=1, border_color=BORDER)
+        music_card.pack(fill="x", pady=(0, 12))
+        self.recess_music_enabled_var = tk.BooleanVar(value=self.config.recess_music_enabled)
+        self.recess_music_volume_var = tk.StringVar(value=str(self.config.recess_music_volume))
+        self.recess_music_labels = {
+            "Bach — Do Majör Prelüd": "muzik_bach_prelud",
+            "Beethoven — Neşeye Övgü": "muzik_ode_to_joy",
+        }
+        current_music_label = next(
+            (label for label, sound_id in self.recess_music_labels.items() if sound_id == self.config.recess_music_track),
+            next(iter(self.recess_music_labels)),
+        )
+        self.recess_music_track_var = tk.StringVar(value=current_music_label)
+        ctk.CTkSwitch(music_card, text="Teneffüste hafif müzik", variable=self.recess_music_enabled_var, progress_color=TEAL, text_color=INK_SUBTLE, font=ctk.CTkFont("Segoe UI Variable Text", 12, "bold")).pack(side="left", padx=(14, 10), pady=12)
+        ctk.CTkComboBox(music_card, variable=self.recess_music_track_var, values=list(self.recess_music_labels), state="readonly", width=230, height=38, fg_color=INPUT, border_color=BORDER, button_color=ACCENT_STRONG).pack(side="left", padx=6, pady=10)
+        ctk.CTkLabel(music_card, text="Ses %", text_color=MUTED, font=ctk.CTkFont("Segoe UI Variable Text", 11, "bold")).pack(side="left", padx=(12, 4))
+        ctk.CTkEntry(music_card, textvariable=self.recess_music_volume_var, width=55, height=38, fg_color=INPUT, border_color=BORDER).pack(side="left", pady=10)
+        self.recess_music_save_button = self._action_button(music_card, "Müzik ayarını kaydet", self._save_recess_music_settings, primary=True, width=154)
+        self.recess_music_save_button.pack(side="right", padx=12, pady=10)
+        ctk.CTkLabel(music_card, text="Güvenli üst sınır %40", text_color=MUTED, font=ctk.CTkFont("Segoe UI Variable Text", 10)).pack(side="right", padx=4)
 
         table_card = ctk.CTkFrame(self.sounds_page, fg_color=SURFACE, corner_radius=16, border_width=1, border_color=BORDER)
         table_card.pack(fill="both", expand=True)
@@ -1649,6 +1677,28 @@ class OkulZiliApp:
             return None
         return selected[0]
 
+    def _save_recess_music_settings(self) -> None:
+        if self.role != "yonetici":
+            return
+        try:
+            volume = int(self.recess_music_volume_var.get().strip())
+            if not 0 <= volume <= 40:
+                raise ValueError("Teneffüs müziği ses düzeyi %0–40 arasında olmalıdır.")
+            track = self.recess_music_labels[self.recess_music_track_var.get()]
+        except (ValueError, KeyError) as exc:
+            messagebox.showerror("Geçersiz müzik ayarı", str(exc), parent=self.root)
+            return
+        self.config = replace(
+            self.config,
+            recess_music_enabled=self.recess_music_enabled_var.get(),
+            recess_music_volume=volume,
+            recess_music_track=track,
+        )
+        if not self.config.recess_music_enabled:
+            self.recess_music.stop()
+        self._save_config()
+        messagebox.showinfo("Teneffüs müziği", "Müzik ayarları kaydedildi.", parent=self.root)
+
     def _assign_selected_sound(self) -> None:
         if self.role != "yonetici":
             return
@@ -1683,6 +1733,16 @@ class OkulZiliApp:
         if not sound_id:
             return
         definition = SOUND_BY_ID[sound_id]
+        if definition.source_kind in {"resmi_desene_gore", "kamu_mali_sentez", "uygulama"}:
+            relative = self.config.sounds.get(sound_id, f"sesler/{sound_id}.wav")
+            destination = self.data_dir / relative
+            if not restore_generated_sound(sound_id, destination):
+                messagebox.showinfo("Varsayılan yok", "Bu ses için yeniden üretilebilir bir paket varsayılanı bulunmuyor.", parent=self.root)
+                return
+            self._refresh_sounds()
+            log_event(self.logger, "uretilen_ses_geri_yuklendi", ses=sound_id)
+            messagebox.showinfo("Ses geri yüklendi", "Çevrimdışı paket varsayılanı yeniden üretildi.", parent=self.root)
+            return
         if definition.source_kind == "meb_paket":
             relative = self.config.sounds.get(sound_id, f"sesler/{sound_id}.wav")
             destination = self.data_dir / relative
@@ -1768,6 +1828,7 @@ class OkulZiliApp:
     def _manual_sequence(self, sound_ids: tuple[str, ...], label: str) -> None:
         if not self._require_permission("gunluk_eylem"):
             return
+        self._stop_recess_music_silently()
         def worker() -> None:
             for sound_id in sound_ids:
                 path = self.data_dir / self.config.sounds.get(sound_id, "")
@@ -1782,7 +1843,7 @@ class OkulZiliApp:
             self.profile_button.configure(state="disabled")
             self.settings_button.configure(state="disabled")
             self.backup_button.configure(state="disabled")
-            for button in (*self.schedule_admin_buttons, self.calendar_edit_button, *self.rule_admin_buttons, *self.sound_admin_buttons):
+            for button in (*self.schedule_admin_buttons, self.calendar_edit_button, *self.rule_admin_buttons, *self.sound_admin_buttons, self.recess_music_save_button):
                 button.configure(state="disabled")
         if self.role == "goruntuleme":
             for button in (
@@ -2245,6 +2306,8 @@ class OkulZiliApp:
                 "meb_paket": "Paketle gelen MEB kaydı",
                 "meb_referans": "MEB kaynak referansı",
                 "uygulama": "Çevrimdışı varsayılan",
+                "resmi_desene_gore": "Resmî tarife göre yerel üretim",
+                "kamu_mali_sentez": "Kamu malı beste — yerel sentez",
             }.get(definition.source_kind, "Kaynak belirtilmedi")
             self.sound_tree.insert("", "end", iid=definition.sound_id, values=(definition.category, definition.label, status, source))
         if selected and self.sound_tree.exists(selected[0]):
@@ -2569,6 +2632,7 @@ class OkulZiliApp:
     def _manual_play(self, sound_id: str) -> None:
         if not self._require_permission("gunluk_eylem"):
             return
+        self._stop_recess_music_silently()
         path = self.data_dir / self.config.sounds.get(sound_id, "")
         device = (
             self.config.announcement_device or self.config.selected_device
@@ -2582,7 +2646,9 @@ class OkulZiliApp:
         threading.Thread(target=worker, name="manuel-zil", daemon=True).start()
 
     def _stop_audio(self) -> None:
-        if self.playback.stop():
+        stopped_bell = self.playback.stop()
+        stopped_music = self.recess_music.stop()
+        if stopped_bell or stopped_music:
             log_event(self.logger, "ses_durduruldu", kaynak="kullanici")
             self._enqueue_notice(SchedulerNotice("bilgi", "Çalan ses kullanıcı tarafından durduruldu."))
         else:
@@ -2748,8 +2814,47 @@ class OkulZiliApp:
                 self._show_window()
                 self.tray.notify(notice.message, "Kritik zil uyarısı")
                 messagebox.showerror("Kritik zil uyarısı", notice.message, parent=self.root)
+            elif (
+                notice.event is not None
+                and notice.event.event_type is EventType.LESSON_END
+                and notice.result is not None
+                and notice.result.success
+                and not notice.result.stopped
+            ):
+                self._start_recess_music()
             self._refresh_logs()
         self.root.after(200, self._drain_notices)
+
+    def _stop_recess_music_silently(self) -> None:
+        if hasattr(self, "recess_music"):
+            self.recess_music.stop()
+
+    def _start_recess_music(self) -> None:
+        if not self.config.recess_music_enabled:
+            return
+        now = datetime.now()
+        next_event = self.scheduler.next_event(now)
+        if next_event is None or next_event.scheduled_at.date() != now.date():
+            return
+        remaining = (next_event.scheduled_at - now).total_seconds()
+        if not 10 <= remaining <= 7_200:
+            return
+        relative = self.config.sounds.get(self.config.recess_music_track, "")
+        source = self.data_dir / relative
+        stop_at = next_event.scheduled_at - timedelta(seconds=1)
+        if self.recess_music.start(
+            source,
+            self.config.selected_device,
+            self.config.recess_music_volume,
+            stop_at,
+        ):
+            log_event(
+                self.logger,
+                "teneffus_muzigi_basladi",
+                parca=self.config.recess_music_track,
+                ses_yuzde=self.config.recess_music_volume,
+                bitis=stop_at.isoformat(timespec="seconds"),
+            )
 
     def _export_logs(self) -> None:
         destination = filedialog.asksaveasfilename(
@@ -2841,6 +2946,7 @@ class OkulZiliApp:
         self._shutdown_event.set()
         self._scheduler_wake_event.set()
         self.playback.stop()
+        self.recess_music.stop()
         self.tray.stop()
         if self._scheduler_thread is not None and self._scheduler_thread.is_alive():
             self._scheduler_thread.join(timeout=3)
@@ -2960,6 +3066,7 @@ def main() -> int:
                     result["code"] = 0
                 app._shutdown_event.set()
                 app._scheduler_wake_event.set()
+                app.recess_music.stop()
                 if app._scheduler_thread is not None:
                     app._scheduler_thread.join(timeout=2)
                 app.tray.stop()

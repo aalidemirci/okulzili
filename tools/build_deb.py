@@ -7,7 +7,7 @@ import tarfile
 import time
 
 
-VERSION = "0.5.0"
+VERSION = "1.0.0"
 
 
 def _tar_xz(entries: list[tuple[Path | None, str, int, bytes | None]]) -> bytes:
@@ -49,8 +49,10 @@ def build(project_root: Path, output: Path) -> None:
     data_entries: list[tuple[Path | None, str, int, bytes | None]] = []
     for source in sorted((project_root / "src" / "okul_zili").glob("*.py")):
         data_entries.append((source, f"./usr/lib/python3/dist-packages/okul_zili/{source.name}", 0o644, None))
-    for source in sorted((project_root / "src" / "okul_zili" / "assets").glob("*.png")):
-        data_entries.append((source, f"./usr/lib/python3/dist-packages/okul_zili/assets/{source.name}", 0o644, None))
+    asset_root = project_root / "src" / "okul_zili" / "assets"
+    for source in sorted(item for item in asset_root.rglob("*") if item.is_file()):
+        relative = source.relative_to(asset_root).as_posix()
+        data_entries.append((source, f"./usr/lib/python3/dist-packages/okul_zili/assets/{relative}", 0o644, None))
     for source in sorted((project_root / "src" / "pystray").rglob("*.py")):
         relative = source.relative_to(project_root / "src")
         data_entries.append((source, f"./usr/lib/python3/dist-packages/{relative.as_posix()}", 0o644, None))
@@ -69,6 +71,8 @@ def build(project_root: Path, output: Path) -> None:
         "DONANIM.md",
         "KULLANIM.md",
         "SORUN-GIDERME.md",
+        "SES-KAYNAKLARI.md",
+        "SES-KAYNAKLARI.md",
         "MIMARI.md",
         "SURUM-NOTLARI.md",
         "BAGIMLILIKLAR.md",

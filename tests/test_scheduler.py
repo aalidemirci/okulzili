@@ -48,6 +48,33 @@ class SchedulerTests(unittest.TestCase):
             self.assertEqual([], second)
             self.assertEqual(1, sum(call[0] == "file" for call in backend.calls))
 
+    def test_low_priority_audio_is_stopped_before_due_bell(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = default_config()
+            for relative in config.sounds.values():
+                write_wave(root / relative)
+            order: list[str] = []
+            backend = MockAudioBackend()
+            original_play = backend.play_file
+
+            def play(path: Path, device: str) -> None:
+                order.append("zil")
+                original_play(path, device)
+
+            backend.play_file = play  # type: ignore[method-assign]
+            scheduler = BellScheduler(
+                config,
+                CalendarEngine(config),
+                PlaybackManager(backend),
+                root,
+                RunState(),
+                FakeClock(datetime(2026, 9, 7, 8, 18)),
+                before_play=lambda: order.append("muzigi-durdur"),
+            )
+            scheduler.tick()
+            self.assertEqual(["muzigi-durdur", "zil"], order)
+
     def test_missed_events_are_logged_not_burst_played(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             scheduler, _, backend, _ = self._scheduler(directory, datetime(2026, 9, 7, 12, 0))

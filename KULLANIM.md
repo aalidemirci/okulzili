@@ -41,6 +41,10 @@
 
 Blok ders sırasında iç ders sınırlarında isteğe bağlı beş saniyelik sınıf değişim zili çalar. Öğrenci zili blok başlamadan belirlenen dakika kadar önce, öğretmen zili blok başlangıcında ve normal teneffüs zili blok bitiminde çalar.
 
+## Teneffüs müziği
+
+**Sesler ve sirenler** sayfasındaki **Teneffüste hafif müzik** seçeneğini açın, kamu malı beste havuzundan parçayı ve en fazla %40 olacak ses düzeyini seçip kaydedin. Varsayılan düzey %20'dir. Müzik yalnızca ders bitişi ile aynı gün içindeki sıradaki zil arasında çalar; sıradaki zilden bir saniye önce, bir tören/tatbikat başlatıldığında veya **Sesi durdur** düğmesine basıldığında kesilir.
+
 ## Tören, sınav veya kısaltılmış gün
 
 1. **Tatil ve istisnalar → Tatil / istisna ekle** yolunu açın.
