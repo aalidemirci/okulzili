@@ -34,6 +34,21 @@ Paket, AFAD'ın resmî **İkaz ve Alarm İşaretleri** sayfasındaki süre ve se
 
 Bu sivil savunma işaretleri, okul içi deprem/tahliye/yangın prova düğmelerinden ayrı tutulur; işaretlerin anlamları birbirine karıştırılmaz.
 
+0.6.0 paketinde proje sahibi tarafından `src/zilsesleri` klasörüne eklenen üç AFAD kaydı kullanılır. Derleme sırasında kayıtların ortalama seviyesi ders zillerinden düşük kalmayacak biçimde normalize edilir ve çevrimdışı PCM WAV olarak paketlenir. Kaynak dosyalar depoda korunur; kullanıcı arayüzden kaydı değiştirebilir veya paket varsayılanına dönebilir.
+
+## Paketlenen tören ve zil kayıtları
+
+0.6.0 sürümünde proje sahibi tarafından sağlanan aşağıdaki kayıtlar çevrimdışı pakete alınmıştır:
+
+- MEB sözlü ve sözsüz/bando İstiklâl Marşı kayıtları
+- Cumhurbaşkanlığı “ses eğitimi almayanlar için” ve “orijinal beste sözlü” İstiklâl Marşı kayıtları
+- Birleşik saygı duruşu + İstiklâl Marşı ve 10 Kasım iki dakika siren + marş akışları
+- Saygı duruşu Ti sesi
+- Yeni MEB öğrenci anonsu, öğretmen anonsu ve anonssuz zil
+- AFAD sarı, kırmızı ve siyah/KBRN ikaz kayıtları
+
+Kaynak sayfaları uygulamadaki ses tablosundan açılabilir. Kayıtların paket içinde kullanılmasına ilişkin sorumluluk ve teyit, dosyaları projeye sağlayan proje sahibine aittir.
+
 ## Teneffüs müziği
 
 Teneffüs müziği varsayılan olarak kapalı ve etkinleştirildiğinde %20 ses düzeyindedir; arayüz güvenlik amacıyla en fazla %40'a izin verir. Bir sonraki zil başlamadan bir saniye önce veya herhangi bir elle/tatbikat/tören yayını başlatıldığında müzik kesilir. Havuzdaki kayıtlar başka icralardan alınmış ses kayıtları değildir:

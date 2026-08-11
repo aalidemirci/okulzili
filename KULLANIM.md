@@ -45,6 +45,10 @@ Blok ders sırasında iç ders sınırlarında isteğe bağlı beş saniyelik s�
 
 **Sesler ve sirenler** sayfasındaki **Teneffüste hafif müzik** seçeneğini açın, kamu malı beste havuzundan parçayı ve en fazla %40 olacak ses düzeyini seçip kaydedin. Varsayılan düzey %20'dir. Müzik yalnızca ders bitişi ile aynı gün içindeki sıradaki zil arasında çalar; sıradaki zilden bir saniye önce, bir tören/tatbikat başlatıldığında veya **Sesi durdur** düğmesine basıldığında kesilir.
 
+## Zil ses düzeyi
+
+Üst çubuktaki **Yönetim** düğmesinden **Okul ve cihaz ayarları** bölümünü açın. **Zil ses düzeyi** çubuğu öğrenci, öğretmen, teneffüs, tören ve tatbikat yayınlarının ortak seviyesini %0–100 arasında ayarlar. Teneffüs müziğinin ayrı ve düşük güvenlik sınırı değişmez. Ses düzeyini değiştirdikten sonra gerçek yayından önce **Sesler ve sirenler** sayfasında kısa bir deneme yapın.
+
 ## Tören, sınav veya kısaltılmış gün
 
 1. **Tatil ve istisnalar → Tatil / istisna ekle** yolunu açın.

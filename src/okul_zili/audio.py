@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from array import array
 from dataclasses import dataclass
 import io
 import math
@@ -441,7 +442,30 @@ class PlaybackManager:
         self.backend.stop_playback()
         return True
 
-    def play(self, path: Path, device_id: str) -> PlaybackResult:
+    @staticmethod
+    def _volume_adjusted_copy(path: Path, volume_percent: int) -> Path:
+        with wave.open(str(path), "rb") as source:
+            if source.getcomptype() != "NONE" or source.getsampwidth() != 2:
+                raise AudioError("Ses düzeyi ayarı yalnızca PCM16 WAV dosyalarında kullanılabilir.")
+            parameters = source.getparams()
+            samples = array("h")
+            samples.frombytes(source.readframes(source.getnframes()))
+        factor = max(0, min(100, int(volume_percent))) / 100.0
+        for index, value in enumerate(samples):
+            samples[index] = max(-32768, min(32767, int(value * factor)))
+        handle, filename = tempfile.mkstemp(prefix="okul-zili-seviye-", suffix=".wav")
+        os.close(handle)
+        destination = Path(filename)
+        try:
+            with wave.open(str(destination), "wb") as target:
+                target.setparams(parameters)
+                target.writeframes(samples.tobytes())
+        except Exception:
+            destination.unlink(missing_ok=True)
+            raise
+        return destination
+
+    def play(self, path: Path, device_id: str, volume_percent: int = 100) -> PlaybackResult:
         if not self._lock.acquire(blocking=False):
             return PlaybackResult(False, False, "Başka bir zil çalıyor; çift çalma engellendi.")
         try:
@@ -470,11 +494,16 @@ class PlaybackManager:
                     False,
                     "Seçili ses cihazı erişilebilir değil ve yedek bip için kullanılabilir çıkış yok.",
                 )
+            adjusted_path: Path | None = None
             try:
                 valid, message = validate_wave(path)
                 if not valid:
                     raise AudioError(message)
-                self.backend.play_file(path, device_id)
+                playback_path = path
+                if int(volume_percent) != 100:
+                    adjusted_path = self._volume_adjusted_copy(path, volume_percent)
+                    playback_path = adjusted_path
+                self.backend.play_file(playback_path, device_id)
                 if self._stop_requested.is_set():
                     return PlaybackResult(True, False, "Ses kullanıcı tarafından durduruldu.", True)
                 return PlaybackResult(True, False, "Ses çalındı.")
@@ -494,5 +523,8 @@ class PlaybackManager:
                 return PlaybackResult(
                     True, True, f"Normal ses başarısız; yedek bip çalındı: {normal_error}"
                 )
+            finally:
+                if adjusted_path is not None:
+                    adjusted_path.unlink(missing_ok=True)
         finally:
             self._lock.release()

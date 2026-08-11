@@ -28,6 +28,7 @@ MEB_SAMPLE_PAGE = "https://erzin.meb.gov.tr/www/ornek-okul-zil-sesleri/icerik/11
 MEB_ANTHEM_PAGE = "https://www.meb.gov.tr/istiklalmarsi/istiklalmarsi/Sesler"
 MEB_NOVEMBER_TENTH_PAGE = "https://fethiye.meb.gov.tr/www/10-kasim-ataturku-anma-gununde-calinacak-ataturkun-sevdigi-sarkilar/icerik/8811"
 AFAD_ALERT_PAGE = "https://www.afad.gov.tr/ikaz-alarm-isaretleri"
+PRESIDENCY_ANTHEM_PAGE = "https://www.tccb.gov.tr/istiklalmarsi/"
 BACH_SCORE_PAGE = "https://imslp.org/wiki/Prelude_and_Fugue_in_C_major%2C_BWV_846_(Bach%2C_Johann_Sebastian)"
 BEETHOVEN_SCORE_PAGE = "https://imslp.org/wiki/Symphony_No.9%2C_Op.125_(Beethoven%2C_Ludwig_van)"
 
@@ -37,17 +38,21 @@ SOUND_DEFINITIONS: tuple[SoundDefinition, ...] = (
     SoundDefinition("ogretmen", "Öğretmen zili", "MEB Resmî Zil Sesleri", "Ders başlangıç saatinde çalan ve paketle birlikte çevrimdışı sunulan Bakanlık zili.", source_page=MEB_CENTRAL_BELL_PAGE, source_kind="meb_paket"),
     SoundDefinition("teneffus", "Teneffüs zili", "MEB Resmî Zil Sesleri", "Ders sonunda çalan ve paketle birlikte çevrimdışı sunulan Bakanlık zili.", source_page=MEB_CENTRAL_BELL_PAGE, source_kind="meb_paket"),
     SoundDefinition("blok_gecis", "Blok içi sınıf değişim zili", "MEB Resmî Zil Sesleri", "Blok içindeki ders sınırında çalan, Bakanlık teneffüs zilinden hazırlanmış beş saniyelik kısa zil.", source_page=MEB_CENTRAL_BELL_PAGE, source_kind="meb_paket"),
-    SoundDefinition("istiklal_sozlu", "İstiklâl Marşı — sözlü", "Tören", "MEB İstiklâl Marşı sayfasındaki sözlü kayıt için ayrılmış yuva.", source_page=MEB_ANTHEM_PAGE, source_kind="meb_referans"),
-    SoundDefinition("istiklal_sozsuz", "İstiklâl Marşı — sözsüz / bando", "MEB Resmî Zil Sesleri", "MEB kurumu sayfasından indirilebilen bando kaydı.", "https://erzin.meb.gov.tr/meb_iys_dosyalar/2025_09/17153218_istiklalmarsi.mp3", MEB_SAMPLE_PAGE, "meb_resmi"),
-    SoundDefinition("saygi_1dk_istiklal", "1 dk saygı duruşu + İstiklâl Marşı", "MEB Resmî Zil Sesleri", "MEB kurumu tarafından okullar için yayımlanan birleşik tören kaydı.", "https://erzin.meb.gov.tr/meb_iys_dosyalar/2025_09/17153158_1dakikaliksaygidurusuveistiklalmarsi.mp3", MEB_SAMPLE_PAGE, "meb_resmi"),
+    SoundDefinition("istiklal_sozlu", "İstiklâl Marşı — MEB sözlü", "Tören", "Kullanıcı tarafından sağlanan MEB sözlü marş kaydı; paketle çevrimdışı sunulur.", source_page=MEB_ANTHEM_PAGE, source_kind="resmi_kayit_paket"),
+    SoundDefinition("istiklal_sozsuz", "İstiklâl Marşı — MEB sözsüz / bando", "Tören", "Kullanıcı tarafından sağlanan MEB bando kaydı; paketle çevrimdışı sunulur.", source_page=MEB_ANTHEM_PAGE, source_kind="resmi_kayit_paket"),
+    SoundDefinition("istiklal_cb_egitimsiz", "İstiklâl Marşı — Cumhurbaşkanlığı sözlü", "Tören", "Ses eğitimi almayanlar için Cumhurbaşkanlığı kaydı; paketle çevrimdışı sunulur.", source_page=PRESIDENCY_ANTHEM_PAGE, source_kind="resmi_kayit_paket"),
+    SoundDefinition("istiklal_cb_orijinal", "İstiklâl Marşı — Cumhurbaşkanlığı orijinal beste", "Tören", "Cumhurbaşkanlığı orijinal beste sözlü kaydı; paketle çevrimdışı sunulur.", source_page=PRESIDENCY_ANTHEM_PAGE, source_kind="resmi_kayit_paket"),
+    SoundDefinition("saygi_1dk_istiklal", "Saygı duruşu + İstiklâl Marşı", "Tören", "Kullanıcı tarafından sağlanan birleşik tören kaydı; paketle çevrimdışı sunulur.", source_page=MEB_SAMPLE_PAGE, source_kind="resmi_kayit_paket"),
+    SoundDefinition("saygi_ti", "Saygı duruşu — Ti sesi", "Tören", "Kullanıcı tarafından sağlanan saygı duruşu Ti sesi.", source_page=MEB_SAMPLE_PAGE, source_kind="resmi_kayit_paket"),
+    SoundDefinition("on_kasim_butun", "10 Kasım — 2 dk siren + İstiklâl Marşı", "Tören", "Kullanıcı tarafından sağlanan tek parça 10 Kasım tören akışı.", source_page=MEB_NOVEMBER_TENTH_PAGE, source_kind="resmi_kayit_paket"),
     SoundDefinition("saygi_2dk", "10 Kasım — 2 dk siren", "Tören", "09.05 için iki dakikalık saygı duruşu sireni; MEB sayfasında birleşik siren ve marş kaydı da bulunur.", source_page=MEB_NOVEMBER_TENTH_PAGE, source_kind="meb_referans"),
     SoundDefinition("tatbikat_deprem", "Deprem — çök, kapan, tutun", "Tatbikat", "Tatbikatın ilk aşaması için yavaş dalgalı siren."),
     SoundDefinition("tatbikat_tahliye", "Tahliye", "Tatbikat", "Binanın kontrollü boşaltılması için kesikli uyarı."),
     SoundDefinition("tatbikat_yangin", "Yangın", "Tatbikat", "Yangın ve tahliye tatbikatı için hızlı alarm."),
     SoundDefinition("acil_durum", "Genel acil durum", "Tatbikat", "Diğer zillerden açıkça ayrılan acil durum uyarısı."),
-    SoundDefinition("afad_sari_ikaz", "AFAD sarı ikaz — 3 dk düz siren", "Sivil savunma", "AFAD'ın hava saldırısı ihtimali için tarif ettiği üç dakikalık düz siren, uygulama tarafından çevrimdışı sentezlenir.", source_page=AFAD_ALERT_PAGE, source_kind="resmi_desene_gore"),
-    SoundDefinition("afad_kirmizi_alarm", "AFAD kırmızı alarm — 3 dk dalgalı siren", "Sivil savunma", "AFAD'ın hava saldırısı tehlikesi için tarif ettiği üç dakikalık yükselip alçalan siren, uygulama tarafından çevrimdışı sentezlenir.", source_page=AFAD_ALERT_PAGE, source_kind="resmi_desene_gore"),
-    SoundDefinition("afad_kbrn_alarm", "AFAD KBRN alarmı — 3 dk kesikli siren", "Sivil savunma", "AFAD'ın kimyasal, biyolojik, radyolojik ve nükleer tehlike için tarif ettiği üç dakikalık kesikli siren, uygulama tarafından çevrimdışı sentezlenir.", source_page=AFAD_ALERT_PAGE, source_kind="resmi_desene_gore"),
+    SoundDefinition("afad_sari_ikaz", "AFAD sarı ikaz — 3 dk düz siren", "Sivil savunma", "Kullanıcı tarafından sağlanan üç dakikalık AFAD sarı ikaz kaydı; yüksek ve dengeli seviyede paketlenir.", source_page=AFAD_ALERT_PAGE, source_kind="resmi_kayit_paket"),
+    SoundDefinition("afad_kirmizi_alarm", "AFAD kırmızı alarm — 3 dk dalgalı siren", "Sivil savunma", "Kullanıcı tarafından sağlanan üç dakikalık AFAD kırmızı alarm kaydı; yüksek ve dengeli seviyede paketlenir.", source_page=AFAD_ALERT_PAGE, source_kind="resmi_kayit_paket"),
+    SoundDefinition("afad_kbrn_alarm", "AFAD KBRN/siyah ikaz — 3 dk kesikli siren", "Sivil savunma", "Kullanıcı tarafından sağlanan üç dakikalık AFAD siyah/KBRN alarm kaydı; yüksek ve dengeli seviyede paketlenir.", source_page=AFAD_ALERT_PAGE, source_kind="resmi_kayit_paket"),
     SoundDefinition("muzik_bach_prelud", "Bach — Do Majör Prelüd", "Teneffüs Müziği", "Kamu malı besteden uygulama tarafından sentezlenen hafif, sözsüz düzenleme.", source_page=BACH_SCORE_PAGE, source_kind="kamu_mali_sentez"),
     SoundDefinition("muzik_ode_to_joy", "Beethoven — Neşeye Övgü", "Teneffüs Müziği", "Kamu malı besteden uygulama tarafından sentezlenen hafif, sözsüz düzenleme.", source_page=BEETHOVEN_SCORE_PAGE, source_kind="kamu_mali_sentez"),
     SoundDefinition("anons", "Anons başlangıcı", "Sistem", "Kayıtlı anons öncesi kısa dikkat sesi."),

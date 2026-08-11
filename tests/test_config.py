@@ -18,7 +18,7 @@ class ConfigTests(unittest.TestCase):
         raw.pop("recess_music_volume")
         raw.pop("recess_music_track")
         migrated = migrate(raw)
-        self.assertEqual(5, migrated["schema_version"])
+        self.assertEqual(6, migrated["schema_version"])
         self.assertFalse(migrated["recess_music_enabled"])
         self.assertEqual(20, migrated["recess_music_volume"])
         self.assertEqual("muzik_bach_prelud", migrated["recess_music_track"])
@@ -31,7 +31,7 @@ class ConfigTests(unittest.TestCase):
         raw.pop("academic_calendar")
         raw["exceptions"] = raw.pop("date_rules")
         migrated = migrate(raw)
-        self.assertEqual(5, migrated["schema_version"])
+        self.assertEqual(6, migrated["schema_version"])
         self.assertEqual("Europe/Istanbul", migrated["timezone"])
         self.assertIn("date_rules", migrated)
         self.assertIsNone(migrated["announcement_device"])
@@ -46,7 +46,7 @@ class ConfigTests(unittest.TestCase):
 
         migrated = migrate(raw)
 
-        self.assertEqual(5, migrated["schema_version"])
+        self.assertEqual(6, migrated["schema_version"])
         self.assertEqual(original_week, migrated["weekly_schedule"])
 
     def test_atomic_round_trip_and_backup(self) -> None:
@@ -60,7 +60,15 @@ class ConfigTests(unittest.TestCase):
             repo.save(config)
             self.assertTrue(path.with_suffix(".json.bak").exists())
             parsed = json.loads(path.read_text(encoding="utf-8"))
-            self.assertEqual(5, parsed["schema_version"])
+            self.assertEqual(6, parsed["schema_version"])
+
+    def test_v5_migration_adds_full_bell_volume(self) -> None:
+        raw = default_config().to_dict()
+        raw["schema_version"] = 5
+        raw.pop("bell_volume")
+        migrated = migrate(raw)
+        self.assertEqual(6, migrated["schema_version"])
+        self.assertEqual(100, migrated["bell_volume"])
 
     def test_corrupt_primary_recovers_from_last_good_backup(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

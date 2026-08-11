@@ -1,5 +1,14 @@
 # Sürüm Notları
 
+## 0.6.0 — Kaynak ses paketi ve ana ses kontrolü
+
+- Kullanıcının `src/zilsesleri` klasörüne eklediği MEB, Cumhurbaşkanlığı, AFAD ve tören kayıtları PCM WAV biçimine dönüştürülerek çevrimdışı pakete gömüldü.
+- Yeni MEB öğrenci, öğretmen ve anonssuz zil kayıtları varsayılan yapıldı; değiştirilmemiş eski varsayılanlar ilk açılışta güvenle yükseltilir, kullanıcı dosyaları korunur.
+- MEB ve Cumhurbaşkanlığı marş seçenekleri, 10 Kasım birleşik akışı ve AFAD ikazları ana sayfadaki tören/tatbikat bölümüne eklendi.
+- AFAD ve yerel tatbikat sesleri ders zillerinden düşük kalmayacak seviyeye getirildi.
+- Yönetim merkezindeki okul ve cihaz ayarlarına %0–100 ana zil ses düzeyi çubuğu eklendi.
+- Yapılandırma şeması v6'ya yükseltildi.
+
 ## 1.0.0 — Final masaüstü düzeni ve güvenli yayın katmanı
 
 - Giriş penceresi Windows ekran ölçeklemesinde eylem düğmelerini gizlemeyecek şekilde büyütüldü; profil ve PIN alanları eşit yüksekliğe getirildi.
