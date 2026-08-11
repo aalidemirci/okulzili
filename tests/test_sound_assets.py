@@ -10,6 +10,7 @@ from okul_zili.sound_assets import (
     bundled_sound_path,
     ensure_generated_sounds,
     upgrade_bundled_sounds_v06,
+    upgrade_bundled_sounds_v061,
 )
 from tests.helpers import write_wave
 
@@ -87,6 +88,27 @@ class BundledSoundAssetTests(unittest.TestCase):
             for sound_id in ("muzik_bach_prelud", "muzik_ode_to_joy"):
                 valid, detail = validate_wave(root / "sesler" / f"{sound_id}.wav")
                 self.assertTrue(valid, detail)
+
+    def test_v061_upgrade_replaces_silent_ceremony_but_preserves_audible_custom_file(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            ceremony = root / "sesler" / "saygi_1dk_istiklal.wav"
+            ceremony.parent.mkdir(parents=True)
+            with wave.open(str(ceremony), "wb") as target:
+                target.setnchannels(1)
+                target.setsampwidth(2)
+                target.setframerate(8_000)
+                target.writeframes(b"\0\0" * 8_000)
+            self.assertTrue(upgrade_bundled_sounds_v061(root))
+            self.assertEqual(bundled_sound_path("saygi_1dk_istiklal").read_bytes(), ceremony.read_bytes())
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            ceremony = root / "sesler" / "saygi_1dk_istiklal.wav"
+            write_wave(ceremony)
+            custom = ceremony.read_bytes()
+            self.assertFalse(upgrade_bundled_sounds_v061(root))
+            self.assertEqual(custom, ceremony.read_bytes())
 
 
 if __name__ == "__main__":

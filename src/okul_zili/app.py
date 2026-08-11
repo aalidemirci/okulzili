@@ -33,7 +33,7 @@ from .pilot_log import analyze_files, format_report
 from .preflight import CheckResult, PreflightService
 from .recess_music import RecessMusicManager
 from .scheduler import BellScheduler, RunState, SchedulerNotice
-from .sound_assets import ensure_generated_sounds, restore_bundled_sound, restore_generated_sound, upgrade_bundled_sounds_v06
+from .sound_assets import ensure_generated_sounds, restore_bundled_sound, restore_generated_sound, upgrade_bundled_sounds_v06, upgrade_bundled_sounds_v061
 from .sound_catalog import SOUND_BY_ID, SOUND_DEFINITIONS, download_official_sound, import_audio_file
 from .tray import TrayController
 from .ui_theme import (
@@ -146,6 +146,95 @@ def _secondary_button(parent: tk.Misc, text: str, command: Callable[[], None], w
     return ctk.CTkButton(parent, text=text, command=command, width=width, height=42, corner_radius=10, fg_color=SURFACE, hover_color=HOVER, text_color=INK_SUBTLE, border_width=1, border_color=BORDER, font=ctk.CTkFont("Segoe UI Variable Text", 12, "bold"))
 
 
+class SafeModalToplevel(tk.Toplevel):
+    """Native modal window that cannot be hidden by CTk title-bar callbacks.
+
+    ``CTkToplevel`` withdraws and remaps itself while recoloring the Windows
+    title bar.  On some Windows 11 systems that asynchronous cycle leaves the
+    window withdrawn while it still owns Tk's input grab.  Dialog shells stay
+    native here; CustomTkinter is used only for their child widgets.
+    """
+
+    def __init__(self, parent: tk.Misc) -> None:
+        super().__init__(parent)
+        self.withdraw()
+        self._modal_parent = parent
+        self._modal_grab_attempts = 0
+        self._modal_ready = False
+        self.transient(parent)
+        self.protocol("WM_DELETE_WINDOW", self.destroy)
+        self.after_idle(self._activate_modal)
+
+    def configure(self, cnf: dict[str, object] | None = None, **kwargs: object) -> object:
+        if "fg_color" in kwargs:
+            kwargs["background"] = resolve(kwargs.pop("fg_color"))
+        return super().configure(cnf, **kwargs)
+
+    config = configure
+
+    def _activate_modal(self) -> None:
+        if not self.winfo_exists():
+            return
+        self.update_idletasks()
+        width = max(self.winfo_reqwidth(), self.winfo_width())
+        height = max(self.winfo_reqheight(), self.winfo_height())
+        parent = self._modal_parent
+        try:
+            parent_visible = bool(parent.winfo_exists() and parent.winfo_viewable())
+        except tk.TclError:
+            parent_visible = False
+        if parent_visible:
+            x = parent.winfo_rootx() + (parent.winfo_width() - width) // 2
+            y = parent.winfo_rooty() + (parent.winfo_height() - height) // 2
+        else:
+            x = (self.winfo_screenwidth() - width) // 2
+            y = (self.winfo_screenheight() - height) // 2
+        x = max(0, min(x, max(0, self.winfo_screenwidth() - width)))
+        y = max(0, min(y, max(0, self.winfo_screenheight() - height)))
+        self.geometry(f"{width}x{height}+{x}+{y}")
+        self.deiconify()
+        self.lift()
+        self.after_idle(self._take_modal_grab)
+        self.after(250, self._verify_modal_visible)
+
+    def _take_modal_grab(self) -> None:
+        if not self.winfo_exists():
+            return
+        if self.winfo_viewable():
+            try:
+                self.grab_set()
+                self.focus_force()
+                self._modal_ready = True
+            except tk.TclError:
+                pass
+            return
+        self._modal_grab_attempts += 1
+        if self._modal_grab_attempts < 10:
+            self.after(50, self._take_modal_grab)
+
+    def _verify_modal_visible(self) -> None:
+        if not self.winfo_exists() or self._modal_ready:
+            return
+        if not self.winfo_viewable():
+            self.deiconify()
+            self.lift()
+        self._take_modal_grab()
+
+    def destroy(self) -> None:
+        parent = getattr(self, "_modal_parent", None)
+        try:
+            if self.grab_current() is self:
+                self.grab_release()
+        except tk.TclError:
+            pass
+        super().destroy()
+        if isinstance(parent, SafeModalToplevel):
+            try:
+                parent.after(20, parent._take_modal_grab)
+            except tk.TclError:
+                pass
+
+
 def upgrade_bell_roles(config: SchoolConfig) -> SchoolConfig:
     """Eski hazırlık/ders şemasını yeni öğrenci-öğretmen akışına çevirir."""
     schedule: dict[int, tuple[EventSpec, ...]] = {}
@@ -168,15 +257,13 @@ def upgrade_bell_roles(config: SchoolConfig) -> SchoolConfig:
     )
 
 
-class EventEditor(ctk.CTkToplevel):
+class EventEditor(SafeModalToplevel):
     def __init__(self, parent: tk.Misc, event: EventSpec | None, on_save: Callable[[EventSpec], None]) -> None:
         super().__init__(parent)
         self.title("Zil düzenle" if event else "Zil ekle")
         self.geometry("620x590")
         self.resizable(True, True)
         self.configure(fg_color=CANVAS)
-        self.transient(parent)
-        self.grab_set()
         self.on_save = on_save
         self.time_var = tk.StringVar(value=event.at.strftime("%H:%M") if event else "08:20")
         self.type_var = tk.StringVar(value=(event.event_type.value if event else EventType.LESSON_START.value))
@@ -224,7 +311,7 @@ class EventEditor(ctk.CTkToplevel):
         self.destroy()
 
 
-class RuleEditor(ctk.CTkToplevel):
+class RuleEditor(SafeModalToplevel):
     def __init__(
         self,
         parent: tk.Misc,
@@ -236,8 +323,6 @@ class RuleEditor(ctk.CTkToplevel):
         self.title("İstisna düzenle" if rule else "Tatil veya istisna ekle")
         self.resizable(True, True)
         self.configure(fg_color=CANVAS)
-        self.transient(parent)
-        self.grab_set()
         self.on_save = on_save
         self.weekly_schedule = weekly_schedule
         self.events = list(rule.events if rule else ())
@@ -357,15 +442,13 @@ class RuleEditor(ctk.CTkToplevel):
         self._refresh_events()
 
 
-class InitialSetupDialog(ctk.CTkToplevel):
+class InitialSetupDialog(SafeModalToplevel):
     def __init__(self, parent: tk.Misc, devices: tuple[str, ...]) -> None:
         super().__init__(parent)
         self.title("Okul Zili — İlk kurulum")
         self.geometry("720x810")
         self.resizable(True, True)
         self.configure(fg_color=CANVAS)
-        self.transient(parent)
-        self.grab_set()
         self.result: SchoolConfig | None = None
         self.school_var = tk.StringVar(value="Okulumuz")
         self.first_lesson_var = tk.StringVar(value="08:20")
@@ -390,8 +473,8 @@ class InitialSetupDialog(ctk.CTkToplevel):
             ("Günlük ders sayısı", ctk.CTkEntry(form, textvariable=self.lesson_count_var, height=38, corner_radius=10, fg_color=SURFACE, border_color=BORDER)),
             ("Ders süresi (dk)", ctk.CTkEntry(form, textvariable=self.lesson_minutes_var, height=38, corner_radius=10, fg_color=SURFACE, border_color=BORDER)),
             ("Teneffüs süresi (dk)", ctk.CTkEntry(form, textvariable=self.break_minutes_var, height=38, corner_radius=10, fg_color=SURFACE, border_color=BORDER)),
-            ("Öğle arası kaçıncı dersten sonra", ctk.CTkEntry(form, textvariable=self.lunch_after_var, height=38, corner_radius=10, fg_color=SURFACE, border_color=BORDER)),
-            ("Öğle arası süresi (dk)", ctk.CTkEntry(form, textvariable=self.lunch_minutes_var, height=38, corner_radius=10, fg_color=SURFACE, border_color=BORDER)),
+            ("Uzun ara kaçıncı dersten sonra (0 = yok)", ctk.CTkEntry(form, textvariable=self.lunch_after_var, height=38, corner_radius=10, fg_color=SURFACE, border_color=BORDER)),
+            ("Uzun ara süresi (dk)", ctk.CTkEntry(form, textvariable=self.lunch_minutes_var, height=38, corner_radius=10, fg_color=SURFACE, border_color=BORDER)),
             ("Öğrenci zili kaç dakika önce", ctk.CTkEntry(form, textvariable=self.preparation_minutes_var, height=38, corner_radius=10, fg_color=SURFACE, border_color=BORDER)),
             (
                 "Zil ses çıkışı",
@@ -446,8 +529,8 @@ class InitialSetupDialog(ctk.CTkToplevel):
                 raise ValueError("Ders sayısı 1–20 arasında olmalıdır.")
             if not 1 <= lesson_minutes <= 180 or not 0 <= break_minutes <= 120:
                 raise ValueError("Ders veya teneffüs süresi geçersiz.")
-            if not 1 <= lunch_after <= lesson_count or not 0 <= lunch_minutes <= 240:
-                raise ValueError("Öğle arası bilgileri geçersiz.")
+            if not 0 <= lunch_after <= lesson_count or not 0 <= lunch_minutes <= 240:
+                raise ValueError("Uzun ara bilgileri geçersiz.")
             if not 0 <= preparation_minutes <= 30:
                 raise ValueError("Öğrenci zili farkı 0–30 dakika olmalıdır.")
             self.result = build_school_config(
@@ -470,7 +553,7 @@ class InitialSetupDialog(ctk.CTkToplevel):
         self.destroy()
 
 
-class LoginDialog(ctk.CTkToplevel):
+class LoginDialog(SafeModalToplevel):
     def __init__(self, parent: tk.Misc, auth: AuthRepository) -> None:
         super().__init__(parent)
         self.title("Okul Zili — Giriş")
@@ -481,8 +564,6 @@ class LoginDialog(ctk.CTkToplevel):
         self.minsize(460, 510)
         self.resizable(True, True)
         self.configure(fg_color=CANVAS)
-        self.transient(parent)
-        self.grab_set()
         self.auth = auth
         self.result: str | None = None
         roles = auth.configured_roles()
@@ -516,15 +597,13 @@ class LoginDialog(ctk.CTkToplevel):
         self.destroy()
 
 
-class ProfileManager(ctk.CTkToplevel):
+class ProfileManager(SafeModalToplevel):
     def __init__(self, parent: tk.Misc, auth: AuthRepository) -> None:
         super().__init__(parent)
         self.title("PIN profilleri")
         self.geometry("620x420")
         self.resizable(True, True)
         self.configure(fg_color=CANVAS)
-        self.transient(parent)
-        self.grab_set()
         self.auth = auth
         self.frame = ctk.CTkFrame(self, fg_color=SURFACE, corner_radius=18, border_width=1, border_color=BORDER)
         self.frame.pack(fill="both", expand=True, padx=24, pady=24)
@@ -562,15 +641,13 @@ class ProfileManager(ctk.CTkToplevel):
         self._render()
 
 
-class SoundTestDialog(ctk.CTkToplevel):
+class SoundTestDialog(SafeModalToplevel):
     def __init__(self, parent: tk.Misc, sound_ids: list[str], on_play: Callable[[str], None], on_complete: Callable[[], None]) -> None:
         super().__init__(parent)
         self.title("Kurulum sonrası ses testi")
         self.geometry("650x650")
         self.resizable(True, True)
         self.configure(fg_color=CANVAS)
-        self.transient(parent)
-        self.grab_set()
         self.on_complete = on_complete
         frame = ctk.CTkFrame(self, fg_color=SURFACE, corner_radius=18, border_width=1, border_color=BORDER)
         frame.pack(fill="both", expand=True, padx=24, pady=24)
@@ -589,15 +666,13 @@ class SoundTestDialog(ctk.CTkToplevel):
         self.destroy()
 
 
-class SettingsDialog(ctk.CTkToplevel):
+class SettingsDialog(SafeModalToplevel):
     def __init__(self, parent: tk.Misc, config: SchoolConfig, devices: tuple[str, ...], on_save: Callable[[str, bool, str, str | None, int, int], None]) -> None:
         super().__init__(parent)
         self.title("Temel ayarlar")
         self.geometry("690x690")
         self.resizable(True, True)
         self.configure(fg_color=CANVAS)
-        self.transient(parent)
-        self.grab_set()
         self.on_save = on_save
         self.school_var = tk.StringVar(value=config.school_name)
         self.preparation_var = tk.BooleanVar(value=config.preparation_enabled)
@@ -675,13 +750,11 @@ class SettingsDialog(ctk.CTkToplevel):
         self.destroy()
 
 
-class LessonTimesDialog(ctk.CTkToplevel):
+class LessonTimesDialog(SafeModalToplevel):
     def __init__(self, parent: tk.Misc, lesson_no: int, student: EventSpec | None, teacher: EventSpec, lesson_end: EventSpec | None, on_save: Callable[[EventSpec | None, EventSpec, EventSpec | None], None]) -> None:
         super().__init__(parent)
         self.title(f"{lesson_no}. ders saatleri")
         self.resizable(True, True)
-        self.transient(parent)
-        self.grab_set()
         self.student = student
         self.teacher = teacher
         self.lesson_end = lesson_end
@@ -721,16 +794,11 @@ class LessonTimesDialog(ctk.CTkToplevel):
         self.destroy()
 
 
-class CopyScheduleDialog(ctk.CTkToplevel):
+class CopyScheduleDialog(SafeModalToplevel):
     def __init__(self, parent: tk.Misc, source_day: int, on_apply: Callable[[tuple[int, ...]], None]) -> None:
         super().__init__(parent)
-        # CTkToplevel briefly withdraws itself while recoloring the Windows title bar.
-        # Build the dialog withdrawn and show it only after those callbacks settle.
-        self.withdraw()
         self.title("Programı günlere uygula")
-        self.transient(parent)
         apply_window_icon(self)
-        self.protocol("WM_DELETE_WINDOW", self.destroy)
         self.on_apply = on_apply
         self.variables: dict[int, tk.BooleanVar] = {}
         card = _dialog_card(self, 470, 450)
@@ -748,20 +816,6 @@ class CopyScheduleDialog(ctk.CTkToplevel):
         _primary_button(buttons, "Seçilenlere uygula", self._apply, 160).pack(side="right")
         _secondary_button(buttons, "Tüm günlere uygula", self._apply_all, 145).pack(side="right", padx=(0, 8))
         _secondary_button(buttons, "İptal", self.destroy).pack(side="right", padx=(0, 8))
-        self.after(80, lambda: self._activate(parent))
-
-    def _activate(self, parent: tk.Misc) -> None:
-        if not self.winfo_exists():
-            return
-        self.update_idletasks()
-        width = self.winfo_width()
-        height = self.winfo_height()
-        x = max(0, parent.winfo_rootx() + (parent.winfo_width() - width) // 2)
-        y = max(0, parent.winfo_rooty() + (parent.winfo_height() - height) // 2)
-        self.geometry(f"{width}x{height}+{x}+{y}")
-        self.deiconify()
-        self.lift()
-        self.focus_force()
 
     def _run_apply(self, targets: tuple[int, ...]) -> None:
         try:
@@ -783,7 +837,7 @@ class CopyScheduleDialog(ctk.CTkToplevel):
         self._run_apply(tuple(self.variables))
 
 
-class AcademicCalendarDialog(ctk.CTkToplevel):
+class AcademicCalendarDialog(SafeModalToplevel):
     FIELD_LABELS = (
         ("label", "Ders yılı adı"),
         ("teaching_start", "Ders yılı başlangıcı"),
@@ -810,8 +864,6 @@ class AcademicCalendarDialog(ctk.CTkToplevel):
         self.geometry("820x760")
         self.minsize(760, 680)
         self.configure(fg_color=CANVAS)
-        self.transient(parent)
-        self.grab_set()
         self.on_save = on_save
         if calendar is None:
             year = date.today().year if date.today().month >= 7 else date.today().year - 1
@@ -884,15 +936,13 @@ class AcademicCalendarDialog(ctk.CTkToplevel):
         self.destroy()
 
 
-class CeremonyDialog(ctk.CTkToplevel):
+class CeremonyDialog(SafeModalToplevel):
     def __init__(self, parent: tk.Misc, on_save: Callable[[DateRule], None]) -> None:
         super().__init__(parent)
         self.title("Tören planla")
         self.geometry("650x510")
         self.resizable(True, True)
         self.configure(fg_color=CANVAS)
-        self.transient(parent)
-        self.grab_set()
         self.on_save = on_save
         self.date_var = tk.StringVar(value=date.today().isoformat())
         self.time_var = tk.StringVar(value="09:00")
@@ -943,6 +993,7 @@ class OkulZiliApp:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         ensure_generated_sounds(self.data_dir)
         upgrade_bundled_sounds_v06(self.data_dir)
+        upgrade_bundled_sounds_v061(self.data_dir)
         self.repo = ConfigRepository(self.data_dir / "ayarlar.json")
         self.auth = auth or AuthRepository(self.data_dir / "profiller.json")
         self.logger = configure_logging(self.data_dir / "gunlukler" / "okul-zili.jsonl")
@@ -1071,7 +1122,15 @@ class OkulZiliApp:
         dashboard_page = ctk.CTkFrame(self.page_host, fg_color="transparent", corner_radius=0)
         self.dashboard = ctk.CTkScrollableFrame(dashboard_page, fg_color="transparent", corner_radius=0)
         self.dashboard.pack(fill="both", expand=True)
-        self.schedule_page = ctk.CTkFrame(self.page_host, fg_color="transparent")
+        schedule_host = ctk.CTkFrame(self.page_host, fg_color="transparent", corner_radius=0)
+        self.schedule_page = ctk.CTkScrollableFrame(
+            schedule_host,
+            fg_color="transparent",
+            corner_radius=0,
+            scrollbar_button_color=BORDER,
+            scrollbar_button_hover_color=MUTED,
+        )
+        self.schedule_page.pack(fill="both", expand=True)
         self.calendar_page = ctk.CTkFrame(self.page_host, fg_color="transparent")
         self.rules_page = ctk.CTkFrame(self.page_host, fg_color="transparent")
         self.sounds_page = ctk.CTkFrame(self.page_host, fg_color="transparent")
@@ -1082,7 +1141,7 @@ class OkulZiliApp:
         self.about_page.pack(fill="both", expand=True)
         self.pages = {
             "durum": dashboard_page,
-            "program": self.schedule_page,
+            "program": schedule_host,
             "takvim": self.calendar_page,
             "istisnalar": self.rules_page,
             "sesler": self.sounds_page,
@@ -1194,11 +1253,9 @@ class OkulZiliApp:
             existing.lift()
             existing.focus_force()
             return
-        window = ctk.CTkToplevel(self.root)
+        window = SafeModalToplevel(self.root)
         self._management_window = window
         window.title("Yönetim merkezi")
-        window.transient(self.root)
-        window.grab_set()
         apply_window_icon(window)
         card = _dialog_card(window, 480, 410)
         _dialog_title(card, "Yönetim merkezi", "Okul ayarları, yetki profilleri ve veri güvenliği tek yerde.")
@@ -1333,6 +1390,7 @@ class OkulZiliApp:
         ceremony_actions = ctk.CTkFrame(self.dashboard_ceremony, fg_color="transparent")
         ceremony_actions.pack(fill="x", padx=10, pady=(0, 7))
         ceremony_buttons = [
+            self._action_button(ceremony_actions, "Saygı + marş", lambda: self._confirm_ceremony_sound("saygi_1dk_istiklal", "Saygı duruşu ve İstiklâl Marşı"), width=112),
             self._action_button(ceremony_actions, "MEB sözlü", lambda: self._confirm_ceremony_sound("istiklal_sozlu", "MEB sözlü İstiklâl Marşı"), width=96),
             self._action_button(ceremony_actions, "MEB bando", lambda: self._confirm_ceremony_sound("istiklal_sozsuz", "MEB bando İstiklâl Marşı"), width=96),
             self._action_button(ceremony_actions, "CB sözlü", lambda: self._confirm_ceremony_sound("istiklal_cb_orijinal", "Cumhurbaşkanlığı sözlü İstiklâl Marşı"), width=96),
@@ -1454,11 +1512,11 @@ class OkulZiliApp:
         self.schedule_admin_buttons = [self.copy_schedule_button, self.advanced_add_button, self.calculate_button] if hasattr(self, "calculate_button") else [self.copy_schedule_button, self.advanced_add_button]
 
         workspace = ctk.CTkFrame(self.schedule_page, fg_color="transparent")
-        workspace.pack(fill="both", expand=True)
+        workspace.pack(fill="x", expand=True)
         self.schedule_workspace = workspace
         table_card = ctk.CTkFrame(workspace, fg_color=SURFACE, corner_radius=16, border_width=1, border_color=BORDER)
         self.schedule_table_card = table_card
-        table_card.pack(side="top", fill="both", expand=True)
+        table_card.pack(side="top", fill="x")
         self.schedule_tree = ttk.Treeview(
             table_card,
             columns=("lesson", "student", "teacher", "transition", "end", "break"),
@@ -1470,13 +1528,7 @@ class OkulZiliApp:
         for key, label, width in columns:
             self.schedule_tree.heading(key, text=label)
             self.schedule_tree.column(key, width=width, minwidth=90, stretch=True, anchor="center" if key != "lesson" else "w")
-        schedule_scrollbar = ctk.CTkScrollbar(
-            table_card, orientation="vertical", command=self.schedule_tree.yview,
-            fg_color=SURFACE, button_color=BORDER, button_hover_color=MUTED, width=12,
-        )
-        schedule_scrollbar.pack(side="right", fill="y", padx=(0, 2), pady=2)
-        self.schedule_tree.configure(yscrollcommand=schedule_scrollbar.set)
-        self.schedule_tree.pack(side="left", fill="both", expand=True, padx=(1, 0), pady=1)
+        self.schedule_tree.pack(fill="x", expand=True, padx=1, pady=1)
         self.schedule_tree.bind("<Double-1>", lambda event: self._edit_lesson_events())
 
         # Automatic calculation is the primary task on this page.  It must be
@@ -1516,7 +1568,7 @@ class OkulZiliApp:
         for index, (key, label) in enumerate((
             ("first_lesson", "İlk ders (SS:DD)"), ("lesson_count", "Ders sayısı"),
             ("lesson_minutes", "Ders süresi (dk)"), ("break_minutes", "Teneffüs (dk)"),
-            ("lunch_after", "Öğle arası kaçıncı dersten sonra"), ("lunch_minutes", "Öğle arası (dk)"),
+            ("lunch_after", "Uzun ara kaçıncı dersten sonra? (0 = yok)"), ("lunch_minutes", "Uzun ara (dk)"),
             ("block_sizes", "Blok düzeni (ör. 2+2+1+1; normal ders için boş)"),
         )):
             field = ctk.CTkFrame(fields_grid, fg_color="transparent")
@@ -1985,6 +2037,9 @@ class OkulZiliApp:
         weekday = WEEKDAYS.index(self.day_var.get())
         events = self.config.weekly_schedule.get(weekday, ())
         starts = sorted((item for item in events if item.event_type is EventType.LESSON_START), key=lambda item: item.at)
+        # The whole page owns vertical scrolling.  Keep every result row visible
+        # so the table never creates a second, hard-to-reach scroll region.
+        self.schedule_tree.configure(height=max(1, len(starts)))
         ends_by_session = {
             session_id: sorted(
                 (item for item in events if item.event_type is EventType.LESSON_END and item.session == session_id),
@@ -2032,7 +2087,7 @@ class OkulZiliApp:
             else:
                 completed = sum(session.effective_blocks[: position + 1])
                 next_break = (
-                    f"Öğle · {session.lunch_minutes} dk"
+                    f"Uzun ara · {session.lunch_minutes} dk"
                     if completed == session.lunch_after
                     else f"{session.break_minutes} dk"
                 )
@@ -3072,6 +3127,29 @@ def main() -> int:
         startup.destroy()
         root.destroy()
         return 0 if valid else 7
+    if "--giris-penceresi-kontrol" in sys.argv:
+        with tempfile.TemporaryDirectory(prefix="okul-zili-giris-") as directory:
+            root = ctk.CTk()
+            startup = _prepare_startup_root(root)
+            auth = AuthRepository(Path(directory) / "profiller.json")
+            auth.set_pin("yonetici", "1234")
+            dialog = LoginDialog(root, auth)
+            result = {"code": 10}
+
+            def verify_login_dialog() -> None:
+                try:
+                    visible = bool(dialog.winfo_exists() and dialog.winfo_viewable())
+                    owns_input = dialog.grab_current() is dialog
+                    result["code"] = 0 if visible and owns_input else 10
+                finally:
+                    if dialog.winfo_exists():
+                        dialog.destroy()
+
+            root.after(700, verify_login_dialog)
+            root.wait_window(dialog)
+            startup.destroy()
+            root.destroy()
+            return int(result["code"])
     if "--arayuz-kontrol" in sys.argv:
         with tempfile.TemporaryDirectory(prefix="okul-zili-arayuz-") as directory:
             data_dir = Path(directory)
@@ -3080,21 +3158,35 @@ def main() -> int:
             root.withdraw()
             auth = AuthRepository(data_dir / "profiller.json")
             app = OkulZiliApp(root, data_dir, "yonetici", auth)
+            app._show_page("program")
             result = {"ok": False}
             result["code"] = 4
 
             def finish() -> None:
                 if not app.schedule_tree.winfo_exists() or len(app.schedule_tree["columns"]) == 0:
                     result["code"] = 41
-                elif len(app.preflight_tree.get_children()) == 0:
-                    result["code"] = 42
-                elif len(app.sound_tree.get_children()) != len(SOUND_DEFINITIONS):
-                    result["code"] = 44
-                elif not app.tray.available:
-                    result["code"] = 43
+                elif not isinstance(app.schedule_page, ctk.CTkScrollableFrame):
+                    result["code"] = 45
+                elif any(isinstance(child, ctk.CTkScrollbar) for child in app.schedule_table_card.winfo_children()):
+                    result["code"] = 46
+                elif int(app.schedule_tree.cget("height")) < len(app.schedule_tree.get_children()):
+                    result["code"] = 47
                 else:
-                    result["ok"] = True
-                    result["code"] = 0
+                    initial_view = app.schedule_page._parent_canvas.yview()
+                    if initial_view[1] < 1.0:
+                        app.schedule_page._parent_canvas.yview_moveto(1.0)
+                    moved_view = app.schedule_page._parent_canvas.yview()
+                    if initial_view[1] < 1.0 and moved_view[0] <= initial_view[0]:
+                        result["code"] = 49
+                    elif len(app.preflight_tree.get_children()) == 0:
+                        result["code"] = 42
+                    elif len(app.sound_tree.get_children()) != len(SOUND_DEFINITIONS):
+                        result["code"] = 44
+                    elif not app.tray.available:
+                        result["code"] = 43
+                    else:
+                        result["ok"] = True
+                        result["code"] = 0
                 app._shutdown_event.set()
                 app._scheduler_wake_event.set()
                 app.recess_music.stop()

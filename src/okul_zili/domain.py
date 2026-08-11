@@ -73,9 +73,9 @@ class SessionSchedule:
         if not 0 <= self.break_minutes <= 180:
             errors.append(f"{prefix}teneffüs süresi 0–180 dakika olmalıdır.")
         if not 0 <= self.lunch_after <= self.lesson_count:
-            errors.append(f"{prefix}öğle arası konumu ders sayısını aşamaz.")
+            errors.append(f"{prefix}uzun ara konumu ders sayısını aşamaz.")
         if not 0 <= self.lunch_minutes <= 240:
-            errors.append(f"{prefix}öğle arası 0–240 dakika olmalıdır.")
+            errors.append(f"{prefix}uzun ara 0–240 dakika olmalıdır.")
         if not 0 <= self.student_bell_minutes <= 30:
             errors.append(f"{prefix}öğrenci zili farkı 0–30 dakika olmalıdır.")
         if self.student_bell_enabled and self.student_bell_minutes == 0:
@@ -89,7 +89,7 @@ class SessionSchedule:
             completed += size
             boundaries.append(completed)
         if self.lunch_after and self.lunch_after not in boundaries:
-            errors.append(f"{prefix}öğle arası bir ders bloğunun içine yerleştirilemez.")
+            errors.append(f"{prefix}uzun ara bir ders bloğunun içine yerleştirilemez; blok sınırını seçin.")
         for boundary in boundaries[:-1]:
             gap = self.lunch_minutes if boundary == self.lunch_after else self.break_minutes
             if self.student_bell_enabled and self.student_bell_minutes > gap:
