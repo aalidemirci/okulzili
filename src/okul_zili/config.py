@@ -1,69 +1,45 @@
 from __future__ import annotations
 
+from datetime import datetime
 import json
 import os
 from pathlib import Path
 import shutil
-from dataclasses import replace
 from typing import Any
 
-from .defaults import default_config, infer_day_schedule
-from .domain import SchoolConfig
-
-
-CURRENT_SCHEMA_VERSION = 6
+from .defaults import default_config
+from .domain import CURRENT_SCHEMA_VERSION, SchoolConfig
 
 
 class ConfigError(RuntimeError):
     pass
 
 
-def migrate(raw: dict[str, Any]) -> dict[str, Any]:
-    version = int(raw.get("schema_version", 1))
-    migrated = dict(raw)
-    if version == 1:
-        migrated["schema_version"] = 2
-        migrated.setdefault("timezone", "Europe/Istanbul")
-        migrated.setdefault("selected_device", "varsayilan")
-        migrated.setdefault("announcement_device", None)
-        migrated.setdefault("preparation_enabled", False)
-        migrated.setdefault("date_rules", migrated.pop("exceptions", []))
-        migrated.setdefault("grace_seconds", 90)
-        migrated.setdefault("grace_seconds_by_type", {})
-        version = 2
-    if version == 2:
-        migrated["schema_version"] = 3
-        migrated.setdefault("day_schedules", {})
-        migrated.setdefault("academic_calendar", None)
-        version = 3
-    if version == 3:
-        migrated["schema_version"] = 4
-        version = 4
-    if version == 4:
-        migrated["schema_version"] = 5
-        migrated.setdefault("recess_music_enabled", False)
-        migrated.setdefault("recess_music_volume", 20)
-        migrated.setdefault("recess_music_track", "muzik_bach_prelud")
-        version = 5
-    if version == 5:
-        migrated["schema_version"] = 6
-        migrated.setdefault("bell_volume", 100)
-        version = 6
+def ensure_current_schema(raw: dict[str, Any]) -> dict[str, Any]:
+    """Yalnızca güncel şema sürümünü kabul eder; göç zinciri yoktur."""
+    version = int(raw.get("schema_version", 0))
     if version != CURRENT_SCHEMA_VERSION:
-        raise ConfigError(f"Desteklenmeyen yapılandırma sürümü: {version}")
-    # Yeni ses yuvalarını eski v2 kurulumlarına sessizce ekle; kullanıcının
-    # değiştirdiği yollar her zaman önceliklidir.
-    merged_sounds = dict(default_config().sounds)
-    merged_sounds.update(migrated.get("sounds", {}))
-    migrated["sounds"] = merged_sounds
-    return migrated
+        raise ConfigError(
+            f"Desteklenmeyen yapılandırma sürümü: {version} "
+            f"(beklenen: {CURRENT_SCHEMA_VERSION})."
+        )
+    return raw
 
 
 class ConfigRepository:
+    """ayarlar.json deposu.
+
+    Okuma sırası: ana dosya → .bak yedeği → varsayılanlar. Okunamayan dosya
+    silinmez; incelenebilmesi için zaman damgalı bir kopya kenara alınır ve
+    `recovery_note` alanına Türkçe bir açıklama yazılır.
+    """
+
     def __init__(self, path: Path) -> None:
         self.path = path
+        self.recovery_note: str | None = None
 
     def load(self) -> SchoolConfig:
+        self.recovery_note = None
         if not self.path.exists():
             config = default_config()
             self.save(config)
@@ -72,17 +48,52 @@ class ConfigRepository:
             return self._read_validated(self.path)
         except (OSError, ValueError, KeyError, TypeError, AssertionError, ConfigError) as primary_error:
             backup = self.path.with_suffix(self.path.suffix + ".bak")
-            if not backup.exists():
-                raise ConfigError(f"Yapılandırma okunamadı: {primary_error}") from primary_error
+            if backup.exists():
+                try:
+                    recovered = self._read_validated(backup)
+                    self._quarantine(self.path)
+                    self._write_current(recovered)
+                    self.recovery_note = (
+                        "Ayar dosyası okunamadı; son sağlam yedekten geri dönüldü. "
+                        f"Neden: {primary_error}"
+                    )
+                    return recovered
+                except (OSError, ValueError, KeyError, TypeError, AssertionError, ConfigError):
+                    pass
+            quarantined = self._quarantine(self.path)
+            self._quarantine(backup)
+            config = default_config()
+            # save() yerine _write_current: save() mevcut (bozuk) ana dosyayı
+            # .bak üzerine kopyalayacağı için son yedeği yok ederdi. Burada
+            # yalnızca ana dosya yenilenir; .bak incelenmek üzere olduğu gibi kalır.
             try:
-                recovered = self._read_validated(backup)
-                self._write_current(recovered)
-                return recovered
-            except (OSError, ValueError, KeyError, TypeError, AssertionError, ConfigError) as backup_error:
-                raise ConfigError(
-                    "Yapılandırma ve son sağlam yedek okunamadı: "
-                    f"ana dosya: {primary_error}; yedek: {backup_error}"
-                ) from backup_error
+                self.path.parent.mkdir(parents=True, exist_ok=True)
+                self._write_current(config)
+            except OSError:
+                pass
+            saved_as = f"Eski dosya '{quarantined}' adıyla saklandı. " if quarantined else ""
+            self.recovery_note = (
+                "Ayar dosyası ve yedeği okunamadı; varsayılan ayarlarla başlandı. "
+                f"{saved_as}Neden: {primary_error}"
+            )
+            return config
+
+    @staticmethod
+    def _quarantine(source: Path) -> str | None:
+        """Sorunlu dosyayı silmeden, incelenebilir bir kopya olarak kenara alır.
+
+        Oluşturulan dosyanın adını döndürür; kopya alınamazsa None.
+        """
+        try:
+            if source.exists():
+                target = source.with_name(
+                    f"{source.name}.bozuk-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+                )
+                shutil.copy2(source, target)
+                return target.name
+        except OSError:
+            pass
+        return None
 
     @staticmethod
     def _decode(path: Path) -> dict[str, Any]:
@@ -92,14 +103,7 @@ class ConfigRepository:
         return raw
 
     def _read_validated(self, path: Path) -> SchoolConfig:
-        config = SchoolConfig.from_dict(migrate(self._decode(path)))
-        if not config.day_schedules:
-            inferred = {
-                weekday: schedule
-                for weekday, events in config.weekly_schedule.items()
-                if (schedule := infer_day_schedule(events)) is not None
-            }
-            config = replace(config, day_schedules=inferred)
+        config = SchoolConfig.from_dict(ensure_current_schema(self._decode(path)))
         errors = config.validate()
         if errors:
             raise ConfigError("; ".join(errors))

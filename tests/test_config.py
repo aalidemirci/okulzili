@@ -6,48 +6,22 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from okul_zili.config import ConfigRepository, migrate
+from okul_zili.config import ConfigError, ConfigRepository, ensure_current_schema
 from okul_zili.defaults import default_config
+from okul_zili.domain import CURRENT_SCHEMA_VERSION
 
 
 class ConfigTests(unittest.TestCase):
-    def test_v4_migration_adds_safe_recess_music_defaults(self) -> None:
+    def test_current_schema_is_accepted(self) -> None:
         raw = default_config().to_dict()
-        raw["schema_version"] = 4
-        raw.pop("recess_music_enabled")
-        raw.pop("recess_music_volume")
-        raw.pop("recess_music_track")
-        migrated = migrate(raw)
-        self.assertEqual(6, migrated["schema_version"])
-        self.assertFalse(migrated["recess_music_enabled"])
-        self.assertEqual(20, migrated["recess_music_volume"])
-        self.assertEqual("muzik_bach_prelud", migrated["recess_music_track"])
+        self.assertIs(raw, ensure_current_schema(raw))
 
-    def test_v1_to_v4_migration(self) -> None:
-        raw = default_config().to_dict()
-        raw["schema_version"] = 1
-        raw.pop("timezone")
-        raw.pop("day_schedules")
-        raw.pop("academic_calendar")
-        raw["exceptions"] = raw.pop("date_rules")
-        migrated = migrate(raw)
-        self.assertEqual(6, migrated["schema_version"])
-        self.assertEqual("Europe/Istanbul", migrated["timezone"])
-        self.assertIn("date_rules", migrated)
-        self.assertIsNone(migrated["announcement_device"])
-        self.assertEqual({}, migrated["grace_seconds_by_type"])
-        self.assertEqual({}, migrated["day_schedules"])
-        self.assertIsNone(migrated["academic_calendar"])
-
-    def test_v3_single_schedule_migrates_without_changing_lesson_times(self) -> None:
-        raw = default_config().to_dict()
-        raw["schema_version"] = 3
-        original_week = raw["weekly_schedule"]
-
-        migrated = migrate(raw)
-
-        self.assertEqual(6, migrated["schema_version"])
-        self.assertEqual(original_week, migrated["weekly_schedule"])
+    def test_old_schema_is_rejected_without_migration(self) -> None:
+        for old_version in (1, 3, 5, CURRENT_SCHEMA_VERSION + 1):
+            raw = default_config().to_dict()
+            raw["schema_version"] = old_version
+            with self.assertRaises(ConfigError):
+                ensure_current_schema(raw)
 
     def test_atomic_round_trip_and_backup(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -60,15 +34,7 @@ class ConfigTests(unittest.TestCase):
             repo.save(config)
             self.assertTrue(path.with_suffix(".json.bak").exists())
             parsed = json.loads(path.read_text(encoding="utf-8"))
-            self.assertEqual(6, parsed["schema_version"])
-
-    def test_v5_migration_adds_full_bell_volume(self) -> None:
-        raw = default_config().to_dict()
-        raw["schema_version"] = 5
-        raw.pop("bell_volume")
-        migrated = migrate(raw)
-        self.assertEqual(6, migrated["schema_version"])
-        self.assertEqual(100, migrated["bell_volume"])
+            self.assertEqual(CURRENT_SCHEMA_VERSION, parsed["schema_version"])
 
     def test_corrupt_primary_recovers_from_last_good_backup(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -81,6 +47,45 @@ class ConfigTests(unittest.TestCase):
             recovered = repo.load()
             self.assertEqual("Sağlam Okul", recovered.school_name)
             self.assertEqual(config.to_dict(), json.loads(path.read_text(encoding="utf-8")))
+            self.assertIsNotNone(repo.recovery_note)
+            quarantined = [
+                item for item in path.parent.iterdir() if "bozuk" in item.name
+            ]
+            self.assertEqual(1, len(quarantined))
+
+    def test_unreadable_config_and_backup_fall_back_to_defaults(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "ayarlar.json"
+            backup = path.with_suffix(".json.bak")
+            path.write_text("{bozuk", encoding="utf-8")
+            backup.write_text("{o da bozuk", encoding="utf-8")
+            repo = ConfigRepository(path)
+            recovered = repo.load()
+            self.assertEqual(default_config().school_name, recovered.school_name)
+            self.assertIsNotNone(repo.recovery_note)
+            # Hem ana dosya hem yedek incelenebilir kopya olarak kenara alınır.
+            quarantined = sorted(
+                item.name for item in path.parent.iterdir() if "bozuk-" in item.name
+            )
+            self.assertEqual(2, len(quarantined))
+            # Kurtarma, son yedeğin üzerine yazmaz: içerik olduğu gibi kalır.
+            self.assertEqual("{o da bozuk", backup.read_text(encoding="utf-8"))
+            # Uygulama tekrar açılabilir durumda: ana dosya artık geçerli.
+            self.assertEqual(
+                CURRENT_SCHEMA_VERSION,
+                json.loads(path.read_text(encoding="utf-8"))["schema_version"],
+            )
+
+    def test_old_schema_file_is_quarantined_and_replaced_with_defaults(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "ayarlar.json"
+            raw = default_config().to_dict()
+            raw["schema_version"] = 3
+            path.write_text(json.dumps(raw), encoding="utf-8")
+            repo = ConfigRepository(path)
+            recovered = repo.load()
+            self.assertEqual(CURRENT_SCHEMA_VERSION, recovered.schema_version)
+            self.assertIsNotNone(repo.recovery_note)
 
     def test_sound_path_cannot_escape_data_directory(self) -> None:
         config = replace(default_config(), sounds={"ders": "../gizli.wav"})
@@ -103,6 +108,13 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(config.grace_seconds_by_type, restored.grace_seconds_by_type)
         invalid = replace(default_config(), grace_seconds_by_type={"bilinmeyen": 10})
         self.assertTrue(any("Bilinmeyen" in item for item in invalid.validate()))
+
+    def test_time_check_flag_round_trips_and_defaults_off(self) -> None:
+        config = default_config()
+        self.assertFalse(config.time_check_enabled)
+        enabled = replace(config, time_check_enabled=True)
+        restored = type(config).from_dict(enabled.to_dict())
+        self.assertTrue(restored.time_check_enabled)
 
 
 if __name__ == "__main__":

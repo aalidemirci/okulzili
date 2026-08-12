@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import replace
 from datetime import date, datetime, time, timedelta
 import json
@@ -24,7 +25,7 @@ from .branding import apply_process_identity, apply_window_icon, load_brand_imag
 from .calendar_engine import CalendarEngine
 from .ceremonies import CEREMONY_SCENARIOS, ceremony_events
 from .config import ConfigError, ConfigRepository
-from .defaults import build_school_config, copy_schedule_to_days, generate_from_day_schedule, infer_day_schedule, set_preparation_bells
+from .defaults import apply_general_settings, build_school_config, copy_schedule_to_days, generate_from_day_schedule
 from .domain import AcademicCalendar, DateRange, DateRule, DaySchedule, EventSpec, EventType, ExceptionKind, SchoolConfig, SessionSchedule, sort_specs
 from .event_log import configure_logging, log_event
 from .instance import SingleInstanceLock
@@ -33,7 +34,8 @@ from .pilot_log import analyze_files, format_report
 from .preflight import CheckResult, PreflightService
 from .recess_music import RecessMusicManager
 from .scheduler import BellScheduler, RunState, SchedulerNotice
-from .sound_assets import ensure_generated_sounds, restore_bundled_sound, restore_generated_sound, upgrade_bundled_sounds_v06, upgrade_bundled_sounds_v061
+from .sound_assets import ensure_generated_sounds, restore_bundled_sound, restore_generated_sound
+from .time_check import check_time
 from .sound_catalog import SOUND_BY_ID, SOUND_DEFINITIONS, download_official_sound, import_audio_file
 from .tray import TrayController
 from .ui_theme import (
@@ -71,6 +73,7 @@ from .ui_theme import (
 
 
 WEEKDAYS = ("Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar")
+MONTHS = ("Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık")
 DEVELOPER_NAME = "Ahmet Ali DEMİRCİ"
 DEVELOPER_EMAIL = "aalidemirci@gmail.com"
 LICENSE_NAME = "PolyForm Noncommercial License 1.0.0"
@@ -178,6 +181,10 @@ class SafeModalToplevel(tk.Toplevel):
         self.update_idletasks()
         width = max(self.winfo_reqwidth(), self.winfo_width())
         height = max(self.winfo_reqheight(), self.winfo_height())
+        # Pencere, görev çubuğu payı bırakılarak ekrana kırpılır; 1366x768 gibi
+        # yaygın okul ekranlarında alt düğmeler görünür kalır.
+        width = min(width, max(320, self.winfo_screenwidth() - 16))
+        height = min(height, max(320, self.winfo_screenheight() - 96))
         parent = self._modal_parent
         try:
             parent_visible = bool(parent.winfo_exists() and parent.winfo_viewable())
@@ -233,28 +240,6 @@ class SafeModalToplevel(tk.Toplevel):
                 parent.after(20, parent._take_modal_grab)
             except tk.TclError:
                 pass
-
-
-def upgrade_bell_roles(config: SchoolConfig) -> SchoolConfig:
-    """Eski hazırlık/ders şemasını yeni öğrenci-öğretmen akışına çevirir."""
-    schedule: dict[int, tuple[EventSpec, ...]] = {}
-    for weekday, events in config.weekly_schedule.items():
-        normalized: list[EventSpec] = []
-        for event in events:
-            if event.event_type is EventType.PREPARATION:
-                continue
-            if event.event_type is EventType.LESSON_START:
-                label = event.label
-                if label.endswith("başlangıcı"):
-                    label = label.removesuffix("başlangıcı") + "öğretmen zili"
-                event = replace(event, label=label, sound_id="ogretmen")
-            normalized.append(event)
-        schedule[weekday] = sort_specs(normalized)
-    return replace(
-        config,
-        preparation_enabled=True,
-        weekly_schedule=set_preparation_bells(schedule, True),
-    )
 
 
 class EventEditor(SafeModalToplevel):
@@ -667,15 +652,16 @@ class SoundTestDialog(SafeModalToplevel):
 
 
 class SettingsDialog(SafeModalToplevel):
-    def __init__(self, parent: tk.Misc, config: SchoolConfig, devices: tuple[str, ...], on_save: Callable[[str, bool, str, str | None, int, int], None]) -> None:
+    def __init__(self, parent: tk.Misc, config: SchoolConfig, devices: tuple[str, ...], on_save: Callable[[str, bool, str, str | None, int, int, bool], None]) -> None:
         super().__init__(parent)
         self.title("Temel ayarlar")
-        self.geometry("690x690")
+        self.geometry("690x730")
         self.resizable(True, True)
         self.configure(fg_color=CANVAS)
         self.on_save = on_save
         self.school_var = tk.StringVar(value=config.school_name)
         self.preparation_var = tk.BooleanVar(value=config.preparation_enabled)
+        self.time_check_var = tk.BooleanVar(value=config.time_check_enabled)
         self.device_var = tk.StringVar(value=config.selected_device)
         self.announcement_device_var = tk.StringVar(
             value=config.announcement_device or "zil ile aynı"
@@ -714,9 +700,10 @@ class SettingsDialog(SafeModalToplevel):
             button_color=ACCENT_STRONG,
             button_hover_color=ACCENT_HOVER,
         ).grid(row=0, column=1, sticky="ew", pady=12)
-        ctk.CTkSwitch(form, text="Öğrenci ve öğretmen zili ayrı çalsın", variable=self.preparation_var, progress_color=TEAL, button_hover_color=TEAL_HOVER, text_color=INK).grid(row=5, column=0, columnspan=2, sticky="w", pady=(12, 8))
+        ctk.CTkSwitch(form, text="Öğrenci ve öğretmen zili ayrı çalsın", variable=self.preparation_var, progress_color=TEAL, button_hover_color=TEAL_HOVER, text_color=INK).grid(row=5, column=0, columnspan=2, sticky="w", pady=(12, 4))
+        ctk.CTkSwitch(form, text="İnternet varsa sistem saatini zaman sunucusuyla karşılaştır (yalnız uyarır)", variable=self.time_check_var, progress_color=TEAL, button_hover_color=TEAL_HOVER, text_color=INK).grid(row=6, column=0, columnspan=2, sticky="w", pady=(4, 8))
         info = ctk.CTkFrame(form, fg_color=SUCCESS_BG, corner_radius=10)
-        info.grid(row=6, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        info.grid(row=7, column=0, columnspan=2, sticky="ew", pady=(8, 0))
         ctk.CTkLabel(info, text="ⓘ  USB ses kartını adına göre seçerseniz, çıkarıldığında sistem kontrolü kritik uyarı verir.", text_color=SUCCESS, justify="left", wraplength=550).pack(fill="x", padx=14, pady=12)
         buttons = ctk.CTkFrame(card, fg_color="transparent")
         buttons.pack(fill="x", padx=26, pady=(18, 24))
@@ -746,6 +733,7 @@ class SettingsDialog(SafeModalToplevel):
             announcement_device,
             grace,
             int(round(self.bell_volume_var.get())),
+            self.time_check_var.get(),
         )
         self.destroy()
 
@@ -992,8 +980,6 @@ class OkulZiliApp:
         self.data_dir = data_dir or user_data_dir()
         self.data_dir.mkdir(parents=True, exist_ok=True)
         ensure_generated_sounds(self.data_dir)
-        upgrade_bundled_sounds_v06(self.data_dir)
-        upgrade_bundled_sounds_v061(self.data_dir)
         self.repo = ConfigRepository(self.data_dir / "ayarlar.json")
         self.auth = auth or AuthRepository(self.data_dir / "profiller.json")
         self.logger = configure_logging(self.data_dir / "gunlukler" / "okul-zili.jsonl")
@@ -1004,20 +990,17 @@ class OkulZiliApp:
             from .defaults import default_config
 
             self.config = default_config()
-        role_upgrade_marker = self.data_dir / "zil-rolleri-v2.tamam"
-        if not role_upgrade_marker.exists():
-            self.config = upgrade_bell_roles(self.config)
-            try:
-                self.repo.save(self.config)
-                role_upgrade_marker.write_text(datetime.now().isoformat(timespec="seconds"), encoding="utf-8")
-            except (ConfigError, OSError) as exc:
-                log_event(self.logger, "zil_rolleri_gecisi_basarisiz", level="kritik", hata=str(exc))
         self.backend = PlatformAudioBackend()
         self.playback = PlaybackManager(self.backend)
         self.recess_music = RecessMusicManager(self.data_dir / "onbellek" / "teneffus-muzigi")
         self.engine = CalendarEngine(self.config)
         self.notice_queue: queue.Queue[SchedulerNotice] = queue.Queue(maxsize=500)
         self._dropped_notice_count = 0
+        self._recent_criticals: deque[str] = deque(maxlen=5)
+        self._last_alerts: list[CheckResult] = []
+        if self.repo.recovery_note:
+            log_event(self.logger, "yapilandirma_kurtarildi", level="kritik", mesaj=self.repo.recovery_note)
+            self._enqueue_notice(SchedulerNotice("kritik", self.repo.recovery_note))
         self.scheduler = BellScheduler(
             self.config,
             self.engine,
@@ -1032,6 +1015,9 @@ class OkulZiliApp:
         self._shutdown_event = threading.Event()
         self._scheduler_wake_event = threading.Event()
         self._scheduler_thread: threading.Thread | None = None
+        self._time_check_thread: threading.Thread | None = None
+        self._time_check_wake = threading.Event()
+        self._time_check_alerted = False
         self._scheduler_failure_count = 0
         self._scheduler_last_success_at: datetime | None = None
         self._dashboard_after_id: str | None = None
@@ -1054,6 +1040,7 @@ class OkulZiliApp:
         tray_started = self.tray.start()
         log_event(self.logger, "sistem_tepsisi", etkin=tray_started)
         self._start_scheduler_worker()
+        self._start_time_check_worker()
         self._refresh_all()
         self.root.after(100, self._drain_notices)
         self.root.after(350, self._open_first_run_sound_test)
@@ -1320,16 +1307,30 @@ class OkulZiliApp:
         self.dashboard_overview.pack(fill="x")
         self.dashboard_overview.columnconfigure(0, weight=2)
         self.dashboard_overview.columnconfigure(1, weight=1)
-        self.dashboard_hero = ctk.CTkFrame(self.dashboard_overview, fg_color=ACCENT_STRONG, corner_radius=16, height=138)
+        self.dashboard_hero = ctk.CTkFrame(self.dashboard_overview, fg_color=ACCENT_STRONG, corner_radius=16, height=150)
         self.dashboard_hero.grid(row=0, column=0, sticky="nsew")
         self.dashboard_hero.grid_propagate(False)
-        ctk.CTkLabel(self.dashboard_hero, text="SONRAKİ ZİL", text_color="#99F6E4", font=ctk.CTkFont("Segoe UI Variable Text", 11, "bold"), anchor="w").pack(fill="x", padx=20, pady=(12, 0))
-        self.next_label = ctk.CTkLabel(self.dashboard_hero, text="—", text_color="#FFFFFF", font=ctk.CTkFont("Segoe UI Variable Display", 38, "bold"), anchor="w")
-        self.next_label.pack(fill="x", padx=18, pady=(0, 0))
-        self.next_detail = ctk.CTkLabel(self.dashboard_hero, text="", text_color="#CCFBF1", font=ctk.CTkFont("Segoe UI Variable Text", 12), anchor="w")
-        self.next_detail.pack(fill="x", padx=20)
+        # Zil uygulamasının kalbi saattir: kartın solunda büyük canlı saat ve
+        # Türkçe tarih, sağında sonraki zil bilgisi durur.
+        self.dashboard_hero.columnconfigure(0, weight=5)
+        self.dashboard_hero.columnconfigure(1, weight=4)
+        self.dashboard_hero.rowconfigure(0, weight=1)
+        clock_column = ctk.CTkFrame(self.dashboard_hero, fg_color="transparent")
+        clock_column.grid(row=0, column=0, sticky="nsew", padx=(20, 8), pady=(10, 12))
+        ctk.CTkLabel(clock_column, text="ŞU AN", text_color="#99F6E4", font=ctk.CTkFont("Segoe UI Variable Text", 11, "bold"), anchor="w").pack(fill="x")
+        self.hero_clock = ctk.CTkLabel(clock_column, text="--:--:--", text_color="#FFFFFF", font=ctk.CTkFont("Segoe UI Variable Display", 50, "bold"), anchor="w")
+        self.hero_clock.pack(fill="x")
+        self.hero_date = ctk.CTkLabel(clock_column, text="", text_color="#CCFBF1", font=ctk.CTkFont("Segoe UI Variable Text", 13), anchor="w")
+        self.hero_date.pack(fill="x")
+        next_column = ctk.CTkFrame(self.dashboard_hero, fg_color="transparent")
+        next_column.grid(row=0, column=1, sticky="nsew", padx=(8, 20), pady=(10, 12))
+        ctk.CTkLabel(next_column, text="SONRAKİ ZİL", text_color="#99F6E4", font=ctk.CTkFont("Segoe UI Variable Text", 11, "bold"), anchor="w").pack(fill="x")
+        self.next_label = ctk.CTkLabel(next_column, text="—", text_color="#FFFFFF", font=ctk.CTkFont("Segoe UI Variable Display", 34, "bold"), anchor="w")
+        self.next_label.pack(fill="x")
+        self.next_detail = ctk.CTkLabel(next_column, text="", text_color="#CCFBF1", font=ctk.CTkFont("Segoe UI Variable Text", 12), anchor="w", justify="left")
+        self.next_detail.pack(fill="x")
 
-        self.dashboard_health = ctk.CTkFrame(self.dashboard_overview, fg_color=SURFACE, corner_radius=16, border_width=1, border_color=BORDER, height=138)
+        self.dashboard_health = ctk.CTkFrame(self.dashboard_overview, fg_color=SURFACE, corner_radius=16, border_width=1, border_color=BORDER, height=150)
         self.dashboard_health.grid(row=0, column=1, sticky="nsew", padx=(12, 0))
         self.dashboard_health.grid_propagate(False)
         ctk.CTkLabel(self.dashboard_health, text="SİSTEM DURUMU", text_color=MUTED, font=ctk.CTkFont("Segoe UI Variable Text", 11, "bold"), anchor="w").pack(fill="x", padx=18, pady=(12, 6))
@@ -1361,7 +1362,12 @@ class OkulZiliApp:
 
         self.alert_frame = ctk.CTkFrame(self.dashboard, fg_color=SURFACE, corner_radius=16, border_width=1, border_color=BORDER)
         self.alert_frame.pack(fill="x", pady=(10, 0))
-        ctk.CTkLabel(self.alert_frame, text="Uyarılar ve öneriler", text_color=INK_SUBTLE, font=ctk.CTkFont("Segoe UI Variable Display", 14, "bold"), anchor="w").pack(fill="x", padx=18, pady=(8, 0))
+        alert_header = ctk.CTkFrame(self.alert_frame, fg_color="transparent")
+        alert_header.pack(fill="x", padx=18, pady=(8, 0))
+        ctk.CTkLabel(alert_header, text="Uyarılar ve öneriler", text_color=INK_SUBTLE, font=ctk.CTkFont("Segoe UI Variable Display", 14, "bold"), anchor="w").pack(side="left")
+        self.clear_alerts_button = self._action_button(alert_header, "Uyarıları onayla", self._clear_critical_alerts, width=126)
+        self.clear_alerts_button.configure(height=30)
+        self.clear_alerts_button.pack(side="right")
         self.alert_text = ctk.CTkTextbox(self.alert_frame, height=58, wrap="word", state="disabled", fg_color=SURFACE, text_color=INK_SUBTLE, border_width=0, corner_radius=0, font=ctk.CTkFont("Segoe UI Variable Text", 12))
         self.alert_text.pack(fill="x", padx=10, pady=(0, 5))
         self.dashboard.bind("<Configure>", self._schedule_dashboard_layout, add="+")
@@ -1767,15 +1773,16 @@ class OkulZiliApp:
         except (ValueError, KeyError) as exc:
             messagebox.showerror("Geçersiz müzik ayarı", str(exc), parent=self.root)
             return
-        self.config = replace(
+        updated = replace(
             self.config,
             recess_music_enabled=self.recess_music_enabled_var.get(),
             recess_music_volume=volume,
             recess_music_track=track,
         )
-        if not self.config.recess_music_enabled:
+        if not self._apply_config(updated):
+            return
+        if not updated.recess_music_enabled:
             self.recess_music.stop()
-        self._save_config()
         messagebox.showinfo("Teneffüs müziği", "Müzik ayarları kaydedildi.", parent=self.root)
 
     def _assign_selected_sound(self) -> None:
@@ -1801,9 +1808,8 @@ class OkulZiliApp:
             return
         sounds = dict(self.config.sounds)
         sounds[sound_id] = str(destination.relative_to(self.data_dir)).replace("\\", "/")
-        self.config = replace(self.config, sounds=sounds)
-        log_event(self.logger, "ses_degistirildi", ses=sound_id, kaynak="kullanici_dosyasi")
-        self._save_config()
+        if self._apply_config(replace(self.config, sounds=sounds)):
+            log_event(self.logger, "ses_degistirildi", ses=sound_id, kaynak="kullanici_dosyasi")
 
     def _download_selected_sound(self) -> None:
         if self.role != "yonetici":
@@ -1863,9 +1869,9 @@ class OkulZiliApp:
     def _official_download_complete(self, sound_id: str, destination: Path) -> None:
         sounds = dict(self.config.sounds)
         sounds[sound_id] = str(destination.relative_to(self.data_dir)).replace("\\", "/")
-        self.config = replace(self.config, sounds=sounds)
+        if not self._apply_config(replace(self.config, sounds=sounds)):
+            return
         log_event(self.logger, "ses_degistirildi", ses=sound_id, kaynak="resmi_meb")
-        self._save_config()
         messagebox.showinfo("Ses hazır", "MEB kaynağındaki ses indirildi, doğrulandı ve seçilen yuvaya atandı.", parent=self.root)
 
     def _open_selected_source(self) -> None:
@@ -2006,30 +2012,42 @@ class OkulZiliApp:
             except tk.TclError:
                 pass
             self._dashboard_after_id = None
-        now = datetime.now()
-        self.clock_label.configure(text=now.strftime("%d.%m.%Y  %H:%M:%S"))
-        next_event = self.scheduler.next_event(now)
-        if next_event:
-            self.next_label.configure(text=next_event.scheduled_at.strftime("%H:%M"))
-            weekday = WEEKDAYS[next_event.scheduled_at.weekday()]
-            self.next_detail.configure(text=f"{next_event.label} · {weekday}, {next_event.scheduled_at.strftime('%d.%m.%Y')}")
-            tray_title = f"Okul Zili — Sonraki: {next_event.scheduled_at.strftime('%H:%M')} {next_event.label}"
-        else:
-            self.next_label.configure(text="Planlanmış zil yok")
-            self.next_detail.configure(text="Önümüzdeki yedi gün içinde etkin olay bulunamadı.")
-            tray_title = "Okul Zili — Planlanmış zil yok"
-        self.tray.update_status(
-            tray_title,
-            critical=self._has_critical_alert,
-            paused=not self.scheduler_running,
-            muted=self.scheduler.state.is_muted(now),
-        )
-        self.mute_button.configure(
-            text="Bugünkü sessize almayı kaldır"
-            if self.scheduler.state.is_muted(now)
-            else "Bugün zil çalma"
-        )
-        self._dashboard_after_id = self.root.after(1000, self._refresh_dashboard)
+        # finally bloğu döngüyü her koşulda yeniden planlar; tek bir istisna
+        # saat ve tepsi güncellemesini kalıcı olarak durduramaz.
+        try:
+            now = datetime.now()
+            self.clock_label.configure(text=now.strftime("%d.%m.%Y  %H:%M:%S"))
+            self.hero_clock.configure(text=now.strftime("%H:%M:%S"))
+            self.hero_date.configure(
+                text=f"{now.day} {MONTHS[now.month - 1]} {now.year} {WEEKDAYS[now.weekday()]}"
+            )
+            next_event = self.scheduler.next_event(now)
+            if next_event:
+                self.next_label.configure(text=next_event.scheduled_at.strftime("%H:%M"))
+                weekday = WEEKDAYS[next_event.scheduled_at.weekday()]
+                self.next_detail.configure(text=f"{next_event.label} · {weekday}, {next_event.scheduled_at.strftime('%d.%m.%Y')}")
+                tray_title = f"Okul Zili — Sonraki: {next_event.scheduled_at.strftime('%H:%M')} {next_event.label}"
+            else:
+                self.next_label.configure(text="Planlanmış zil yok")
+                self.next_detail.configure(text="Önümüzdeki yedi gün içinde etkin olay bulunamadı.")
+                tray_title = "Okul Zili — Planlanmış zil yok"
+            self.tray.update_status(
+                tray_title,
+                critical=self._has_critical_alert,
+                paused=not self.scheduler_running,
+                muted=self.scheduler.state.is_muted(now),
+            )
+            self.mute_button.configure(
+                text="Bugünkü sessize almayı kaldır"
+                if self.scheduler.state.is_muted(now)
+                else "Bugün zil çalma"
+            )
+        finally:
+            try:
+                self._dashboard_after_id = self.root.after(1000, self._refresh_dashboard)
+            except tk.TclError:
+                # Pencere kapatılırken bekleyen çağrı: yeniden planlama gereksiz.
+                self._dashboard_after_id = None
 
     def _refresh_schedule(self) -> None:
         for item in self.schedule_tree.get_children():
@@ -2061,7 +2079,7 @@ class OkulZiliApp:
             )
             for session_id in {item.session for item in starts}
         }
-        settings = self.config.day_schedules.get(weekday) or infer_day_schedule(events)
+        settings = self.config.day_schedules.get(weekday)
         session_settings = {
             item.session_id: item for item in settings.effective_sessions
         } if settings else {}
@@ -2159,7 +2177,7 @@ class OkulZiliApp:
         if not hasattr(self, "day_form_vars"):
             return
         weekday = WEEKDAYS.index(self.day_var.get())
-        schedule = self.config.day_schedules.get(weekday) or infer_day_schedule(self.config.weekly_schedule.get(weekday, ())) or DaySchedule(student_bell_enabled=False)
+        schedule = self.config.day_schedules.get(weekday) or DaySchedule(student_bell_enabled=False)
         if reset_mode:
             mode = "İkili eğitim" if schedule.is_dual else "Tekli eğitim"
             self.education_mode_var.set(mode)
@@ -2250,28 +2268,33 @@ class OkulZiliApp:
         schedules = dict(self.config.day_schedules)
         schedules[weekday] = settings
         weekly = dict(self.config.weekly_schedule)
-        weekly[weekday] = generate_from_day_schedule(settings)
-        self.config = replace(
-            self.config,
-            day_schedules=schedules,
-            weekly_schedule=weekly,
-            preparation_enabled=any(
-                session.student_bell_enabled
-                for item in schedules.values()
-                for session in item.effective_sessions
-            ),
+        preserved = tuple(
+            item
+            for item in self.config.weekly_schedule.get(weekday, ())
+            if item.event_type
+            in (EventType.ANNOUNCEMENT, EventType.CEREMONY, EventType.MANUAL, EventType.BREAK_END)
         )
-        self._save_config()
+        weekly[weekday] = sort_specs((*generate_from_day_schedule(settings), *preserved))
+        self._apply_config(
+            replace(
+                self.config,
+                day_schedules=schedules,
+                weekly_schedule=weekly,
+                preparation_enabled=any(
+                    session.student_bell_enabled
+                    for item in schedules.values()
+                    for session in item.effective_sessions
+                ),
+            )
+        )
 
     def _copy_schedule(self) -> None:
         if self.role != "yonetici":
             return
         source_day = WEEKDAYS.index(self.day_var.get())
         def apply(targets: tuple[int, ...]) -> None:
-            previous = self.config
-            self.config = copy_schedule_to_days(previous, source_day, targets)
-            if not self._save_config(show_error=False):
-                self.config = previous
+            updated = copy_schedule_to_days(self.config, source_day, targets)
+            if not self._apply_config(updated, show_error=False):
                 raise ConfigError("Program diske kaydedilemedi; mevcut ayarlar değiştirilmedi.")
         CopyScheduleDialog(self.root, source_day, apply)
 
@@ -2322,8 +2345,7 @@ class OkulZiliApp:
                 items.append(new_end)
             weekly = dict(self.config.weekly_schedule)
             weekly[weekday] = sort_specs(items)
-            self.config = replace(self.config, weekly_schedule=weekly)
-            self._save_config()
+            self._apply_config(replace(self.config, weekly_schedule=weekly))
         def normalize_student(new_student: EventSpec | None, new_teacher: EventSpec, new_end: EventSpec | None) -> None:
             if new_student is None and student is None:
                 student_text = dialog.student_var.get().strip()
@@ -2371,8 +2393,7 @@ class OkulZiliApp:
         if self.role != "yonetici":
             return
         def save(calendar: AcademicCalendar) -> None:
-            self.config = replace(self.config, academic_calendar=calendar)
-            self._save_config()
+            self._apply_config(replace(self.config, academic_calendar=calendar))
         AcademicCalendarDialog(self.root, self.config.academic_calendar, save)
 
     def _refresh_sounds(self) -> None:
@@ -2407,6 +2428,7 @@ class OkulZiliApp:
             self.preflight_tree.insert("", "end", values=(display, result.title, result.detail), tags=(result.level,))
             if result.level != "iyi":
                 critical.append(result)
+        self._last_alerts = critical
         self._show_alerts(critical)
 
     def _runtime_health_check(self) -> CheckResult:
@@ -2446,7 +2468,9 @@ class OkulZiliApp:
             )
 
     def _show_alerts(self, alerts: list[CheckResult]) -> None:
-        self._has_critical_alert = any(item.level == "kritik" for item in alerts)
+        self._has_critical_alert = (
+            any(item.level == "kritik" for item in alerts) or bool(self._recent_criticals)
+        )
         if self._has_critical_alert:
             self.health_status_label.configure(text="●  Müdahale gerekli", text_color=CRITICAL)
         elif alerts:
@@ -2455,7 +2479,9 @@ class OkulZiliApp:
             self.health_status_label.configure(text="●  Sistem hazır", text_color=SUCCESS)
         self.alert_text.configure(state="normal")
         self.alert_text.delete("1.0", "end")
-        if not alerts:
+        for entry in reversed(self._recent_criticals):
+            self.alert_text.insert("end", f"• {entry}\n")
+        if not alerts and not self._recent_criticals:
             self.alert_text.insert("end", "Tüm kontroller uygun. Sistem zil çalmaya hazır.")
         else:
             for item in alerts:
@@ -2465,8 +2491,10 @@ class OkulZiliApp:
     def _refresh_logs(self) -> None:
         path = self.data_dir / "gunlukler" / "okul-zili.jsonl"
         try:
-            lines = path.read_text(encoding="utf-8").splitlines()[-300:]
-        except OSError:
+            # errors="replace": elektrik kesintisiyle yarım kalan çok baytlı
+            # karakter tüm günlük görünümünü düşürmesin.
+            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()[-300:]
+        except (OSError, ValueError):
             lines = []
         rendered: list[str] = []
         for line in lines:
@@ -2480,15 +2508,17 @@ class OkulZiliApp:
         self.log_text.insert("end", "\n".join(rendered))
         self.log_text.configure(state="disabled")
 
-    def _save_config(self, *, show_error: bool = True) -> bool:
+    def _apply_config(self, new_config: SchoolConfig, *, show_error: bool = True) -> bool:
+        """Yeni yapılandırmayı önce diske yazar; yazılamazsa bellek ve motor değişmez."""
         try:
-            self.repo.save(self.config)
+            self.repo.save(new_config)
         except ConfigError as exc:
             if show_error:
                 messagebox.showerror("Kaydetme hatası", str(exc), parent=self.root)
             return False
-        self.engine = CalendarEngine(self.config)
-        self.scheduler.update_config(self.config, self.engine)
+        self.config = new_config
+        self.engine = CalendarEngine(new_config)
+        self.scheduler.update_config(new_config, self.engine)
         log_event(self.logger, "yapilandirma_kaydedildi")
         self._refresh_all()
         return True
@@ -2506,23 +2536,9 @@ class OkulZiliApp:
         announcement_device: str | None,
         grace: int,
         bell_volume: int,
+        time_check_enabled: bool,
     ) -> None:
-        day_schedules = {
-            day: replace(
-                item,
-                student_bell_enabled=preparation_enabled,
-                sessions=tuple(
-                    replace(session, student_bell_enabled=preparation_enabled)
-                    for session in item.sessions
-                ),
-            )
-            for day, item in self.config.day_schedules.items()
-        }
-        schedule = {
-            day: generate_from_day_schedule(settings)
-            for day, settings in day_schedules.items()
-        } or set_preparation_bells(self.config.weekly_schedule, preparation_enabled)
-        self.config = replace(
+        updated = apply_general_settings(
             self.config,
             school_name=school_name,
             preparation_enabled=preparation_enabled,
@@ -2530,12 +2546,16 @@ class OkulZiliApp:
             announcement_device=announcement_device,
             grace_seconds=grace,
             bell_volume=bell_volume,
-            weekly_schedule=schedule,
-            day_schedules=day_schedules,
+            time_check_enabled=time_check_enabled,
         )
+        if not self._apply_config(updated):
+            return
         self.root.title(f"Okul Zili — {school_name}")
         self.school_label.configure(text=school_name)
-        self._save_config()
+        if updated.time_check_enabled:
+            self._start_time_check_worker()
+            # Aynı oturumda kapatılıp yeniden açıldıysa altı saat beklenmesin.
+            self._time_check_wake.set()
 
     def _backup_menu(self) -> None:
         if self.role != "yonetici":
@@ -2596,15 +2616,6 @@ class OkulZiliApp:
         self._refresh_all()
         messagebox.showinfo("Geri yükleme tamamlandı", "Program ve ses dosyaları doğrulanarak geri yüklendi.", parent=self.root)
 
-    def _selected_event(self) -> tuple[int, int, EventSpec] | None:
-        selected = self.schedule_tree.selection()
-        if not selected:
-            messagebox.showinfo("Seçim gerekli", "Önce bir zil seçin.", parent=self.root)
-            return None
-        weekday = WEEKDAYS.index(self.day_var.get())
-        index = int(selected[0])
-        return weekday, index, self.config.weekly_schedule[weekday][index]
-
     def _add_event(self) -> None:
         if self.role != "yonetici":
             return
@@ -2612,50 +2623,8 @@ class OkulZiliApp:
         def save(event: EventSpec) -> None:
             schedule = dict(self.config.weekly_schedule)
             schedule[weekday] = sort_specs((*schedule.get(weekday, ()), event))
-            self.config = replace(self.config, weekly_schedule=schedule)
-            self._save_config()
+            self._apply_config(replace(self.config, weekly_schedule=schedule))
         EventEditor(self.root, None, save)
-
-    def _edit_event(self) -> None:
-        if self.role != "yonetici":
-            return
-        selected = self._selected_event()
-        if not selected:
-            return
-        weekday, index, existing = selected
-        def save(event: EventSpec) -> None:
-            items = list(self.config.weekly_schedule[weekday])
-            items[index] = event
-            schedule = dict(self.config.weekly_schedule)
-            schedule[weekday] = sort_specs(items)
-            self.config = replace(self.config, weekly_schedule=schedule)
-            self._save_config()
-        EventEditor(self.root, existing, save)
-
-    def _delete_event(self) -> None:
-        if self.role != "yonetici":
-            return
-        selected = self._selected_event()
-        if not selected:
-            return
-        weekday, index, existing = selected
-        if not messagebox.askyesno("Zili sil", f"“{existing.label}” silinsin mi?", parent=self.root):
-            return
-        items = list(self.config.weekly_schedule[weekday])
-        del items[index]
-        schedule = dict(self.config.weekly_schedule)
-        schedule[weekday] = tuple(items)
-        self.config = replace(self.config, weekly_schedule=schedule)
-        self._save_config()
-
-    def _assign_sound(self) -> None:
-        if self.role != "yonetici":
-            return
-        selected = self._selected_event()
-        if not selected:
-            return
-        _, _, event = selected
-        self._choose_sound_file(event.sound_id)
 
     def _selected_rule(self) -> tuple[int, DateRule] | None:
         selected = self.rules_tree.selection()
@@ -2671,8 +2640,7 @@ class OkulZiliApp:
         def save(rule: DateRule) -> None:
             rules = [*self.config.date_rules, rule]
             rules.sort(key=lambda item: (item.start, item.end, item.name))
-            self.config = replace(self.config, date_rules=rules)
-            self._save_config()
+            self._apply_config(replace(self.config, date_rules=rules))
         RuleEditor(self.root, None, self.config.weekly_schedule, save)
 
     def _add_ceremony(self) -> None:
@@ -2681,8 +2649,7 @@ class OkulZiliApp:
         def save(rule: DateRule) -> None:
             rules = [*self.config.date_rules, rule]
             rules.sort(key=lambda item: (item.start, item.end, item.name))
-            self.config = replace(self.config, date_rules=rules)
-            self._save_config()
+            self._apply_config(replace(self.config, date_rules=rules))
         CeremonyDialog(self.root, save)
 
     def _edit_rule(self) -> None:
@@ -2696,8 +2663,7 @@ class OkulZiliApp:
             rules = list(self.config.date_rules)
             rules[index] = rule
             rules.sort(key=lambda item: (item.start, item.end, item.name))
-            self.config = replace(self.config, date_rules=rules)
-            self._save_config()
+            self._apply_config(replace(self.config, date_rules=rules))
         RuleEditor(self.root, existing, self.config.weekly_schedule, save)
 
     def _delete_rule(self) -> None:
@@ -2711,8 +2677,7 @@ class OkulZiliApp:
             return
         rules = list(self.config.date_rules)
         del rules[index]
-        self.config = replace(self.config, date_rules=rules)
-        self._save_config()
+        self._apply_config(replace(self.config, date_rules=rules))
 
     def _manual_play(self, sound_id: str) -> None:
         if not self._require_permission("gunluk_eylem"):
@@ -2843,6 +2808,69 @@ class OkulZiliApp:
             self._scheduler_wake_event.wait(wait_seconds)
             self._scheduler_wake_event.clear()
 
+    def _start_time_check_worker(self) -> None:
+        if not self.config.time_check_enabled:
+            return
+        if self._time_check_thread is not None and self._time_check_thread.is_alive():
+            return
+        self._time_check_thread = threading.Thread(
+            target=self._time_check_loop,
+            name="saat-dogrulama",
+            daemon=True,
+        )
+        self._time_check_thread.start()
+
+    def _time_check_loop(self) -> None:
+        """Sistem saatini isteğe bağlı olarak zaman sunucusuyla karşılaştırır.
+
+        Yalnızca uyarır; sistem saatine hiçbir zaman yazmaz. Ağ yoksa sessizce
+        günlüğe not düşer ve altı saat sonra yeniden dener. Ayarlardan yeniden
+        etkinleştirilince ``_time_check_wake`` ile bekleme kesilip hemen ölçülür.
+        Uyarı yalnızca eşik AŞILDIĞI ANDA bir kez üretilir; sapma sürdükçe altı
+        saatte bir panel doldurulmaz, saat düzelince bilgi kaydı düşülür.
+        """
+        wait_seconds = 15.0
+        while not self._shutdown_event.is_set():
+            woken = self._time_check_wake.wait(wait_seconds)
+            self._time_check_wake.clear()
+            if self._shutdown_event.is_set():
+                return
+            wait_seconds = 15.0 if woken else 6 * 3600.0
+            if woken:
+                # Uyandırma yalnızca "hemen ölç" isteğidir; ölçüm bir sonraki
+                # kısa beklemenin ardından yapılır ki ağ yığını hazır olsun.
+                continue
+            if not self.config.time_check_enabled:
+                wait_seconds = 6 * 3600.0
+                continue
+            result = check_time()
+            if result is None:
+                log_event(self.logger, "saat_dogrulama", durum="ulasilamadi")
+                continue
+            offset = result.offset_seconds
+            log_event(
+                self.logger,
+                "saat_dogrulama",
+                durum="tamam",
+                sunucu=result.server,
+                sapma_saniye=round(offset, 1),
+            )
+            if abs(offset) > 60:
+                if not self._time_check_alerted:
+                    self._time_check_alerted = True
+                    self._enqueue_notice(
+                        SchedulerNotice(
+                            "kritik",
+                            "Sistem saati zaman sunucusuna göre "
+                            f"{offset:+.0f} saniye sapıyor; ziller yanlış saatte çalabilir. "
+                            "Bilgisayarın tarih ve saat ayarını denetleyin. "
+                            f"(Karşılaştırma: {result.server})",
+                        )
+                    )
+            elif self._time_check_alerted:
+                self._time_check_alerted = False
+                log_event(self.logger, "saat_dogrulama", durum="duzeldi", sunucu=result.server)
+
     def _enqueue_notice(self, notice: SchedulerNotice) -> None:
         try:
             self.notice_queue.put_nowait(notice)
@@ -2872,43 +2900,81 @@ class OkulZiliApp:
         )
 
     def _drain_notices(self) -> None:
-        while True:
+        # Gövde ne olursa olsun döngü finally ile yeniden planlanır; tek bir
+        # istisna bildirim pompasını kalıcı olarak durduramaz.
+        try:
+            processed = False
+            while True:
+                try:
+                    notice = self.notice_queue.get_nowait()
+                except queue.Empty:
+                    break
+                processed = True
+                log_event(
+                    self.logger,
+                    "zil_sonucu",
+                    level=notice.level,
+                    mesaj=notice.message,
+                    olay_adi=(notice.event.label if notice.event else None),
+                    olay_kimligi=(notice.event.event_id if notice.event else None),
+                    planlanan_zaman=(
+                        notice.event.scheduled_at.isoformat(timespec="seconds")
+                        if notice.event
+                        else None
+                    ),
+                    kaynak=(notice.event.source if notice.event else None),
+                    ses_kimligi=(notice.event.sound_id if notice.event else None),
+                    basarili=(notice.result.success if notice.result else None),
+                    yedek_bip=(notice.result.used_fallback if notice.result else None),
+                )
+                if notice.level == "kritik":
+                    self._has_critical_alert = True
+                    last = self._recent_criticals[-1] if self._recent_criticals else ""
+                    if last.split(" — ", 1)[-1] != notice.message:
+                        self._recent_criticals.append(
+                            f"{datetime.now().strftime('%d.%m %H:%M')} — {notice.message}"
+                        )
+                    self.tray.notify(notice.message, "Kritik zil uyarısı")
+                    self._render_critical_banner()
+                elif (
+                    notice.event is not None
+                    and notice.event.event_type is EventType.LESSON_END
+                    and notice.result is not None
+                    and notice.result.success
+                    and not notice.result.stopped
+                ):
+                    self._start_recess_music()
+            if processed:
+                self._refresh_logs()
+        finally:
             try:
-                notice = self.notice_queue.get_nowait()
-            except queue.Empty:
-                break
-            log_event(
-                self.logger,
-                "zil_sonucu",
-                level=notice.level,
-                mesaj=notice.message,
-                olay_adi=(notice.event.label if notice.event else None),
-                olay_kimligi=(notice.event.event_id if notice.event else None),
-                planlanan_zaman=(
-                    notice.event.scheduled_at.isoformat(timespec="seconds")
-                    if notice.event
-                    else None
-                ),
-                kaynak=(notice.event.source if notice.event else None),
-                ses_kimligi=(notice.event.sound_id if notice.event else None),
-                basarili=(notice.result.success if notice.result else None),
-                yedek_bip=(notice.result.used_fallback if notice.result else None),
-            )
-            if notice.level == "kritik":
-                self._has_critical_alert = True
-                self._show_window()
-                self.tray.notify(notice.message, "Kritik zil uyarısı")
-                messagebox.showerror("Kritik zil uyarısı", notice.message, parent=self.root)
-            elif (
-                notice.event is not None
-                and notice.event.event_type is EventType.LESSON_END
-                and notice.result is not None
-                and notice.result.success
-                and not notice.result.stopped
-            ):
-                self._start_recess_music()
-            self._refresh_logs()
-        self.root.after(200, self._drain_notices)
+                self.root.after(200, self._drain_notices)
+            except tk.TclError:
+                # Pencere kapatılırken bekleyen çağrı: pompa uygulamayla biter.
+                pass
+
+    def _render_critical_banner(self) -> None:
+        """Kritik uyarıları modal pencere yerine kalıcı panelde gösterir.
+
+        Son ön kontrol uyarıları da panelde tutulur; kritik girdi geldi diye
+        mevcut uyarılar görünümden düşmez.
+        """
+        self._show_alerts(self._last_alerts)
+
+    def _clear_critical_alerts(self) -> None:
+        """Kritik uyarı geçmişini onaylayıp paneli güncel duruma döndürür."""
+        if not self._require_permission("gunluk_eylem"):
+            return
+        if not self._recent_criticals:
+            return
+        log_event(
+            self.logger,
+            "kritik_uyarilar_onaylandi",
+            rol=self.role,
+            adet=len(self._recent_criticals),
+        )
+        self._recent_criticals.clear()
+        self._show_alerts(self._last_alerts)
 
     def _stop_recess_music_silently(self) -> None:
         if hasattr(self, "recess_music"):

@@ -15,6 +15,7 @@
 - `preflight.py`: Açılış kontrolleri
 - `backup.py`: Karmalı paylaşım yedeği ve güvenli geri yükleme
 - `simulation.py`: Enjekte edilen saatle öğretim yılı simülasyonu
+- `time_check.py`: İsteğe bağlı SNTP saat karşılaştırması (yalnız uyarı)
 - `event_log.py`: Dönen yerel JSON satır günlüğü
 - `app.py`: Türkçe Tk masaüstü arayüzü
 - `tray.py`: Sistem tepsisi yaşam döngüsü, durum simgesi ve hızlı eylemler
@@ -35,7 +36,7 @@ Tek olay ertelemesi olay kimliğini değiştirmeden etkin zamanı ileri taşır 
 
 ## Yapılandırma
 
-`ayarlar.json` şema sürümü taşır. Yazma önce geçici dosyaya yapılır, disk eşitlemesinden sonra atomik değiştirme uygulanır ve önceki kopya `.bak` olarak korunur. v1–v5 yapılandırmaları v6 alanlarına göç ettirilir; mevcut olaylardan günün ders girdileri çıkarılır, teneffüs müziği güvenli kapalı varsayılanla ve ana zil düzeyi %100 olarak eklenir. Bilinmeyen ileri sürümler açılmaz.
+`ayarlar.json` şema sürümü taşır. Yazma önce geçici dosyaya yapılır, disk eşitlemesinden sonra atomik değiştirme uygulanır ve önceki kopya `.bak` olarak korunur. Yalnızca güncel şema sürümü desteklenir; sürüm göçü zinciri yoktur (saha kurulumu olmadığı için 0.7'de kaldırıldı). Okunamayan ya da eski sürümlü dosya silinmez: `ayarlar.json.bozuk-<tarih>` adıyla kenara alınır, önce `.bak` yedeği denenir, o da geçersizse varsayılanlarla başlanır ve durum hem günlüğe hem arayüzdeki kritik uyarı paneline yazılır.
 
 Şema v4, üretilmiş haftalık olayların yanında gün bazlı `DaySchedule` girdilerini ve isteğe bağlı `AcademicCalendar` kaydını tutar. `DaySchedule`, eski tekli eğitim alanlarını korurken isteğe bağlı bir `SessionSchedule` listesi taşıyabilir. Her oturum bağımsız başlangıç/süre ayarlarına ve toplamı ders sayısına eşit bir blok dizisine sahiptir. Blok başına başlangıç ve bitiş olayları, etkinleştirildiğinde ise iç ders sınırlarında beş saniyelik sınıf değişim olayları üretilir; oturum kimliği olay kimliğinin parçasıdır. Takvim tanımlandığında haftalık olaylar yalnızca etkin dönemlerde üretilir; ara tatiller, sabit resmî tatiller ve kullanıcı tarafından doğrulanan Ramazan/Kurban tarihleri ders zillerini bastırır. Tarihe özel tören ve telafi kuralları bu kapanışların üzerinde uygulanabilir.
 
@@ -43,7 +44,7 @@ Paylaşım yedeği ZIP tabanlı `.okulzili` kapsayıcısıdır. Manifest her yap
 
 ## Gizlilik ve güvenlik
 
-Uygulama ağ çağrısı yapmaz ve kişisel veri modeli içermez. Günlükler yereldir, boyut bazında döner ve yalnızca işletim olaylarını içerir. Yönetici, nöbetçi ve salt görüntüleme profillerinin PIN'leri düz metin tutulmaz; rastgele 16 bayt tuz ve 310.000 turlu PBKDF2-HMAC-SHA256 özeti saklanır. Yetki denetimi yalnızca düğmelerin durumuna bırakılmaz; değişiklik metotları da yönetici rolünü doğrular.
+Uygulama kendiliğinden ağ çağrısı yapmaz ve kişisel veri modeli içermez. Yalnızca iki bilinçli istisna vardır: yöneticinin açıkça başlattığı MEB ses indirmesi (`sound_catalog.py`, yalnız `*.meb.gov.tr`) ve varsayılan olarak kapalı SNTP saat karşılaştırması (`time_check.py`; sistem saatine yazmaz, yalnız sapmayı uyarır, hiçbir veri göndermez). `test_packaging.py` bu ikisi dışındaki modüllerde ağ istemcisi importunu reddeder. Günlükler yereldir, boyut bazında döner ve yalnızca işletim olaylarını içerir. Yönetici, nöbetçi ve salt görüntüleme profillerinin PIN'leri düz metin tutulmaz; rastgele 16 bayt tuz ve 310.000 turlu PBKDF2-HMAC-SHA256 özeti saklanır. Yetki denetimi yalnızca düğmelerin durumuna bırakılmaz; değişiklik metotları da yönetici rolünü doğrular.
 
 Tepsi katmanı LGPLv3 lisanslı `pystray` kaynaklarını kullanır. Windows derlemesinde Pillow ve six ile birlikte uygulamaya gömülür. Linux paketinde saf Python `pystray` kaynakları bulunur; grafik/X11 bağımlılıkları dağıtımın sistem paketlerinden sağlanır. Lisans metinleri her dağıtımda korunur.
 

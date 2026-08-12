@@ -2,9 +2,16 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import date, datetime, timedelta
-import re
 
-from .domain import DaySchedule, EventSpec, EventType, SchoolConfig, SessionSchedule, sort_specs
+from .domain import (
+    CURRENT_SCHEMA_VERSION,
+    DaySchedule,
+    EventSpec,
+    EventType,
+    SchoolConfig,
+    SessionSchedule,
+    sort_specs,
+)
 
 
 def _event(at: datetime, event_type: EventType, label: str, sound_id: str) -> EventSpec:
@@ -134,7 +141,7 @@ def build_school_config(
         student_bell_minutes=preparation_minutes,
     )
     return SchoolConfig(
-        schema_version=6,
+        schema_version=CURRENT_SCHEMA_VERSION,
         school_name=school_name,
         timezone="Europe/Istanbul",
         preparation_enabled=preparation_enabled,
@@ -192,132 +199,109 @@ def generate_from_day_schedule(schedule: DaySchedule) -> tuple[EventSpec, ...]:
     )
 
 
-def infer_day_schedule(events: tuple[EventSpec, ...]) -> DaySchedule | None:
-    session_ids = tuple(
-        dict.fromkeys(
-            item.session
-            for item in sorted(events, key=lambda item: item.at)
-            if item.event_type is EventType.LESSON_START
-        )
-    )
-    if not session_ids:
-        return None
-    sessions: list[SessionSchedule] = []
-    for session_id in session_ids:
-        session_events = tuple(item for item in events if item.session == session_id)
-        inferred = _infer_session_schedule(session_events, session_id)
-        if inferred is None:
-            return None
-        sessions.append(inferred)
-    first = sessions[0]
-    return DaySchedule(
-        first_lesson=first.first_lesson,
-        lesson_count=first.lesson_count,
-        lesson_minutes=first.lesson_minutes,
-        break_minutes=first.break_minutes,
-        lunch_after=first.lunch_after,
-        lunch_minutes=first.lunch_minutes,
-        student_bell_enabled=first.student_bell_enabled,
-        student_bell_minutes=first.student_bell_minutes,
-        sessions=(
-            tuple(sessions)
-            if len(sessions) > 1 or any(item.block_sizes for item in sessions)
-            else ()
-        ),
-    )
-
-
-def _infer_session_schedule(
-    events: tuple[EventSpec, ...], session_id: str
-) -> SessionSchedule | None:
-    starts = sorted(
-        (item for item in events if item.event_type is EventType.LESSON_START),
-        key=lambda item: item.at,
-    )
-    ends = sorted(
-        (item for item in events if item.event_type is EventType.LESSON_END),
-        key=lambda item: item.at,
-    )
-    if not starts or len(starts) != len(ends):
-        return None
-    block_sizes: list[int] = []
-    for index, item in enumerate(starts, start=1):
-        match = re.search(r"(\d+)(?:-(\d+))?\. ders", item.label)
-        if match:
-            first = int(match.group(1))
-            last = int(match.group(2) or first)
-            block_sizes.append(last - first + 1)
-        else:
-            block_sizes.append(1)
-    anchor = date(2000, 1, 1)
-    to_datetime = lambda value: datetime.combine(anchor, value)
-    first_block_minutes = int((to_datetime(ends[0].at) - to_datetime(starts[0].at)).total_seconds() // 60)
-    lesson_minutes = first_block_minutes // block_sizes[0]
-    gaps = [
-        int((to_datetime(starts[index + 1].at) - to_datetime(ends[index].at)).total_seconds() // 60)
-        for index in range(len(starts) - 1)
-    ]
-    positive = [item for item in gaps if item >= 0]
-    break_minutes = min(positive) if positive else 0
-    lunch_minutes = max(positive) if positive else 0
-    lunch_after = (gaps.index(lunch_minutes) + 1) if gaps and lunch_minutes > break_minutes else 0
-    preparations = sorted(
-        (item for item in events if item.event_type is EventType.PREPARATION),
-        key=lambda item: item.at,
-    )
-    student_minutes = 2
-    if preparations:
-        student_minutes = max(
-            0,
-            int((to_datetime(starts[0].at) - to_datetime(preparations[0].at)).total_seconds() // 60),
-        )
-    names = {"sabah": "Sabah", "ogle": "Öğleden sonra", "normal": "Normal"}
-    return SessionSchedule(
-        session_id=session_id,
-        name=names.get(session_id, session_id.replace("_", " ").title()),
-        first_lesson=starts[0].at.strftime("%H:%M"),
-        lesson_count=sum(block_sizes),
-        lesson_minutes=lesson_minutes,
-        break_minutes=break_minutes,
-        lunch_after=lunch_after,
-        lunch_minutes=lunch_minutes if lunch_after else break_minutes,
-        student_bell_enabled=bool(preparations),
-        student_bell_minutes=student_minutes,
-        block_sizes=tuple(block_sizes) if any(size > 1 for size in block_sizes) else (),
-        block_transition_bell_enabled=any(
-            item.event_type is EventType.BLOCK_TRANSITION for item in events
-        ),
-    )
-
-
 def set_preparation_bells(
-    schedule: dict[int, tuple[EventSpec, ...]], enabled: bool, minutes: int = 2
+    schedule: dict[int, tuple[EventSpec, ...]],
+    enabled: bool,
+    minutes: int = 2,
+    minutes_by_session: dict[str, int] | None = None,
 ) -> dict[int, tuple[EventSpec, ...]]:
+    """Mevcut olay listesine dokunmadan öğrenci zillerini ekler ya da çıkarır.
+
+    Öğrenci zili, eşleştiği öğretmen zilinin saatinden ve etiketinden türetilir;
+    böylece düzeltilmiş ders saatleri, bloklu dersler ve ikili eğitim oturumları
+    yeniden üretim olmadan korunur.
+    """
     updated: dict[int, tuple[EventSpec, ...]] = {}
     for weekday, events in schedule.items():
         without_preparation = tuple(
             item for item in events if item.event_type is not EventType.PREPARATION
         )
         if enabled:
-            starts = [
-                item
-                for item in without_preparation
-                if item.event_type is EventType.LESSON_START
-            ]
-            if starts:
-                preparations = tuple(
+            preparations = []
+            for item in without_preparation:
+                if item.event_type is not EventType.LESSON_START:
+                    continue
+                offset = (minutes_by_session or {}).get(item.session, minutes)
+                label = (
+                    item.label.replace("öğretmen zili", "öğrenci zili")
+                    if "öğretmen zili" in item.label
+                    else f"{item.label} öğrenci zili"
+                )
+                preparations.append(
                     EventSpec(
-                        (datetime.combine(date.today(), item.at) - timedelta(minutes=minutes)).time(),
+                        (datetime.combine(date.today(), item.at) - timedelta(minutes=offset)).time(),
                         EventType.PREPARATION,
-                        f"{index}. ders öğrenci zili",
+                        label,
                         "ogrenci",
                         session=item.session,
                     )
-                    for index, item in enumerate(sorted(starts, key=lambda item: item.at), start=1)
                 )
+            if preparations:
                 without_preparation = sort_specs((*without_preparation, *preparations))
         updated[weekday] = without_preparation
     return updated
+
+
+def apply_general_settings(
+    config: SchoolConfig,
+    *,
+    school_name: str,
+    preparation_enabled: bool,
+    selected_device: str,
+    announcement_device: str | None,
+    grace_seconds: int,
+    bell_volume: int,
+    time_check_enabled: bool,
+) -> SchoolConfig:
+    """Genel ayarları, haftalık olay listesine dokunmadan uygular.
+
+    Öğrenci zili anahtarı değiştiyse mevcut olay listesi yalnızca öğrenci
+    zilleri eklenerek/çıkarılarak dönüştürülür; elle eklenen anons/tören
+    olayları ve düzeltilmiş ders saatleri korunur.
+    """
+    day_schedules = {
+        day: replace(
+            item,
+            student_bell_enabled=preparation_enabled,
+            sessions=tuple(
+                replace(session, student_bell_enabled=preparation_enabled)
+                for session in item.sessions
+            ),
+        )
+        for day, item in config.day_schedules.items()
+    }
+    weekly = config.weekly_schedule
+    if preparation_enabled != config.preparation_enabled:
+        weekly = {}
+        for weekday, events in config.weekly_schedule.items():
+            settings = day_schedules.get(weekday)
+            minutes = settings.student_bell_minutes if settings else 2
+            minutes_by_session = (
+                {
+                    session.session_id: session.student_bell_minutes
+                    for session in settings.effective_sessions
+                }
+                if settings
+                else None
+            )
+            weekly[weekday] = set_preparation_bells(
+                {weekday: events},
+                preparation_enabled,
+                minutes,
+                minutes_by_session,
+            )[weekday]
+    return replace(
+        config,
+        school_name=school_name,
+        preparation_enabled=preparation_enabled,
+        selected_device=selected_device,
+        announcement_device=announcement_device,
+        grace_seconds=grace_seconds,
+        bell_volume=bell_volume,
+        time_check_enabled=time_check_enabled,
+        weekly_schedule=weekly,
+        day_schedules=day_schedules,
+    )
 
 
 def copy_schedule_to_days(
@@ -330,7 +314,7 @@ def copy_schedule_to_days(
     if invalid_targets:
         raise ValueError("Hedef günlerden biri geçersiz veya kaynak günle aynı.")
     source_events = config.weekly_schedule.get(source_day, ())
-    source_settings = config.day_schedules.get(source_day) or infer_day_schedule(source_events)
+    source_settings = config.day_schedules.get(source_day)
     if not source_events or source_settings is None:
         raise ValueError("Kaynak günde kopyalanabilecek bir ders programı yok.")
 

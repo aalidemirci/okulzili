@@ -8,7 +8,7 @@ from pathlib import Path, PurePosixPath
 import tempfile
 import zipfile
 
-from .config import ConfigError, migrate
+from .config import ConfigError, ensure_current_schema
 from .domain import SchoolConfig
 
 
@@ -54,6 +54,11 @@ def import_bundle(source: Path, data_dir: Path) -> SchoolConfig:
         with zipfile.ZipFile(source, "r") as archive:
             names = archive.namelist()
             for name in names:
+                # Windows'ta joinpath ters bölüyü ayraç sayar; Python dışı bir
+                # araçla üretilmiş arşivlerde dizin kaçışına izin vermemek için
+                # ters bölü ve sürücü ayracı içeren adlar tümüyle reddedilir.
+                if "\\" in name or ":" in name:
+                    raise BackupError("Yedekte güvenli olmayan dosya yolu bulundu.")
                 path = PurePosixPath(name)
                 if path.is_absolute() or ".." in path.parts:
                     raise BackupError("Yedekte güvenli olmayan dosya yolu bulundu.")
@@ -74,7 +79,7 @@ def import_bundle(source: Path, data_dir: Path) -> SchoolConfig:
 
     try:
         raw = json.loads(contents["ayarlar.json"].decode("utf-8"))
-        config = SchoolConfig.from_dict(migrate(raw))
+        config = SchoolConfig.from_dict(ensure_current_schema(raw))
     except (KeyError, UnicodeError, ValueError, TypeError, ConfigError) as exc:
         raise BackupError(f"Yedekteki yapılandırma geçersiz: {exc}") from exc
     errors = config.validate()

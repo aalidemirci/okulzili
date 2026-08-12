@@ -75,6 +75,30 @@ class SchedulerTests(unittest.TestCase):
             scheduler.tick()
             self.assertEqual(["muzigi-durdur", "zil"], order)
 
+    def test_busy_playback_defers_event_until_lock_is_free(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            scheduler, _, backend, state = self._scheduler(directory, datetime(2026, 9, 7, 8, 18))
+            playback = scheduler.playback
+            # Manuel bir ses çalıyormuş gibi kilidi dışarıdan tut.
+            self.assertTrue(playback._lock.acquire(blocking=False))
+            try:
+                first = scheduler.tick()
+            finally:
+                playback._lock.release()
+            self.assertEqual(1, len(first))
+            self.assertEqual("uyarı", first[0].level)
+            self.assertIn("bekletildi", first[0].message)
+            # Pilot günlüğü sözleşmesi: bekletilen olay çalma sonucu taşımaz.
+            self.assertIsNone(first[0].result)
+            # Olay tamamlanmış sayılmadı; kilit boşalınca zil gerçekten çalar.
+            self.assertEqual(0, sum(call[0] == "file" for call in backend.calls))
+            second = scheduler.tick()
+            self.assertEqual(1, len(second))
+            self.assertTrue(second[0].result is not None and second[0].result.success)
+            self.assertEqual(1, sum(call[0] == "file" for call in backend.calls))
+            # Aynı olay için ikinci kez "bekletildi" uyarısı üretilmez.
+            self.assertEqual([], scheduler.tick())
+
     def test_missed_events_are_logged_not_burst_played(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             scheduler, _, backend, _ = self._scheduler(directory, datetime(2026, 9, 7, 12, 0))

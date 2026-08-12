@@ -36,6 +36,22 @@ class BackupTests(unittest.TestCase):
             with self.assertRaises(BackupError):
                 import_bundle(bundle, Path(directory) / "hedef")
 
+    def test_backslash_path_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            bundle = Path(directory) / "kacis.okulzili"
+            placeholder = "dosyalar#..#..#kacak.wav"
+            with zipfile.ZipFile(bundle, "w") as archive:
+                archive.writestr(placeholder, b"x")
+                archive.writestr("manifest.json", "{}")
+            # Python zipfile ters bölüyü hem yazarken hem okurken '/'
+            # olarak normalize eder; ham baytları yamalayarak Python dışı bir
+            # araçla üretilmiş arşiv taklit edilir. Normalize edilen ad '..'
+            # denetimine, normalize edilemeyen olası bir ad ise ters bölü
+            # denetimine takılmalıdır — her iki durumda da içe aktarma reddedilir.
+            bundle.write_bytes(bundle.read_bytes().replace(b"#", b"\\"))
+            with self.assertRaises(BackupError):
+                import_bundle(bundle, Path(directory) / "hedef")
+
     def test_parent_path_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             bundle = Path(directory) / "yol.okulzili"

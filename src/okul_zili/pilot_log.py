@@ -69,7 +69,9 @@ def analyze_lines(lines: Iterable[str]) -> PilotReport:
 def analyze_files(paths: Iterable[Path]) -> PilotReport:
     lines: list[str] = []
     for path in paths:
-        lines.extend(path.read_text(encoding="utf-8").splitlines())
+        # errors="replace": yarım yazılmış günlük tüm haftalık analizi düşürmesin;
+        # bozuk satırlar zaten malformed_lines sayacına düşer.
+        lines.extend(path.read_text(encoding="utf-8", errors="replace").splitlines())
     return analyze_lines(lines)
 
 

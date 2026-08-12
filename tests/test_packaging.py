@@ -87,16 +87,31 @@ class PackagingDefinitionTests(unittest.TestCase):
         self.assertIn("--ses-cihazi-kontrol", verifier)
 
     def test_runtime_has_no_network_client_dependency(self) -> None:
+        # Bilinçli iki istisna dışında hiçbir modül ağ istemcisi içeremez:
+        # sound_catalog yalnız yönetici onayıyla MEB indirmesi yapar,
+        # time_check yalnız isteğe bağlı SNTP saat karşılaştırması yapar.
+        allowed_sources = {"sound_catalog.py", "time_check.py"}
         forbidden = {"requests", "httpx", "socket", "urllib", "http.client"}
-        imported: set[str] = set()
+
+        def is_forbidden(name: str) -> bool:
+            return any(name == item or name.startswith(item + ".") for item in forbidden)
+
+        violations: list[str] = []
         for source in (ROOT / "src" / "okul_zili").glob("*.py"):
+            if source.name in allowed_sources:
+                continue
             tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
             for node in ast.walk(tree):
                 if isinstance(node, ast.Import):
-                    imported.update(alias.name for alias in node.names)
+                    names = [alias.name for alias in node.names]
                 elif isinstance(node, ast.ImportFrom) and node.module:
-                    imported.add(node.module)
-        self.assertEqual(set(), imported & forbidden)
+                    names = [node.module]
+                else:
+                    continue
+                violations.extend(
+                    f"{source.name}: {name}" for name in names if is_forbidden(name)
+                )
+        self.assertEqual([], violations)
 
     def test_application_sources_do_not_contain_common_english_ui_commands(self) -> None:
         forbidden = re.compile(

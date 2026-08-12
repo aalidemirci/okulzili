@@ -420,6 +420,7 @@ class PlaybackResult:
     used_fallback: bool
     message: str
     stopped: bool = False
+    busy: bool = False
 
 
 class PlaybackManager:
@@ -467,7 +468,9 @@ class PlaybackManager:
 
     def play(self, path: Path, device_id: str, volume_percent: int = 100) -> PlaybackResult:
         if not self._lock.acquire(blocking=False):
-            return PlaybackResult(False, False, "Başka bir zil çalıyor; çift çalma engellendi.")
+            return PlaybackResult(
+                False, False, "Başka bir zil çalıyor; çift çalma engellendi.", busy=True
+            )
         try:
             self._stop_requested.clear()
             self.backend.prepare_playback()

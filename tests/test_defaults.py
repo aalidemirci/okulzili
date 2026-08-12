@@ -4,9 +4,15 @@ from dataclasses import replace
 from datetime import time
 import unittest
 
-from okul_zili.defaults import build_school_config, default_config, generate_day, generate_from_day_schedule, set_preparation_bells
-from okul_zili.domain import DaySchedule, EventType
-from okul_zili.app import upgrade_bell_roles
+from okul_zili.defaults import (
+    apply_general_settings,
+    build_school_config,
+    default_config,
+    generate_day,
+    generate_from_day_schedule,
+    set_preparation_bells,
+)
+from okul_zili.domain import DaySchedule, EventSpec, EventType, sort_specs
 
 
 class DefaultScheduleTests(unittest.TestCase):
@@ -69,19 +75,133 @@ class DefaultScheduleTests(unittest.TestCase):
         disabled = set_preparation_bells(enabled_twice, False)
         self.assertTrue(all(all(item.event_type is not EventType.PREPARATION for item in events) for events in disabled.values()))
 
-    def test_legacy_roles_upgrade_to_student_and_teacher_bells(self) -> None:
-        legacy = build_school_config(preparation_enabled=False)
-        schedule = {
-            day: tuple(
-                item if item.event_type is not EventType.LESSON_START else replace(item, label=item.label.replace("öğretmen zili", "başlangıcı"), sound_id="ders")
-                for item in events
+    def _config_with_manual_events(self):
+        """Elle eklenmiş anons ve düzeltilmiş ders saati içeren yapılandırma."""
+        config = default_config()
+        monday = list(config.weekly_schedule[0])
+        announcement = EventSpec(time(9, 45), EventType.ANNOUNCEMENT, "Bayrak töreni anonsu", "anons")
+        monday.append(announcement)
+        weekly = dict(config.weekly_schedule)
+        weekly[0] = sort_specs(monday)
+        # Cumartesiye yalnızca elle eklenen bir olay: day_schedules kaydı yok.
+        weekly[5] = (EventSpec(time(10, 0), EventType.ANNOUNCEMENT, "Kurs anonsu", "anons"),)
+        return replace(config, weekly_schedule=weekly), announcement
+
+    def test_general_settings_save_preserves_manual_events(self) -> None:
+        config, announcement = self._config_with_manual_events()
+        updated = apply_general_settings(
+            config,
+            school_name="Yeni Ad",
+            preparation_enabled=config.preparation_enabled,
+            selected_device=config.selected_device,
+            announcement_device=None,
+            grace_seconds=120,
+            bell_volume=70,
+            time_check_enabled=False,
+        )
+        self.assertIn(announcement, updated.weekly_schedule[0])
+        self.assertEqual(config.weekly_schedule[5], updated.weekly_schedule[5])
+        self.assertEqual(config.weekly_schedule, updated.weekly_schedule)
+        self.assertEqual("Yeni Ad", updated.school_name)
+        self.assertEqual(70, updated.bell_volume)
+
+    def test_preparation_toggle_preserves_manual_events_and_edited_times(self) -> None:
+        config, announcement = self._config_with_manual_events()
+        # 3. dersin öğretmen zilini elle 5 dakika kaydır.
+        monday = list(config.weekly_schedule[0])
+        starts = [index for index, item in enumerate(monday) if item.event_type is EventType.LESSON_START]
+        moved = replace(monday[starts[2]], at=time(10, 35))
+        monday[starts[2]] = moved
+        weekly = dict(config.weekly_schedule)
+        weekly[0] = sort_specs(monday)
+        config = replace(config, weekly_schedule=weekly)
+
+        disabled = apply_general_settings(
+            config,
+            school_name=config.school_name,
+            preparation_enabled=False,
+            selected_device=config.selected_device,
+            announcement_device=None,
+            grace_seconds=config.grace_seconds,
+            bell_volume=config.bell_volume,
+            time_check_enabled=False,
+        )
+        self.assertIn(announcement, disabled.weekly_schedule[0])
+        self.assertFalse(
+            any(item.event_type is EventType.PREPARATION for item in disabled.weekly_schedule[0])
+        )
+        self.assertIn(moved, disabled.weekly_schedule[0])
+
+        enabled = apply_general_settings(
+            disabled,
+            school_name=config.school_name,
+            preparation_enabled=True,
+            selected_device=config.selected_device,
+            announcement_device=None,
+            grace_seconds=config.grace_seconds,
+            bell_volume=config.bell_volume,
+            time_check_enabled=False,
+        )
+        self.assertIn(announcement, enabled.weekly_schedule[0])
+        self.assertIn(moved, enabled.weekly_schedule[0])
+        preparations = [
+            item for item in enabled.weekly_schedule[0]
+            if item.event_type is EventType.PREPARATION
+        ]
+        self.assertEqual(8, len(preparations))
+        # Kaydırılan dersin öğrenci zili de kaydırılmış saate göre üretilir.
+        offset = enabled.day_schedules[0].student_bell_minutes
+        expected_minute = (10 * 60 + 35) - offset
+        self.assertIn(
+            time(expected_minute // 60, expected_minute % 60),
+            {item.at for item in preparations},
+        )
+
+
+    def test_preparation_toggle_uses_session_specific_minutes_in_dual_mode(self) -> None:
+        from okul_zili.domain import SessionSchedule
+
+        dual = DaySchedule(
+            sessions=(
+                SessionSchedule(
+                    session_id="sabah", name="Sabah", first_lesson="08:00",
+                    lesson_count=4, lunch_after=0, student_bell_enabled=False,
+                    student_bell_minutes=5,
+                ),
+                SessionSchedule(
+                    session_id="ogle", name="Öğleden sonra", first_lesson="13:00",
+                    lesson_count=4, lunch_after=0, student_bell_enabled=False,
+                    student_bell_minutes=3,
+                ),
             )
-            for day, events in legacy.weekly_schedule.items()
+        )
+        config = default_config()
+        weekly = dict(config.weekly_schedule)
+        weekly[0] = generate_from_day_schedule(dual)
+        config = replace(
+            config,
+            preparation_enabled=False,
+            weekly_schedule=weekly,
+            day_schedules={**config.day_schedules, 0: dual},
+        )
+        enabled = apply_general_settings(
+            config,
+            school_name=config.school_name,
+            preparation_enabled=True,
+            selected_device=config.selected_device,
+            announcement_device=None,
+            grace_seconds=config.grace_seconds,
+            bell_volume=config.bell_volume,
+            time_check_enabled=False,
+        )
+        preparations = {
+            (item.session, item.at)
+            for item in enabled.weekly_schedule[0]
+            if item.event_type is EventType.PREPARATION
         }
-        upgraded = upgrade_bell_roles(replace(legacy, weekly_schedule=schedule))
-        monday = upgraded.weekly_schedule[0]
-        self.assertEqual(8, sum(item.sound_id == "ogrenci" for item in monday))
-        self.assertEqual(8, sum(item.sound_id == "ogretmen" for item in monday))
+        # Sabah oturumu 5, öğleden sonra 3 dakika öne çekilmeli.
+        self.assertIn(("sabah", time(7, 55)), preparations)
+        self.assertIn(("ogle", time(12, 57)), preparations)
 
 
 if __name__ == "__main__":

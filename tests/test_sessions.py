@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import time
 import unittest
 
-from okul_zili.defaults import copy_schedule_to_days, default_config, generate_from_day_schedule, infer_day_schedule
+from okul_zili.defaults import copy_schedule_to_days, default_config, generate_from_day_schedule
 from okul_zili.domain import DaySchedule, EventType, SessionSchedule
 
 
@@ -183,7 +183,7 @@ class SessionAndBlockScheduleTests(unittest.TestCase):
         )
         self.assertEqual(original, DaySchedule.from_dict(original.to_dict()))
 
-    def test_dual_block_schedule_round_trips_through_inference(self) -> None:
+    def test_dual_block_schedule_generates_expected_event_counts(self) -> None:
         original = DaySchedule(
             sessions=(
                 SessionSchedule(
@@ -196,12 +196,12 @@ class SessionAndBlockScheduleTests(unittest.TestCase):
                 ),
             )
         )
-        inferred = infer_day_schedule(generate_from_day_schedule(original))
-        self.assertIsNotNone(inferred)
-        assert inferred is not None
-        self.assertEqual((2, 2), inferred.sessions[0].block_sizes)
-        self.assertEqual((1, 2), inferred.sessions[1].block_sizes)
-        self.assertEqual(7, sum(item.lesson_count for item in inferred.sessions))
+        events = generate_from_day_schedule(original)
+        starts = [item for item in events if item.event_type is EventType.LESSON_START]
+        transitions = [item for item in events if item.event_type is EventType.BLOCK_TRANSITION]
+        self.assertEqual(4, len(starts))
+        self.assertEqual(3, len(transitions))
+        self.assertEqual({"sabah", "ogle"}, {item.session for item in events})
 
 
 if __name__ == "__main__":

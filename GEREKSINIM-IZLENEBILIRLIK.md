@@ -33,7 +33,7 @@ Bu matris `PLAN.md` gereksinimlerini tasarım, otomatik test ve saha kabul kanı
 | Kimlik | Gereksinim | Uygulama kanıtı | Doğrulama | Durum |
 |---|---|---|---|---|
 | OZ-CFG-001 | Sürümlü, doğrulanan ve atomik yapılandırma | `ConfigRepository` | atomik tur, `.bak`, yol sınırı testleri | Geçti |
-| OZ-CFG-002 | v1/v2 → v3 göçü | `config.migrate`, `defaults.infer_day_schedule` | göç testi | Geçti |
+| OZ-CFG-002 | Yalnız güncel şema; eski/bozuk dosyada karantina + varsayılanla açılış | `config.ensure_current_schema`, `ConfigRepository.load` | eski sürüm/bozuk dosya kurtarma testleri | Geçti (göç zinciri 0.7'de bilinçli kaldırıldı; saha kurulumu yok) |
 | OZ-CFG-003 | Paylaşılabilir güvenli yedek/geri yükleme | karmalı `.okulzili`; PIN ve günlük hariç | tur, değiştirilmiş paket ve üst dizin saldırısı testleri | Geçti |
 | OZ-SEC-001 | Üç rol, karmalı PIN ve en az yetki | PBKDF2-HMAC-SHA256 ve rol izinleri | PIN/bozuk özet/tepsi eylemi izin testleri | Geçti |
 | OZ-UI-001 | Türkçe ana pencere, tepsi ve hızlı eylemler | Tk arayüzü ve `TrayController` | kaynak/paket arayüz ve tepsi açılış kontrolleri | Otomatik geçti; manuel görsel tarama bekliyor |

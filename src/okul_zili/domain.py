@@ -8,6 +8,9 @@ from pathlib import PurePosixPath
 from typing import Iterable
 
 
+CURRENT_SCHEMA_VERSION = 6
+
+
 class EventType(str, Enum):
     PREPARATION = "hazirlik"
     LESSON_START = "ders_baslangici"
@@ -462,10 +465,11 @@ class SchoolConfig:
     recess_music_volume: int = 20
     recess_music_track: str = "muzik_bach_prelud"
     bell_volume: int = 100
+    time_check_enabled: bool = False
 
     def validate(self) -> list[str]:
         errors: list[str] = []
-        if self.schema_version != 6:
+        if self.schema_version != CURRENT_SCHEMA_VERSION:
             errors.append("Desteklenmeyen yapılandırma sürümü.")
         if not self.school_name.strip():
             errors.append("Okul adı boş olamaz.")
@@ -550,6 +554,7 @@ class SchoolConfig:
             "recess_music_volume": self.recess_music_volume,
             "recess_music_track": self.recess_music_track,
             "bell_volume": self.bell_volume,
+            "time_check_enabled": self.time_check_enabled,
         }
 
     @classmethod
@@ -591,6 +596,7 @@ class SchoolConfig:
             recess_music_volume=int(raw.get("recess_music_volume", 20)),
             recess_music_track=str(raw.get("recess_music_track", "muzik_bach_prelud")),
             bell_volume=int(raw.get("bell_volume", 100)),
+            time_check_enabled=bool(raw.get("time_check_enabled", False)),
         )
 
 

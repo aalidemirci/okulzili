@@ -151,6 +151,7 @@ class BellScheduler:
         self._last_monotonic: float | None = None
         self._lock = threading.RLock()
         self._tick_lock = threading.Lock()
+        self._busy_notified: set[str] = set()
 
     def update_config(self, config: SchoolConfig, engine: CalendarEngine) -> None:
         """Çalışan zamanlayıcının yapılandırmasını atomik olarak değiştirir."""
@@ -265,6 +266,25 @@ class BellScheduler:
                     config.device_for(event.event_type),
                     config.bell_volume,
                 )
+                if result.busy:
+                    # Kilit doluyken olay tamamlanmış sayılmaz; tolerans süresi
+                    # dolana kadar sonraki turlarda yeniden denenir. Bildirime
+                    # result KONMAZ: kaçırılan/sessize alınan uyarılarla aynı
+                    # sözleşme — aksi halde pilot günlüğü bu turu başarısız bir
+                    # çalma sayıp aynı zili çift kayıt olarak raporlar.
+                    if event.event_id not in self._busy_notified:
+                        if len(self._busy_notified) > 512:
+                            self._busy_notified.clear()
+                        self._busy_notified.add(event.event_id)
+                        notices.append(
+                            SchedulerNotice(
+                                "uyarı",
+                                "Başka bir ses çaldığı için zil bekletildi; "
+                                f"tolerans içinde yeniden denenecek: {event.label}",
+                                event,
+                            )
+                        )
+                    continue
                 self.state.mark(event.event_id)
                 level = "bilgi" if result.success and not result.used_fallback else "kritik"
                 notice = SchedulerNotice(level, result.message, event, result)
