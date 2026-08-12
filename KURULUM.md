@@ -1,4 +1,4 @@
-# Kurulum Kılavuzu
+﻿# Kurulum Kılavuzu
 
 Bu kılavuz teknik olmayan okul personeli için hazırlanmıştır. Kuruluma başlamadan önce bilgisayarın tarih ve saatinin doğru olduğundan, amplifikatörün açık olduğundan ve USB ses kartının takılı olduğundan emin olun.
 
@@ -32,11 +32,11 @@ Kaldırıcı, yalnızca kendi kurulum dizinindeki çalışan `OkulZili.exe` sür
 
 ## Pardus 23 / Ubuntu 22.04 ve üzeri
 
-1. Size verilen `okul-zili_0.6.2_all.deb` dosyasını bilgisayara kopyalayın.
+1. Size verilen `okul-zili_0.7.0_all.deb` dosyasını bilgisayara kopyalayın.
 2. Dosya yöneticisinden paket yükleyiciyle açın veya terminalde aşağıdaki komutu çalıştırın:
 
    ```bash
-   sudo apt install ./okul-zili_0.6.2_all.deb
+   sudo apt install ./okul-zili_0.7.0_all.deb
    ```
 
 3. Uygulama menüsünde **Okul Zili** öğesini açın.
@@ -72,7 +72,7 @@ Dağıtıma özgü eksiksiz bağımlılık belleği, internete bağlı ve hedefl
 
 ```bash
 sudo ./tools/prepare-linux-offline-bundle.sh \
-  ./dist/okul-zili_0.6.2_all.deb \
+  ./dist/okul-zili_0.7.0_all.deb \
   ./dist/vendor-linux
 ```
 
@@ -81,10 +81,10 @@ sudo ./tools/prepare-linux-offline-bundle.sh \
 Kaynak dağıtımındaki Python wheel paketini Windows'ta çevrimdışı kurmak isteyen teknik personel, aynı dağıtımla verilen `vendor-windows` dizinini kullanabilir:
 
 ```powershell
-python -m pip install --no-index --find-links .\vendor-windows .\okul_zili-0.6.2-py3-none-any.whl
+python -m pip install --no-index --find-links .\vendor-windows .\okul_zili-0.7.0-py3-none-any.whl
 ```
 
-Normal okul kurulumu için bu komut gerekmez; `OkulZili-Kurulum-0.6.2.exe` tercih edilmelidir.
+Normal okul kurulumu için bu komut gerekmez; `OkulZili-Kurulum-0.7.0.exe` tercih edilmelidir.
 
 ### Güncelleme
 

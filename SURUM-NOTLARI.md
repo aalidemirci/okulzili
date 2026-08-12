@@ -1,5 +1,19 @@
 # Sürüm Notları
 
+## 0.7.0 — Gözetimsiz çalışma, Pardus paketi ve tek doğruluk kaynağı
+
+- Uygulama artık giriş beklemeden salt görüntüleme yetkisiyle açılır: elektrik kesintisi sonrası ziller PIN girilmeden çalar, giriş yalnız yetki yükseltir. Başlığa çalışırken giriş yapmayı sağlayan **Giriş** düğmesi eklendi.
+- Linux paketi temiz Pardus/Ubuntu kurulumunda çalışır hâle getirildi: arayüz kütüphaneleri (`customtkinter`, `darkdetect`, `packaging`) pakete gömüldü; kurulum internet bağlantısı gerektirmez.
+- Linux'ta ses çalma zaman aşımı dosya süresinden türetilir; üç dakikalık AFAD ikazları ve uzun tören kayıtları artık ortadan kesilmez.
+- Bilgisayarın uykudan uyanması artık yanlış "saat sıçraması" kritik uyarısı üretmez.
+- Elle eklenen anons/tören olayları ders akışından ayrı bir "ek olaylar" listesinde tutulur (şema v7); ayar kaydı veya programın yeniden üretimi bu olayları silemez. Program sayfasındaki yeni **Ek olaylar** penceresi bu olayları listeler, düzenler ve siler. v6 ayar dosyası ilk açılışta kayıpsız taşınır.
+- "Tatil veya istisna ekle" ve "Zil ekle" pencereleri modern tasarıma geçti: Türkçe tür/ses/oturum etiketleri ve gg.aa.yyyy tarih girişi.
+- Çalma sırasında ses cihazı kaybolursa yedek bip varsayılan çıkışta bir kez daha denenir.
+- Giriş ekranına profil bazlı kalıcı hatalı deneme sayacı ve artan bekleme süresi eklendi; yönetici PIN'i artık en az 6 hanedir. `profiller.json` POSIX sistemlerde 0o600 izniyle yazılır.
+- Testler her değişiklikte GitHub Actions üzerinde Ubuntu ve Windows'ta otomatik koşar; sürüm numarası tek kaynaktan okunur.
+- Ses kaynakları ve telif belgeleri tek tutarlı hikâyeye indirildi; `NOTICE` paketteki tüm kayıtları kapsar.
+- Not: Sürüm geçmişindeki hatalı "1.0.0" girdisi, yayımlandığı gerçek sürüm olan 0.5.1 olarak düzeltildi.
+
 ## 0.6.2 — Ders zilleri sayfasında tek genel kaydırma
 
 - Ders zilleri sayfasının başlık, otomatik hesaplama formu ve sonuç tablosu tek bir genel dikey kaydırma yüzeyine alındı.
@@ -23,7 +37,7 @@
 - Yönetim merkezindeki okul ve cihaz ayarlarına %0–100 ana zil ses düzeyi çubuğu eklendi.
 - Yapılandırma şeması v6'ya yükseltildi.
 
-## 1.0.0 — Final masaüstü düzeni ve güvenli yayın katmanı
+## 0.5.1 — Final masaüstü düzeni ve güvenli yayın katmanı
 
 - Giriş penceresi Windows ekran ölçeklemesinde eylem düğmelerini gizlemeyecek şekilde büyütüldü; profil ve PIN alanları eşit yüksekliğe getirildi.
 - Haftalık programda otomatik hesaplama bölümü sonuç tablosunun üstüne alındı ve iç içe kaydırma kaldırıldı.
