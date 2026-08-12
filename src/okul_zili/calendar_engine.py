@@ -47,14 +47,14 @@ class CalendarEngine:
         return DayResolution(day, events, winner.name, (winner.name,), suppressed)
 
     def _from_weekday(self, day: date, weekday: int, source: str, allow_closed: bool = False) -> DayResolution:
-        specs = self.config.weekly_schedule.get(weekday, ())
+        specs = self.config.combined_weekly(weekday)
         if not allow_closed:
             specs = self._eligible_weekly_specs(day, specs)
         events = self._materialize(day, specs, source)
         return DayResolution(day, events, source, (), ())
 
     def _merge_ceremony(self, day: date, rule: DateRule) -> tuple[EventSpec, ...]:
-        normal = self._eligible_weekly_specs(day, self.config.weekly_schedule.get(day.weekday(), ()))
+        normal = self._eligible_weekly_specs(day, self.config.combined_weekly(day.weekday()))
         occupied = {(item.at, item.sequence) for item in rule.events}
         retained = [item for item in normal if (item.at, item.sequence) not in occupied]
         return sort_specs((*retained, *rule.events))

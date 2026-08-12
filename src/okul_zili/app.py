@@ -471,6 +471,92 @@ class RuleEditor(SafeModalToplevel):
         self._refresh_events()
 
 
+class ExtraEventsDialog(SafeModalToplevel):
+    """Ders akışı dışındaki elle eklenen olayları listeler, ekler ve siler."""
+
+    def __init__(
+        self,
+        parent: tk.Misc,
+        weekday_name: str,
+        events: tuple[EventSpec, ...],
+        on_change: Callable[[tuple[EventSpec, ...]], bool],
+    ) -> None:
+        super().__init__(parent)
+        self.title(f"Ek olaylar — {weekday_name}")
+        self.on_change = on_change
+        self.events = list(events)
+        card = _dialog_card(self, 660, 540)
+        _dialog_title(
+            card,
+            f"Ek olaylar — {weekday_name}",
+            "Anons, tören ve özel ziller burada yönetilir; ders akışı yeniden "
+            "üretildiğinde bu olaylar korunur.",
+        )
+        buttons = ctk.CTkFrame(card, fg_color="transparent")
+        buttons.pack(side="bottom", fill="x", padx=26, pady=(10, 22))
+        _secondary_button(buttons, "Kapat", self.destroy, 100).pack(side="right")
+        toolbar = ctk.CTkFrame(card, fg_color="transparent")
+        toolbar.pack(fill="x", padx=26, pady=(0, 8))
+        _primary_button(toolbar, "Olay ekle", self._add, 110).pack(side="left")
+        _secondary_button(toolbar, "Düzenle", self._edit, 96).pack(side="left", padx=8)
+        _secondary_button(toolbar, "Sil", self._delete, 70).pack(side="left")
+        self.tree = ttk.Treeview(card, columns=("time", "type", "label", "sound"), show="headings", height=9)
+        for key, label, width in (("time", "Saat", 70), ("type", "Tür", 140), ("label", "Açıklama", 210), ("sound", "Ses", 170)):
+            self.tree.heading(key, text=label)
+            self.tree.column(key, width=width, anchor="w")
+        self.tree.pack(fill="both", expand=True, padx=26, pady=(0, 6))
+        self.tree.bind("<Double-1>", lambda event: self._edit())
+        self._refresh()
+
+    def _refresh(self) -> None:
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+        self.events = list(sort_specs(self.events))
+        for index, event in enumerate(self.events):
+            sound = SOUND_BY_ID[event.sound_id].label if event.sound_id in SOUND_BY_ID else event.sound_id
+            self.tree.insert(
+                "",
+                "end",
+                iid=str(index),
+                values=(event.at.strftime("%H:%M"), EVENT_LABELS[event.event_type], event.label, sound),
+            )
+
+    def _selected_index(self) -> int | None:
+        selected = self.tree.selection()
+        if not selected:
+            messagebox.showinfo("Seçim gerekli", "Önce listeden bir olay seçin.", parent=self)
+            return None
+        return int(selected[0])
+
+    def _apply(self, updated: list[EventSpec]) -> None:
+        if self.on_change(sort_specs(updated)):
+            self.events = list(updated)
+        self._refresh()
+
+    def _add(self) -> None:
+        EventEditor(self, None, lambda event: self._apply([*self.events, event]))
+
+    def _edit(self) -> None:
+        index = self._selected_index()
+        if index is None:
+            return
+
+        def save(event: EventSpec) -> None:
+            updated = list(self.events)
+            updated[index] = event
+            self._apply(updated)
+
+        EventEditor(self, self.events[index], save)
+
+    def _delete(self) -> None:
+        index = self._selected_index()
+        if index is None:
+            return
+        updated = list(self.events)
+        del updated[index]
+        self._apply(updated)
+
+
 class InitialSetupDialog(SafeModalToplevel):
     def __init__(self, parent: tk.Misc, devices: tuple[str, ...]) -> None:
         super().__init__(parent)
@@ -1577,7 +1663,7 @@ class OkulZiliApp:
         day_box.pack(side="left", padx=8)
         self.copy_schedule_button = self._action_button(toolbar, "Günlere uygula", self._copy_schedule, width=124)
         self.copy_schedule_button.pack(side="left", padx=(10, 4))
-        self.advanced_add_button = self._action_button(toolbar, "Gelişmiş zil ekle", self._add_event, width=132)
+        self.advanced_add_button = self._action_button(toolbar, "Ek olaylar", self._add_event, width=110)
         self.advanced_add_button.pack(side="left", padx=(4, 0))
         self.schedule_admin_buttons = [self.copy_schedule_button, self.advanced_add_button, self.calculate_button] if hasattr(self, "calculate_button") else [self.copy_schedule_button, self.advanced_add_button]
 
@@ -1827,7 +1913,7 @@ class OkulZiliApp:
         return selected[0]
 
     def _save_recess_music_settings(self) -> None:
-        if self.role != "yonetici":
+        if not self._require_permission("yapilandir"):
             return
         try:
             volume = int(self.recess_music_volume_var.get().strip())
@@ -1850,7 +1936,7 @@ class OkulZiliApp:
         messagebox.showinfo("Teneffüs müziği", "Müzik ayarları kaydedildi.", parent=self.root)
 
     def _assign_selected_sound(self) -> None:
-        if self.role != "yonetici":
+        if not self._require_permission("yapilandir"):
             return
         sound_id = self._selected_sound_id()
         if sound_id:
@@ -1876,7 +1962,7 @@ class OkulZiliApp:
             log_event(self.logger, "ses_degistirildi", ses=sound_id, kaynak="kullanici_dosyasi")
 
     def _download_selected_sound(self) -> None:
-        if self.role != "yonetici":
+        if not self._require_permission("yapilandir"):
             return
         sound_id = self._selected_sound_id()
         if not sound_id:
@@ -2345,7 +2431,7 @@ class OkulZiliApp:
         return schedule
 
     def _regenerate_schedule(self) -> None:
-        if self.role != "yonetici":
+        if not self._require_permission("yapilandir"):
             return
         try:
             settings = self._day_schedule_from_form()
@@ -2356,13 +2442,9 @@ class OkulZiliApp:
         schedules = dict(self.config.day_schedules)
         schedules[weekday] = settings
         weekly = dict(self.config.weekly_schedule)
-        preserved = tuple(
-            item
-            for item in self.config.weekly_schedule.get(weekday, ())
-            if item.event_type
-            in (EventType.ANNOUNCEMENT, EventType.CEREMONY, EventType.MANUAL, EventType.BREAK_END)
-        )
-        weekly[weekday] = sort_specs((*generate_from_day_schedule(settings), *preserved))
+        # İskelet ayarlardan türetilir; elle eklenen olaylar extra_events'te
+        # ayrı durduğundan burada koruma filtresi gerekmez.
+        weekly[weekday] = generate_from_day_schedule(settings)
         self._apply_config(
             replace(
                 self.config,
@@ -2377,7 +2459,7 @@ class OkulZiliApp:
         )
 
     def _copy_schedule(self) -> None:
-        if self.role != "yonetici":
+        if not self._require_permission("yapilandir"):
             return
         source_day = WEEKDAYS.index(self.day_var.get())
         def apply(targets: tuple[int, ...]) -> None:
@@ -2387,7 +2469,7 @@ class OkulZiliApp:
         CopyScheduleDialog(self.root, source_day, apply)
 
     def _edit_lesson_events(self) -> None:
-        if self.role != "yonetici":
+        if not self._require_permission("yapilandir"):
             return
         selected = self.schedule_tree.selection()
         if not selected:
@@ -2478,7 +2560,7 @@ class OkulZiliApp:
         ))
 
     def _edit_academic_calendar(self) -> None:
-        if self.role != "yonetici":
+        if not self._require_permission("yapilandir"):
             return
         def save(calendar: AcademicCalendar) -> None:
             self._apply_config(replace(self.config, academic_calendar=calendar))
@@ -2612,7 +2694,7 @@ class OkulZiliApp:
         return True
 
     def _open_settings(self) -> None:
-        if self.role != "yonetici":
+        if not self._require_permission("yapilandir"):
             return
         SettingsDialog(self.root, self.config, self.backend.list_devices(), self._update_settings)
 
@@ -2646,7 +2728,7 @@ class OkulZiliApp:
             self._time_check_wake.set()
 
     def _backup_menu(self) -> None:
-        if self.role != "yonetici":
+        if not self._require_permission("yapilandir"):
             return
         choice = messagebox.askyesnocancel(
             "Yedekleme",
@@ -2705,14 +2787,24 @@ class OkulZiliApp:
         messagebox.showinfo("Geri yükleme tamamlandı", "Program ve ses dosyaları doğrulanarak geri yüklendi.", parent=self.root)
 
     def _add_event(self) -> None:
-        if self.role != "yonetici":
+        if not self._require_permission("yapilandir"):
             return
         weekday = WEEKDAYS.index(self.day_var.get())
-        def save(event: EventSpec) -> None:
-            schedule = dict(self.config.weekly_schedule)
-            schedule[weekday] = sort_specs((*schedule.get(weekday, ()), event))
-            self._apply_config(replace(self.config, weekly_schedule=schedule))
-        EventEditor(self.root, None, save)
+
+        def apply(events: tuple[EventSpec, ...]) -> bool:
+            extras = dict(self.config.extra_events)
+            if events:
+                extras[weekday] = events
+            else:
+                extras.pop(weekday, None)
+            return self._apply_config(replace(self.config, extra_events=extras))
+
+        ExtraEventsDialog(
+            self.root,
+            self.day_var.get(),
+            self.config.extra_events.get(weekday, ()),
+            apply,
+        )
 
     def _selected_rule(self) -> tuple[int, DateRule] | None:
         selected = self.rules_tree.selection()
@@ -2723,16 +2815,16 @@ class OkulZiliApp:
         return index, self.config.date_rules[index]
 
     def _add_rule(self) -> None:
-        if self.role != "yonetici":
+        if not self._require_permission("yapilandir"):
             return
         def save(rule: DateRule) -> None:
             rules = [*self.config.date_rules, rule]
             rules.sort(key=lambda item: (item.start, item.end, item.name))
             self._apply_config(replace(self.config, date_rules=rules))
-        RuleEditor(self.root, None, self.config.weekly_schedule, save)
+        RuleEditor(self.root, None, {day: self.config.combined_weekly(day) for day in range(7)}, save)
 
     def _add_ceremony(self) -> None:
-        if self.role != "yonetici":
+        if not self._require_permission("yapilandir"):
             return
         def save(rule: DateRule) -> None:
             rules = [*self.config.date_rules, rule]
@@ -2741,7 +2833,7 @@ class OkulZiliApp:
         CeremonyDialog(self.root, save)
 
     def _edit_rule(self) -> None:
-        if self.role != "yonetici":
+        if not self._require_permission("yapilandir"):
             return
         selected = self._selected_rule()
         if not selected:
@@ -2752,10 +2844,10 @@ class OkulZiliApp:
             rules[index] = rule
             rules.sort(key=lambda item: (item.start, item.end, item.name))
             self._apply_config(replace(self.config, date_rules=rules))
-        RuleEditor(self.root, existing, self.config.weekly_schedule, save)
+        RuleEditor(self.root, existing, {day: self.config.combined_weekly(day) for day in range(7)}, save)
 
     def _delete_rule(self) -> None:
-        if self.role != "yonetici":
+        if not self._require_permission("yapilandir"):
             return
         selected = self._selected_rule()
         if not selected:

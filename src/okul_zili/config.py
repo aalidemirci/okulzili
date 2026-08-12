@@ -15,9 +15,43 @@ class ConfigError(RuntimeError):
     pass
 
 
+_LESSON_FLOW_TYPE_VALUES = {"hazirlik", "ders_baslangici", "blok_ici_gecis", "ders_bitisi"}
+
+
+def _split_extra_events_v7(raw: dict[str, Any]) -> dict[str, Any]:
+    """v6 → v7: elle eklenen olayları haftalık listeden extra_events'e ayırır.
+
+    Göç zinciri değil, tek adımlık alan ayrıştırmasıdır: v6'da anons/tören/
+    manuel olaylar ders akışıyla aynı listede duruyordu; v7 bunları ayrı
+    tutar. Veri kaybı yoktur, olayların kendisi değişmez.
+    """
+    skeleton: dict[str, list[Any]] = {}
+    extras: dict[str, list[Any]] = {}
+    for day, events in dict(raw.get("weekly_schedule", {})).items():
+        skeleton[day] = [
+            item for item in events if item.get("event_type") in _LESSON_FLOW_TYPE_VALUES
+        ]
+        moved = [
+            item for item in events if item.get("event_type") not in _LESSON_FLOW_TYPE_VALUES
+        ]
+        if moved:
+            extras[day] = moved
+    updated = dict(raw)
+    updated["schema_version"] = CURRENT_SCHEMA_VERSION
+    updated["weekly_schedule"] = skeleton
+    updated["extra_events"] = extras
+    return updated
+
+
 def ensure_current_schema(raw: dict[str, Any]) -> dict[str, Any]:
-    """Yalnızca güncel şema sürümünü kabul eder; göç zinciri yoktur."""
+    """Yalnızca güncel şema sürümünü kabul eder; göç zinciri yoktur.
+
+    Tek istisna v6 → v7 alan ayrıştırmasıdır (bkz. _split_extra_events_v7).
+    """
     version = int(raw.get("schema_version", 0))
+    if version == 6:
+        raw = _split_extra_events_v7(raw)
+        version = int(raw["schema_version"])
     if version != CURRENT_SCHEMA_VERSION:
         raise ConfigError(
             f"Desteklenmeyen yapılandırma sürümü: {version} "

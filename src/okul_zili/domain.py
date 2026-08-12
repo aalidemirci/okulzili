@@ -8,7 +8,7 @@ from pathlib import PurePosixPath
 from typing import Iterable
 
 
-CURRENT_SCHEMA_VERSION = 6
+CURRENT_SCHEMA_VERSION = 7
 
 
 class EventType(str, Enum):
@@ -20,6 +20,20 @@ class EventType(str, Enum):
     ANNOUNCEMENT = "anons"
     CEREMONY = "toren"
     MANUAL = "manuel"
+
+
+# weekly_schedule yalnız bu türleri (ders akışı iskeleti) içerir; elle eklenen
+# anons/tören/manuel olaylar SchoolConfig.extra_events'te ayrı tutulur. Bu
+# ayrım, ayar kaydı veya program üretiminin elle eklenen olayları silmesini
+# yapısal olarak engeller (v7 şemasının nedeni).
+LESSON_FLOW_TYPES = frozenset(
+    (
+        EventType.PREPARATION,
+        EventType.LESSON_START,
+        EventType.BLOCK_TRANSITION,
+        EventType.LESSON_END,
+    )
+)
 
 
 class ExceptionKind(str, Enum):
@@ -455,6 +469,7 @@ class SchoolConfig:
     selected_device: str
     sounds: dict[str, str]
     weekly_schedule: dict[int, tuple[EventSpec, ...]]
+    extra_events: dict[int, tuple[EventSpec, ...]] = field(default_factory=dict)
     day_schedules: dict[int, DaySchedule] = field(default_factory=dict)
     academic_calendar: AcademicCalendar | None = None
     announcement_device: str | None = None
@@ -500,6 +515,17 @@ class SchoolConfig:
                 errors.append(f"Geçersiz hafta günü: {weekday}")
             if list(events) != sorted(events, key=lambda item: (item.at, item.sequence)):
                 errors.append(f"{weekday}. gün olayları zaman sırasına göre değil.")
+            for event in events:
+                if event.event_type not in LESSON_FLOW_TYPES:
+                    errors.append(
+                        f"{weekday}. gün: {event.label} — ders akışı dışındaki olaylar "
+                        "ek olaylar listesinde tutulmalıdır."
+                    )
+        for weekday, events in self.extra_events.items():
+            if weekday not in range(7):
+                errors.append(f"Geçersiz ek olay günü: {weekday}")
+            if list(events) != sorted(events, key=lambda item: (item.at, item.sequence)):
+                errors.append(f"{weekday}. gün ek olayları zaman sırasına göre değil.")
         for weekday, schedule in self.day_schedules.items():
             if weekday not in range(7):
                 errors.append(f"Geçersiz ders günü: {weekday}")
@@ -520,9 +546,20 @@ class SchoolConfig:
             for event in events
         }
         identifiers.update(
+            event.sound_id
+            for events in self.extra_events.values()
+            for event in events
+        )
+        identifiers.update(
             event.sound_id for rule in self.date_rules for event in rule.events
         )
         return identifiers
+
+    def combined_weekly(self, weekday: int) -> tuple[EventSpec, ...]:
+        """Ders akışı iskeleti ile elle eklenen olayların birleşik görünümü."""
+        return sort_specs(
+            (*self.weekly_schedule.get(weekday, ()), *self.extra_events.get(weekday, ()))
+        )
 
     def device_for(self, event_type: EventType) -> str:
         if event_type in (EventType.ANNOUNCEMENT, EventType.CEREMONY):
@@ -541,6 +578,11 @@ class SchoolConfig:
             "weekly_schedule": {
                 str(day): [event.to_dict() for event in events]
                 for day, events in sorted(self.weekly_schedule.items())
+            },
+            "extra_events": {
+                str(day): [event.to_dict() for event in events]
+                for day, events in sorted(self.extra_events.items())
+                if events
             },
             "day_schedules": {
                 str(day): schedule.to_dict()
@@ -576,6 +618,10 @@ class SchoolConfig:
             weekly_schedule={
                 int(day): tuple(EventSpec.from_dict(item) for item in events)
                 for day, events in weekly_raw.items()
+            },
+            extra_events={
+                int(day): tuple(EventSpec.from_dict(item) for item in events)
+                for day, events in dict(raw.get("extra_events", {})).items()
             },
             day_schedules={
                 int(day): DaySchedule.from_dict(item)

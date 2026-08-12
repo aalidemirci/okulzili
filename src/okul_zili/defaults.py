@@ -172,6 +172,7 @@ def build_school_config(
             "muzik_ode_to_joy": "sesler/muzik_ode_to_joy.wav",
         },
         weekly_schedule={weekday: day for weekday in range(5)},
+        extra_events={},
         day_schedules={weekday: day_settings for weekday in range(5)},
         academic_calendar=None,
         date_rules=[],
@@ -320,10 +321,18 @@ def copy_schedule_to_days(
 
     weekly = dict(config.weekly_schedule)
     schedules = dict(config.day_schedules)
+    extras = dict(config.extra_events)
+    source_extras = config.extra_events.get(source_day, ())
     for target in dict.fromkeys(targets):
         weekly[target] = tuple(source_events)
         schedules[target] = source_settings
-    updated = replace(config, weekly_schedule=weekly, day_schedules=schedules)
+        if source_extras:
+            extras[target] = tuple(source_extras)
+        else:
+            extras.pop(target, None)
+    updated = replace(
+        config, weekly_schedule=weekly, day_schedules=schedules, extra_events=extras
+    )
     errors = updated.validate()
     if errors:
         raise ValueError("\n".join(errors))

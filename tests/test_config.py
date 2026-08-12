@@ -8,7 +8,7 @@ import unittest
 
 from okul_zili.config import ConfigError, ConfigRepository, ensure_current_schema
 from okul_zili.defaults import default_config
-from okul_zili.domain import CURRENT_SCHEMA_VERSION
+from okul_zili.domain import CURRENT_SCHEMA_VERSION, EventType
 
 
 class ConfigTests(unittest.TestCase):
@@ -75,6 +75,37 @@ class ConfigTests(unittest.TestCase):
                 CURRENT_SCHEMA_VERSION,
                 json.loads(path.read_text(encoding="utf-8"))["schema_version"],
             )
+
+    def test_v6_file_splits_manual_events_into_extra_events(self) -> None:
+        # v6 → v7 ayrıştırması: elle eklenen olaylar haftalık listeden
+        # extra_events'e taşınır; veri kaybı olmaz, dosya karantinaya düşmez.
+        raw = default_config().to_dict()
+        raw["schema_version"] = 6
+        del raw["extra_events"]
+        announcement = {
+            "at": "09:45:00",
+            "event_type": "anons",
+            "label": "Bayrak töreni anonsu",
+            "sound_id": "anons",
+            "session": "normal",
+            "sequence": 0,
+        }
+        raw["weekly_schedule"]["0"] = sorted(
+            [*raw["weekly_schedule"]["0"], announcement], key=lambda item: str(item["at"])
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "ayarlar.json"
+            path.write_text(json.dumps(raw), encoding="utf-8")
+            repo = ConfigRepository(path)
+            loaded = repo.load()
+        self.assertIsNone(repo.recovery_note)
+        self.assertEqual(CURRENT_SCHEMA_VERSION, loaded.schema_version)
+        self.assertEqual([], loaded.validate())
+        self.assertEqual(("Bayrak töreni anonsu",), tuple(item.label for item in loaded.extra_events[0]))
+        self.assertFalse(
+            any(item.event_type is EventType.ANNOUNCEMENT for item in loaded.weekly_schedule[0])
+        )
+        self.assertIn(loaded.extra_events[0][0], loaded.combined_weekly(0))
 
     def test_old_schema_file_is_quarantined_and_replaced_with_defaults(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

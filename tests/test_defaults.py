@@ -76,16 +76,15 @@ class DefaultScheduleTests(unittest.TestCase):
         self.assertTrue(all(all(item.event_type is not EventType.PREPARATION for item in events) for events in disabled.values()))
 
     def _config_with_manual_events(self):
-        """Elle eklenmiş anons ve düzeltilmiş ders saati içeren yapılandırma."""
+        """Elle eklenmiş anons (extra_events) ve düzeltilmiş ders saati içeren yapılandırma."""
         config = default_config()
-        monday = list(config.weekly_schedule[0])
         announcement = EventSpec(time(9, 45), EventType.ANNOUNCEMENT, "Bayrak töreni anonsu", "anons")
-        monday.append(announcement)
-        weekly = dict(config.weekly_schedule)
-        weekly[0] = sort_specs(monday)
-        # Cumartesiye yalnızca elle eklenen bir olay: day_schedules kaydı yok.
-        weekly[5] = (EventSpec(time(10, 0), EventType.ANNOUNCEMENT, "Kurs anonsu", "anons"),)
-        return replace(config, weekly_schedule=weekly), announcement
+        extras = {
+            0: (announcement,),
+            # Cumartesiye yalnızca elle eklenen bir olay: day_schedules kaydı yok.
+            5: (EventSpec(time(10, 0), EventType.ANNOUNCEMENT, "Kurs anonsu", "anons"),),
+        }
+        return replace(config, extra_events=extras), announcement
 
     def test_general_settings_save_preserves_manual_events(self) -> None:
         config, announcement = self._config_with_manual_events()
@@ -99,11 +98,24 @@ class DefaultScheduleTests(unittest.TestCase):
             bell_volume=70,
             time_check_enabled=False,
         )
-        self.assertIn(announcement, updated.weekly_schedule[0])
-        self.assertEqual(config.weekly_schedule[5], updated.weekly_schedule[5])
+        # O1/O2: elle eklenen olaylar ayrı listede yapısal olarak korunur.
+        self.assertEqual(config.extra_events, updated.extra_events)
+        self.assertIn(announcement, updated.extra_events[0])
+        self.assertIn(announcement, updated.combined_weekly(0))
         self.assertEqual(config.weekly_schedule, updated.weekly_schedule)
+        self.assertEqual([], updated.validate())
         self.assertEqual("Yeni Ad", updated.school_name)
         self.assertEqual(70, updated.bell_volume)
+
+    def test_weekly_schedule_rejects_non_lesson_flow_events(self) -> None:
+        # v7 değişmezi: anons/tören haftalık iskelete değil extra_events'e girer.
+        config = default_config()
+        weekly = dict(config.weekly_schedule)
+        weekly[0] = sort_specs(
+            (*weekly[0], EventSpec(time(9, 45), EventType.ANNOUNCEMENT, "Anons", "anons"))
+        )
+        broken = replace(config, weekly_schedule=weekly)
+        self.assertTrue(any("ek olaylar listesinde" in error for error in broken.validate()))
 
     def test_preparation_toggle_preserves_manual_events_and_edited_times(self) -> None:
         config, announcement = self._config_with_manual_events()
@@ -126,7 +138,7 @@ class DefaultScheduleTests(unittest.TestCase):
             bell_volume=config.bell_volume,
             time_check_enabled=False,
         )
-        self.assertIn(announcement, disabled.weekly_schedule[0])
+        self.assertEqual(config.extra_events, disabled.extra_events)
         self.assertFalse(
             any(item.event_type is EventType.PREPARATION for item in disabled.weekly_schedule[0])
         )
@@ -142,7 +154,8 @@ class DefaultScheduleTests(unittest.TestCase):
             bell_volume=config.bell_volume,
             time_check_enabled=False,
         )
-        self.assertIn(announcement, enabled.weekly_schedule[0])
+        self.assertEqual(config.extra_events, enabled.extra_events)
+        self.assertIn(announcement, enabled.combined_weekly(0))
         self.assertIn(moved, enabled.weekly_schedule[0])
         preparations = [
             item for item in enabled.weekly_schedule[0]

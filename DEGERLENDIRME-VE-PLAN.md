@@ -342,15 +342,26 @@ uçtan uca kurulum testi yapılmadan Linux paketi dağıtılmamalı.**
   değiştirildi.
 
 ### Faz 4 — Yapısal borç (kademeli, acil değil)
-- [ ] **O1/O2** — Tek doğruluk kaynağına geç: `day_schedules` esas olsun, olay
-  listesi türetilsin; elle eklenen olaylar ayrı "ek olaylar" listesinde tutulsun.
-  Blok bilgisini etikete değil `EventSpec` alanına taşı. Bu, Y1 ve O1/O2'nin kök
-  nedenini kalıcı kapatır.
+- [x] **O1/O2** *(12.08.2026, şema v7)* — Elle eklenen olaylar artık ayrı
+  `extra_events` alanında; `weekly_schedule` yalnız ders akışı iskeletini
+  içerebilir (doğrulama bunu zorlar) ve "Programı oluştur" iskeleti saf
+  biçimde `day_schedules`'tan türetir — koruma filtresi/etiket bağımlılığı
+  kalmadı (etiket metinleri yalnız görüntüleme amaçlı). Günlük plan
+  `combined_weekly` ile birleştirilir; tören birleşimi ve telafi günleri ek
+  olayları da taşır. Program sayfasındaki "Ek olaylar" penceresi elle
+  eklenen olayları ilk kez listeler/düzenler/siler (eski "Gelişmiş zil
+  ekle"nin silme yüzeyi yoktu). v6 dosyası açılışta tek adımlık
+  ayrıştırmayla v7'ye çevrilir (veri kaybı yok; göç zinciri değil).
+  Kişisel ders saati düzeltmeleri `DaySchedule` parametreleriyle temsil
+  edilemediğinden haftalık iskelet kalıcı kalır; "tam türetim" bilinçli
+  olarak kapsam dışı bırakıldı.
 - [ ] **O10** — `app.py`'yi kademeli böl: (1) diyaloglar `dialogs.py`, (2) her
   sayfa kendi sınıfı, (3) zamanlayıcı+kuyruk+tepsi köprüsü `runtime.py`. Her adım
   `--arayuz-kontrol` smoke testi güvencesinde.
-- [ ] **O11/O12** — `self.role != "yonetici"` kontrollerini `_require_permission`
-  ile değiştir; ölü `_edit_event` ailesini sil.
+- [x] **O11/O12** *(12.08.2026)* — 14 sessiz `self.role != "yonetici"`
+  kontrolü `_require_permission("yapilandir")` oldu: engellenen kullanıcı
+  artık uyarı görüyor ve olay günlüğe yazılıyor (ölü `_edit_event` ailesi
+  Faz 0 çalışmasında zaten kaldırılmıştı).
 
 ### Faz 5 — Güvenlik sertleştirme (düşük ama ucuz)
 - [ ] Giriş ekranına profil bazlı deneme sayacı + artan gecikme; sayaç kalıcı.

@@ -42,6 +42,26 @@ class CalendarEngineTests(unittest.TestCase):
         self.assertEqual(24, len(result.events))
         self.assertTrue(all(event.source == "Pazartesi telafisi" for event in result.events))
 
+    def test_extra_events_ring_alongside_weekly_skeleton(self) -> None:
+        # O1/O2: elle eklenen olaylar ayrı listede durur ama günlük plana katılır.
+        announcement = EventSpec(time(9, 45), EventType.ANNOUNCEMENT, "Bayrak töreni anonsu", "anons")
+        config = replace(self.config, extra_events={0: (announcement,)})
+        monday = date(2026, 9, 7)
+        labels = [event.label for event in CalendarEngine(config).resolve(monday).events]
+        self.assertIn("Bayrak töreni anonsu", labels)
+
+        ceremony = DateRule(
+            "Tören günü",
+            ExceptionKind.CEREMONY,
+            monday,
+            monday,
+            (EventSpec(time(9, 0), EventType.CEREMONY, "Tören", "istiklal_sozlu"),),
+        )
+        merged = CalendarEngine(replace(config, date_rules=[ceremony])).resolve(monday)
+        merged_labels = [event.label for event in merged.events]
+        self.assertIn("Bayrak töreni anonsu", merged_labels)
+        self.assertIn("Tören", merged_labels)
+
     def test_event_ids_are_stable_and_date_specific(self) -> None:
         engine = CalendarEngine(self.config)
         first = engine.resolve(date(2026, 9, 7)).events[0]
