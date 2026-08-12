@@ -28,9 +28,10 @@ SIRENS: dict[str, tuple[int, int, int, int]] = {
     "acil_durum.wav": (10_000, 520, 1320, 700),
 }
 
-# Sivil savunma işaretleri AFAD'ın yayımladığı üç dakikalık tariflere göre
-# uygulama tarafından sentezlenir. Bunlar üçüncü taraf bir ses kaydının kopyası
-# değildir ve ilk çalıştırmada çevrimdışı hazırlanır.
+# AFAD işaretlerinin asıl kaynağı paketle gelen resmî kayıtlardır
+# (BUNDLED_SOUND_ASSETS, 0.6.0). Buradaki tanımlar yalnız paket kaydı
+# eksik/bozukken kullanılan, AFAD'ın üç dakikalık tariflerine göre çevrimdışı
+# üretilen yedek sentezlerdir.
 AFAD_ALERTS = {
     "afad_sari_ikaz.wav": "steady",
     "afad_kirmizi_alarm.wav": "wave",

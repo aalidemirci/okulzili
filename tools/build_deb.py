@@ -3,11 +3,13 @@ from __future__ import annotations
 import argparse
 import io
 from pathlib import Path
+import sys
 import tarfile
 import time
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-VERSION = "0.6.2"
+from okul_zili import __version__ as VERSION
 
 
 def _tar_xz(entries: list[tuple[Path | None, str, int, bytes | None]]) -> bytes:

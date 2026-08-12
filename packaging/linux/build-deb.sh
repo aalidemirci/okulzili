@@ -4,6 +4,7 @@ set -eu
 PROJECT_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 BUILD_ROOT="$PROJECT_ROOT/build/deb-root"
 OUTPUT_DIR="$PROJECT_ROOT/dist"
+VERSION=$(PYTHONPATH="$PROJECT_ROOT/src" python3 -c "import okul_zili; print(okul_zili.__version__)")
 
 rm -rf "$BUILD_ROOT"
 mkdir -p "$BUILD_ROOT/DEBIAN"
@@ -39,4 +40,4 @@ cp -R "$PROJECT_ROOT/THIRD_PARTY_LICENSES" "$BUILD_ROOT/usr/share/doc/okul-zili/
 
 chmod 0755 "$BUILD_ROOT/DEBIAN/postinst" "$BUILD_ROOT/DEBIAN/prerm" "$BUILD_ROOT/usr/bin/okul-zili" "$BUILD_ROOT/usr/share/okul-zili/tools/verify-linux-install.sh" "$BUILD_ROOT/usr/share/okul-zili/tools/analyze_pilot_log.py"
 find "$BUILD_ROOT" -type d -exec chmod 0755 {} \;
-dpkg-deb --root-owner-group --build "$BUILD_ROOT" "$OUTPUT_DIR/okul-zili_0.6.2_all.deb"
+dpkg-deb --root-owner-group --build "$BUILD_ROOT" "$OUTPUT_DIR/okul-zili_${VERSION}_all.deb"

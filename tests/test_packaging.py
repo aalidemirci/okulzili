@@ -19,6 +19,17 @@ class PackagingDefinitionTests(unittest.TestCase):
         self.assertIn(f'version = "{__version__}"', project)
         self.assertIn(f'#define MyAppVersion "{__version__}"', installer)
         self.assertIn(f"Version: {__version__}", linux)
+        # deb üreticileri sürümü koddan okur; belge sürümle birlikte güncellenir.
+        from tools.build_deb import VERSION as deb_builder_version
+
+        self.assertEqual(__version__, deb_builder_version)
+        build_script = (ROOT / "packaging" / "linux" / "build-deb.sh").read_text(encoding="utf-8")
+        self.assertIn("okul_zili.__version__", build_script)
+        self.assertIn("okul-zili_${VERSION}_all.deb", build_script)
+        setup_guide = (ROOT / "KURULUM.md").read_text(encoding="utf-8")
+        self.assertIn(f"okul-zili_{__version__}_all.deb", setup_guide)
+        release_notes = (ROOT / "SURUM-NOTLARI.md").read_text(encoding="utf-8")
+        self.assertIn(f"## {__version__}", release_notes)
 
     def test_windows_installer_is_turkish_and_runs_sound_test_flow(self) -> None:
         script = (ROOT / "packaging" / "windows" / "okul-zili.iss").read_text(

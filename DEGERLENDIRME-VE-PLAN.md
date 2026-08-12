@@ -318,21 +318,28 @@ uçtan uca kurulum testi yapılmadan Linux paketi dağıtılmamalı.**
 > Aşağıdaki maddeler yalnızca belge tutarlılığı ve depo bakımıyla ilgilidir;
 > hiçbir ses dosyası silinmez.
 
-- [ ] **Y6 (revize)** — `SES-KAYNAKLARI.md`'yi tek tutarlı hikâyeye indir:
-  hangi kayıt pakette, dayanağı ne — "kopyalanmaz/sentezlenir" gibi eski
-  ifadeleri gerçek durumla ("paketle sunulur") değiştir. `NOTICE`'ı 0.6.0'da
-  eklenen tüm kayıtları (marşlar, saygı duruşu, AFAD) kapsayacak şekilde
-  güncelle. `sound_assets.py:31-33`'teki eski yorumu düzelt.
-- [ ] **O14 (revize)** — `.gitattributes`'a `*.wav *.mp3 *.wma *.m4a binary`
-  işaretleri ekle. Ses dosyaları depoda kalacak; tek dikkat noktası, bir kayıt
-  güncellendiğinde eski sürümün git geçmişinde kalıcı yer tutması — kayıt
-  yenilemelerini gerektiğinde toplu yapmak yeterli.
-- [ ] **O15** — "Ağ istemcisi yok" testini `urllib.request` ve önek eşleşmesi
-  yakalayacak şekilde düzelt; `sound_catalog.py`'yi bilinçli istisna olarak
-  allowlist'e al. `MIMARI.md` gizlilik bölümünü gerçekle hizala.
-- [ ] Sürüm numarasını tek kaynaktan (`okul_zili.__version__`) okut; sürüm senkron
-  testine `build_deb.py` ve `build-deb.sh`'ı da ekle. `SURUM-NOTLARI.md` ve
-  `KURULUM.md`'yi güncelle. `MIMARI.md` modül listesini 22 modüle tamamla.
+- [x] **Y6 (revize)** *(12.08.2026)* — `SES-KAYNAKLARI.md` tek tutarlı
+  hikâyeye indirildi: "paketle sunulan kayıtlar" ve "uygulamanın ürettiği
+  sesler" iki net grup; AFAD bölümü paket kayıtlarını esas alıp senteze
+  yalnız yedek üretim olarak atıf yapıyor; "pakete kopyalanmaz" çelişkisi
+  kaldırıldı. `NOTICE` 0.6.0'da eklenen tüm kayıtları (marşlar, saygı
+  duruşu, 10 Kasım, AFAD) sayıyor ve lisans sınırını belirtiyor.
+  `sound_assets.py`'deki eski AFAD yorumu düzeltildi.
+- [x] **O14 (revize)** *(12.08.2026)* — `.gitattributes`'a `*.wav *.mp3
+  *.wma *.m4a *.flac *.ogg *.otf *.ttf binary` işaretleri eklendi (vendor
+  yazı tipleri dahil). Ses dosyaları depoda kalıyor; kayıt yenilemelerini
+  gerektiğinde toplu yapmak yeterli.
+- [x] **O15** — Test düzeltmesi Faz 0'da yapılmıştı; kalan `MIMARI.md`
+  hizalaması tamam: modül listesi 25 modüle tamamlandı (çekirdek/ses/destek/
+  arayüz gruplarıyla), zaman politikası O4 sonrası davranışı anlatıyor,
+  "Şema v4" → v6, Linux paket paragrafına gömülü arayüz kütüphaneleri
+  eklendi.
+- [x] **Sürüm tek kaynaktan** *(12.08.2026)* — `tools/build_deb.py` ve
+  `packaging/linux/build-deb.sh` sürümü `okul_zili.__version__`'dan okuyor;
+  sürüm senkron testi artık iki deb üreticisini, `KURULUM.md`'yi ve
+  `SURUM-NOTLARI.md` başlığını da denetliyor. `KURULUM.md`'deki eski 0.1.0
+  adları güncellendi ve kaldırılan şema göçüne atıf, karantina davranışıyla
+  değiştirildi.
 
 ### Faz 4 — Yapısal borç (kademeli, acil değil)
 - [ ] **O1/O2** — Tek doğruluk kaynağına geç: `day_schedules` esas olsun, olay

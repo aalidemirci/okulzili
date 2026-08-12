@@ -32,11 +32,11 @@ Kaldırıcı, yalnızca kendi kurulum dizinindeki çalışan `OkulZili.exe` sür
 
 ## Pardus 23 / Ubuntu 22.04 ve üzeri
 
-1. Size verilen `okul-zili_0.1.0_all.deb` dosyasını bilgisayara kopyalayın.
+1. Size verilen `okul-zili_0.6.2_all.deb` dosyasını bilgisayara kopyalayın.
 2. Dosya yöneticisinden paket yükleyiciyle açın veya terminalde aşağıdaki komutu çalıştırın:
 
    ```bash
-   sudo apt install ./okul-zili_0.1.0_all.deb
+   sudo apt install ./okul-zili_0.6.2_all.deb
    ```
 
 3. Uygulama menüsünde **Okul Zili** öğesini açın.
@@ -56,7 +56,7 @@ Kaldırıcı, yalnızca kendi kurulum dizinindeki çalışan `OkulZili.exe` sür
 
 Bu sürüm bir masaüstü uygulamasıdır. `enable-linger` tek başına grafik ekranı veya kullanıcı ses oturumunu oluşturmaz; bu nedenle oturum açılmadan zil çalacağı varsayılmamalıdır. Bu komut ancak kullanılan masaüstü ve ses oturumuyla saha testi yapılmışsa etkinleştirilmelidir. Oturumdan önce çalışma zorunluysa kısıtlı bir okul hesabında güvenli otomatik oturum açma seçeneği kurum politikasıyla değerlendirilmelidir.
 
-Sistem tepsisi için paket `python3-pil`, `python3-six`, `python3-xlib`, `python3-gi` ve Ayatana AppIndicator çalışma zamanını ister. Pardus 23'te bunlar sistem paketlerinden kurulur; Ubuntu 22.04 çevrimdışı kurulum belleğinde bu bağımlılıkların `.deb` dosyaları da bulunmalıdır. Tepsi arka ucu açılamazsa uygulama görev çubuğunda çalışmayı sürdürür ve olay günlüğüne uyarı yazar.
+Sistem tepsisi için paket `python3-pil`, `python3-six`, `python3-xlib`, `python3-gi` ve Ayatana AppIndicator çalışma zamanını ister. Pardus 23'te bunlar sistem paketlerinden kurulur; Ubuntu 22.04 çevrimdışı kurulum belleğinde bu bağımlılıkların `.deb` dosyaları da bulunmalıdır. Arayüz kütüphaneleri (`customtkinter`, `darkdetect`, `packaging`) Pardus depolarında bulunmadığından `.deb` paketinin içinde gömülü gelir; ayrıca kurulum gerekmez. Tepsi arka ucu açılamazsa uygulama görev çubuğunda çalışmayı sürdürür ve olay günlüğüne uyarı yazar.
 
 > Ekran görüntüsü yer tutucusu: Pardus paket yükleyici
 
@@ -72,7 +72,7 @@ Dağıtıma özgü eksiksiz bağımlılık belleği, internete bağlı ve hedefl
 
 ```bash
 sudo ./tools/prepare-linux-offline-bundle.sh \
-  ./dist/okul-zili_0.1.0_all.deb \
+  ./dist/okul-zili_0.6.2_all.deb \
   ./dist/vendor-linux
 ```
 
@@ -81,11 +81,11 @@ sudo ./tools/prepare-linux-offline-bundle.sh \
 Kaynak dağıtımındaki Python wheel paketini Windows'ta çevrimdışı kurmak isteyen teknik personel, aynı dağıtımla verilen `vendor-windows` dizinini kullanabilir:
 
 ```powershell
-python -m pip install --no-index --find-links .\vendor-windows .\okul_zili-0.1.0-py3-none-any.whl
+python -m pip install --no-index --find-links .\vendor-windows .\okul_zili-0.6.2-py3-none-any.whl
 ```
 
-Normal okul kurulumu için bu komut gerekmez; `OkulZili-Kurulum-0.1.0.exe` tercih edilmelidir.
+Normal okul kurulumu için bu komut gerekmez; `OkulZili-Kurulum-0.6.2.exe` tercih edilmelidir.
 
 ### Güncelleme
 
-Yeni sürümü eskisinin üzerine kurmadan önce ayarlar dosyasını yedekleyin. Uygulama sürümlü şemayı açılışta göç ettirir; internetten otomatik güncelleme yapmaz.
+Yeni sürümü eskisinin üzerine kurmadan önce ayarlar dosyasını yedekleyin. Uygulama yalnızca güncel ayar şemasını destekler; eski veya okunamayan ayar dosyası silinmez, `ayarlar.json.bozuk-<tarih>` adıyla kenara alınır ve uygulama varsayılanlarla açılıp durumu kritik uyarı panelinde bildirir. İnternetten otomatik güncelleme yapılmaz.

@@ -15,3 +15,11 @@ packaging/linux/prerm text eol=lf
 *.ico binary
 *.exe binary
 *.zip binary
+*.wav binary
+*.mp3 binary
+*.wma binary
+*.m4a binary
+*.flac binary
+*.ogg binary
+*.otf binary
+*.ttf binary
