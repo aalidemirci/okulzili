@@ -1,12 +1,22 @@
 # -*- mode: python ; coding: utf-8 -*-
 import os
+import sys
 from pathlib import Path
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 root = Path(SPEC).resolve().parents[2]
+# Öncelik build/ altına açılmış bağımsız CPython dağıtımıdır; yoksa derlemeyi
+# yürüten Python'ın kendi Tcl/Tk dosyaları kullanılır.
 python_root = root / "build" / "python" / "cpython-3.12.13-windows-x86_64-none"
-os.environ["TCL_LIBRARY"] = str(root / "build" / "tcl86")
-os.environ["TK_LIBRARY"] = str(root / "build" / "tk86")
+if python_root.exists():
+    tcl_root = root / "build" / "tcl86"
+    tk_root = root / "build" / "tk86"
+else:
+    python_root = Path(sys.base_prefix)
+    tcl_root = python_root / "tcl" / "tcl8.6"
+    tk_root = python_root / "tcl" / "tk8.6"
+os.environ["TCL_LIBRARY"] = str(tcl_root)
+os.environ["TK_LIBRARY"] = str(tk_root)
 
 a = Analysis(
     [str(root / "packaging" / "windows" / "entrypoint.py")],
@@ -18,8 +28,8 @@ a = Analysis(
     ],
     datas=[
         (str(python_root / "Lib" / "tkinter"), "tkinter"),
-        (str(root / "build" / "tcl86"), "_tcl_data"),
-        (str(root / "build" / "tk86"), "_tk_data"),
+        (str(tcl_root), "_tcl_data"),
+        (str(tk_root), "_tk_data"),
         (str(root / "src" / "okul_zili" / "assets"), "okul_zili/assets"),
         (str(root / "LICENSE"), "."),
         (str(root / "NOTICE"), "."),
@@ -37,7 +47,7 @@ a = Analysis(
         (str(root / "THIRD_PARTY_LICENSES"), "THIRD_PARTY_LICENSES"),
         *collect_data_files("customtkinter"),
     ],
-    hiddenimports=["tkinter", "miniaudio", "_cffi_backend", "PIL.Image", "PIL.ImageDraw", *collect_submodules("pystray")],
+    hiddenimports=["tkinter", "miniaudio", "_cffi_backend", "PIL.Image", "PIL.ImageDraw", "six", "six.moves", *collect_submodules("pystray")],
     runtime_hooks=[str(root / "packaging" / "windows" / "runtime-tk.py")],
     noarchive=False,
 )
