@@ -979,7 +979,13 @@ class OkulZiliApp:
         self.role = role
         self.data_dir = data_dir or user_data_dir()
         self.data_dir.mkdir(parents=True, exist_ok=True)
-        ensure_generated_sounds(self.data_dir)
+        try:
+            ensure_generated_sounds(self.data_dir)
+            generated_sound_error: str | None = None
+        except Exception as exc:
+            # Türetilmiş sesler üretilemese de zil motoru açılmalı; eksik
+            # dosya çalma anında yedek biple telafi edilir.
+            generated_sound_error = str(exc)
         self.repo = ConfigRepository(self.data_dir / "ayarlar.json")
         self.auth = auth or AuthRepository(self.data_dir / "profiller.json")
         self.logger = configure_logging(self.data_dir / "gunlukler" / "okul-zili.jsonl")
@@ -1001,6 +1007,15 @@ class OkulZiliApp:
         if self.repo.recovery_note:
             log_event(self.logger, "yapilandirma_kurtarildi", level="kritik", mesaj=self.repo.recovery_note)
             self._enqueue_notice(SchedulerNotice("kritik", self.repo.recovery_note))
+        if generated_sound_error:
+            log_event(self.logger, "ses_uretim_hatasi", level="kritik", mesaj=generated_sound_error)
+            self._enqueue_notice(
+                SchedulerNotice(
+                    "kritik",
+                    f"Yerleşik sesler hazırlanamadı: {generated_sound_error} "
+                    "Ziller gerekirse yedek biple çalınacak.",
+                )
+            )
         self.scheduler = BellScheduler(
             self.config,
             self.engine,
@@ -1091,7 +1106,8 @@ class OkulZiliApp:
         heading.pack(side="left", fill="y")
         self.school_label = ctk.CTkLabel(heading, text=self.config.school_name, text_color=INK, font=ctk.CTkFont("Segoe UI Variable Display", 24, "bold"), anchor="w")
         self.school_label.pack(side="left")
-        ctk.CTkLabel(heading, text=f"  •  {ROLE_LABELS.get(self.role, self.role)} profili", text_color=MUTED, font=ctk.CTkFont("Segoe UI Variable Text", 12)).pack(side="left")
+        self.role_label = ctk.CTkLabel(heading, text=f"  •  {ROLE_LABELS.get(self.role, self.role)} profili", text_color=MUTED, font=ctk.CTkFont("Segoe UI Variable Text", 12))
+        self.role_label.pack(side="left")
         self.clock_label = ctk.CTkLabel(top, text="", text_color=INK_SUBTLE, font=ctk.CTkFont("Segoe UI Variable Text", 13, "bold"))
         self.clock_label.pack(side="right")
         self.header_stop_button = ctk.CTkButton(top, text="■  Sesi durdur", width=118, height=40, corner_radius=10, fg_color=DANGER, hover_color=DANGER_HOVER, text_color="#FFFFFF", command=self._stop_audio, font=ctk.CTkFont("Segoe UI Variable Text", 12, "bold"))
@@ -1099,6 +1115,10 @@ class OkulZiliApp:
         self.management_button = ctk.CTkButton(top, text="Yönetim", width=104, height=40, corner_radius=10, fg_color=SURFACE, hover_color=HOVER, text_color=INK_SUBTLE, border_width=1, border_color=BORDER, command=self._open_management_center, font=ctk.CTkFont("Segoe UI Variable Text", 12, "bold"))
         self.management_button.pack(side="right", padx=(8, 18))
         self.profile_button = self.management_button
+        # Gözetimsiz açılışta uygulama salt görüntülemeyle kurulur; bu düğme
+        # çalışırken PIN ile yetki yükseltmenin tek yoludur.
+        self.login_button = ctk.CTkButton(top, text="Giriş", width=84, height=40, corner_radius=10, fg_color=SURFACE, hover_color=HOVER, text_color=INK_SUBTLE, border_width=1, border_color=BORDER, command=self._open_login, font=ctk.CTkFont("Segoe UI Variable Text", 12, "bold"))
+        self.login_button.pack(side="right", padx=(8, 0))
         self.backup_button = self.management_button
         self.settings_button = self.management_button
 
@@ -1924,24 +1944,48 @@ class OkulZiliApp:
         threading.Thread(target=worker, name="manuel-senaryo", daemon=True).start()
 
     def _apply_permissions(self) -> None:
-        if self.role != "yonetici":
-            self.profile_button.configure(state="disabled")
-            self.settings_button.configure(state="disabled")
-            self.backup_button.configure(state="disabled")
-            for button in (*self.schedule_admin_buttons, self.calendar_edit_button, *self.rule_admin_buttons, *self.sound_admin_buttons, self.recess_music_save_button):
-                button.configure(state="disabled")
-        if self.role == "goruntuleme":
-            for button in (
-                self.manual_student_button,
-                self.manual_lesson_button,
-                self.manual_break_button,
-                self.run_button,
-                self.defer_button,
-                self.mute_button,
-                *self.drill_buttons,
-                *self.dashboard_operational_buttons,
-            ):
-                button.configure(state="disabled")
+        # İki yönlü çalışır: gözetimsiz açılışta salt görüntülemeyle kurulan
+        # uygulama, girişten sonra set_role ile yetki kazanır.
+        admin_state = "normal" if self.role == "yonetici" else "disabled"
+        for button in (
+            self.profile_button,
+            self.settings_button,
+            self.backup_button,
+            *self.schedule_admin_buttons,
+            self.calendar_edit_button,
+            *self.rule_admin_buttons,
+            *self.sound_admin_buttons,
+            self.recess_music_save_button,
+        ):
+            button.configure(state=admin_state)
+        operator_state = "disabled" if self.role == "goruntuleme" else "normal"
+        for button in (
+            self.manual_student_button,
+            self.manual_lesson_button,
+            self.manual_break_button,
+            self.run_button,
+            self.defer_button,
+            self.mute_button,
+            *self.drill_buttons,
+            *self.dashboard_operational_buttons,
+        ):
+            button.configure(state=operator_state)
+
+    def set_role(self, role: str) -> None:
+        """Çalışan uygulamada yetkiyi değiştirir (gözetimsiz açılış sonrası giriş)."""
+        if role == self.role:
+            return
+        self.role = role
+        self.role_label.configure(text=f"  •  {ROLE_LABELS.get(role, role)} profili")
+        self._apply_permissions()
+        log_event(self.logger, "profil_degisti", profil=role)
+        self.root.after(350, self._open_first_run_sound_test)
+
+    def _open_login(self) -> None:
+        dialog = LoginDialog(self.root, self.auth)
+        self.root.wait_window(dialog)
+        if dialog.result is not None:
+            self.set_role(dialog.result)
 
     def _build_logs(self) -> None:
         self._page_heading(self.logs_page, "Olay günlüğü", "Çalınan, kaçırılan ve yedek sesle tamamlanan olayların teknik kaydı")
@@ -3224,6 +3268,50 @@ def main() -> int:
             startup.destroy()
             root.destroy()
             return int(result["code"])
+    if "--gozetimsiz-kontrol" in sys.argv:
+        # O8 kabulü: uygulama giriş olmadan salt görüntülemeyle açılır,
+        # zamanlayıcı çalışır, yönetim kilitlidir; girişle yetki açılır.
+        with tempfile.TemporaryDirectory(prefix="okul-zili-gozetimsiz-") as directory:
+            data_dir = Path(directory)
+            (data_dir / "ilk-ses-testi.tamam").write_text("test", encoding="utf-8")
+            root = ctk.CTk()
+            root.withdraw()
+            auth = AuthRepository(data_dir / "profiller.json")
+            app = OkulZiliApp(root, data_dir, "goruntuleme", auth)
+            result = {"code": 12}
+
+            def verify_unattended() -> None:
+                scheduler_alive = (
+                    app._scheduler_thread is not None and app._scheduler_thread.is_alive()
+                )
+                locked = (
+                    str(app.settings_button.cget("state")) == "disabled"
+                    and str(app.run_button.cget("state")) == "disabled"
+                )
+                app.set_role("yonetici")
+                unlocked = (
+                    str(app.settings_button.cget("state")) == "normal"
+                    and str(app.run_button.cget("state")) == "normal"
+                )
+                result["code"] = 0 if scheduler_alive and locked and unlocked else 12
+                app._shutdown_event.set()
+                app._scheduler_wake_event.set()
+                app.recess_music.stop()
+                if app._scheduler_thread is not None:
+                    app._scheduler_thread.join(timeout=2)
+                app.tray.stop()
+                for handler in list(app.logger.handlers):
+                    handler.close()
+                    app.logger.removeHandler(handler)
+                root.destroy()
+
+            root.after(1200, verify_unattended)
+            try:
+                root.mainloop()
+            except tk.TclError as exc:
+                if "application has been destroyed" not in str(exc):
+                    raise
+            return int(result["code"])
     if "--arayuz-kontrol" in sys.argv:
         with tempfile.TemporaryDirectory(prefix="okul-zili-arayuz-") as directory:
             data_dir = Path(directory)
@@ -3334,15 +3422,18 @@ def main() -> int:
                 )
                 root.destroy()
                 return 1
-        dialog = LoginDialog(root, auth)
-        root.wait_window(dialog)
-        if dialog.result is None:
-            root.destroy()
-            return 0
         startup.destroy()
         root.withdraw()
-        OkulZiliApp(root, data_dir, dialog.result, auth)
+        # Gözetimsiz açılış: uygulama girişten önce salt görüntüleme
+        # yetkisiyle kurulur, zamanlayıcı hemen çalışmaya başlar. Giriş
+        # penceresi yalnız yetki yükseltir; kapatılırsa ziller çalmaya
+        # devam eder ve yönetim işlevleri PIN'e kadar kilitli kalır.
+        app = OkulZiliApp(root, data_dir, "goruntuleme", auth)
         root.deiconify()
+        dialog = LoginDialog(root, auth)
+        root.wait_window(dialog)
+        if dialog.result is not None:
+            app.set_role(dialog.result)
         root.mainloop()
     except Exception as exc:
         try:

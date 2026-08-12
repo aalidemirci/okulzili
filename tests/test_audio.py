@@ -110,6 +110,26 @@ class AudioTests(unittest.TestCase):
             self.assertFalse(result.success)
             self.assertIn("yedek bip başarısız", result.message)
 
+    def test_device_lost_during_playback_beeps_on_default_output(self) -> None:
+        # O7: çalma sırasında cihaz kaybolursa yedek bip önce kaybolan
+        # cihazda, o da başarısızsa varsayılan çıkışta denenir.
+        class DeviceLostBackend(MockAudioBackend):
+            def play_fallback_beep(self, device_id: str) -> None:
+                self.calls.append(("beep", device_id))
+                if device_id != "varsayilan":
+                    raise RuntimeError("cihaz kayboldu")
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "zil.wav"
+            write_wave(path)
+            backend = DeviceLostBackend(file_failure=True)
+            result = PlaybackManager(backend).play(path, "usb-kart")
+            self.assertTrue(result.success)
+            self.assertTrue(result.used_fallback)
+            self.assertIn(("beep", "usb-kart"), backend.calls)
+            self.assertIn(("beep", "varsayilan"), backend.calls)
+            self.assertIn("varsayılan çıkış", result.message)
+
     def test_missing_device_is_critical_and_cannot_beep(self) -> None:
         backend = MockAudioBackend(available=False)
         result = PlaybackManager(backend).play(Path("zil.wav"), "usb-kart")

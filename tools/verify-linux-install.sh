@@ -40,7 +40,7 @@ for argument in --paket-kontrol --ses-cihazi-kontrol; do
 done
 
 if [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
-    for argument in --tepsi-kontrol --ilk-kurulum-kontrol --arayuz-kontrol; do
+    for argument in --tepsi-kontrol --ilk-kurulum-kontrol --arayuz-kontrol --gozetimsiz-kontrol; do
         if ! /usr/bin/okul-zili "$argument"; then
             echo "BAŞARISIZ: $argument kontrolü geçmedi."
             FAILED=1

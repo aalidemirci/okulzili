@@ -21,7 +21,7 @@ if (-not (Test-Path -LiteralPath $executable)) {
             $failures.Add("Tk arayüz bileşeni eksik: $relativePath")
         }
     }
-    foreach ($argument in @("--paket-kontrol", "--tepsi-kontrol", "--ilk-kurulum-kontrol", "--baslangic-kontrol", "--giris-penceresi-kontrol", "--arayuz-kontrol", "--ses-cihazi-kontrol")) {
+    foreach ($argument in @("--paket-kontrol", "--tepsi-kontrol", "--ilk-kurulum-kontrol", "--baslangic-kontrol", "--giris-penceresi-kontrol", "--arayuz-kontrol", "--gozetimsiz-kontrol", "--ses-cihazi-kontrol")) {
         $process = Start-Process -FilePath $executable -ArgumentList $argument -PassThru -WindowStyle Hidden
         if (-not $process.WaitForExit(10000)) {
             Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue

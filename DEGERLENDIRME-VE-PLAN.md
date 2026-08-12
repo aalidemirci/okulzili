@@ -290,11 +290,17 @@ uçtan uca kurulum testi yapılmadan Linux paketi dağıtılmamalı.**
 - [ ] **Y5** — Tüm sabit boyutlu diyalogları `_dialog_card` üzerinden geçir veya
   `_activate_modal`'da genişlik/yüksekliği ekrana kırp; uzun formlarda buton
   çubuğunu pencereye sabitle. 1366×768'de test et.
-- [ ] **O8** — Gözetimsiz başlangıç modu: açılışta zamanlayıcı otomatik olarak
-  salt-çalma yetkisiyle başlasın, yönetim işlevleri PIN istesin.
-  `ensure_generated_sounds` hatalarını ölümcül yapma.
-- [ ] **O7** — Çalma anındaki cihaz kaybında yedek bip başarısızsa
-  `'varsayilan'` çıkışta bir kez daha dene (iki dalı aynı davranışa getir).
+- [x] **O8** *(12.08.2026)* — Uygulama girişten önce salt görüntüleme
+  yetkisiyle kuruluyor; zamanlayıcı PIN beklemeden çalışıyor. Giriş penceresi
+  yalnız yetki yükseltiyor; kapatılırsa ziller sürer, başlıktaki yeni "Giriş"
+  düğmesi çalışırken PIN ile yükseltmeye izin verir. `_apply_permissions`
+  çift yönlü oldu (`set_role`). `ensure_generated_sounds` hatası artık
+  ölümcül değil; kritik panelde bildirilir, ziller yedek biple sürer.
+  Kabul: yeni `--gozetimsiz-kontrol` öz-testi (iki doğrulama betiğine
+  eklendi) bu makinede geçti.
+- [x] **O7** *(12.08.2026)* — Çalma anındaki cihaz kaybında yedek bip
+  başarısızsa `'varsayilan'` çıkışta bir kez daha deneniyor; iki dal aynı
+  davranışta. Regresyon testi eklendi.
 - [ ] **O16** — EventEditor'da `EVENT_LABELS` etiketleri, ses için katalog
   etiketli readonly combobox, oturum için Türkçe etiketler kullan.
 - [ ] **RuleEditor'ı CTk tasarımına geçir (saha bulgusu)** — `_dialog_card` +

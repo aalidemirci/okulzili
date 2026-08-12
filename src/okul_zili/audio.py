@@ -538,6 +538,26 @@ class PlaybackManager:
                 except Exception as fallback_error:
                     if self._stop_requested.is_set() or isinstance(fallback_error, PlaybackStopped):
                         return PlaybackResult(True, False, "Ses kullanıcı tarafından durduruldu.", True)
+                    # Cihaz çalma sırasında kaybolmuş olabilir; çalma öncesi
+                    # dalda olduğu gibi varsayılan çıkışta bir kez daha dene.
+                    if device_id != "varsayilan" and self.backend.is_device_available("varsayilan"):
+                        try:
+                            self.backend.play_fallback_beep("varsayilan")
+                        except Exception as default_error:
+                            if self._stop_requested.is_set() or isinstance(default_error, PlaybackStopped):
+                                return PlaybackResult(True, False, "Ses kullanıcı tarafından durduruldu.", True)
+                            return PlaybackResult(
+                                False,
+                                False,
+                                f"Normal ses başarısız: {normal_error}; yedek bip başarısız: "
+                                f"{fallback_error}; varsayılan çıkışta yedek bip başarısız: {default_error}",
+                            )
+                        return PlaybackResult(
+                            True,
+                            True,
+                            "Normal ses başarısız; yedek bip varsayılan çıkıştan çalındı: "
+                            f"{normal_error}",
+                        )
                     return PlaybackResult(
                         False,
                         False,
