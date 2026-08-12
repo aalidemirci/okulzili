@@ -19,7 +19,7 @@ check_file /usr/lib/systemd/user/okul-zili.service
 check_file /usr/share/applications/okul-zili.desktop
 check_file /etc/xdg/autostart/okul-zili.desktop
 
-if ! /usr/bin/python3 -c "import okul_zili, tkinter, PIL, pystray, six"; then
+if ! /usr/bin/python3 -c "import okul_zili, tkinter, PIL, pystray, six, customtkinter, darkdetect, packaging"; then
     echo "BAŞARISIZ: Python çalışma zamanı bağımlılıklarından biri yüklenemedi."
     FAILED=1
 fi

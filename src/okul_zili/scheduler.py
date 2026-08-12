@@ -13,6 +13,11 @@ from .calendar_engine import CalendarEngine
 from .domain import BellEvent, SchoolConfig
 
 
+# Duvar saatiyle monotonik sayaç arasındaki bu eşiği aşan pozitif kayma,
+# saat sıçraması değil uyku/bekleme dönüşü sayılır (bkz. tick içindeki ayrım).
+SUSPEND_DRIFT_THRESHOLD_SECONDS = 30.0
+
+
 class Clock(Protocol):
     def now(self) -> datetime: ...
 
@@ -24,6 +29,13 @@ class SystemClock:
         return datetime.now()
 
     def monotonic(self) -> float:
+        # Linux'ta time.monotonic() (CLOCK_MONOTONIC) askıda geçen süreyi
+        # saymaz; uyanma "saat sıçraması" sanılır. CLOCK_BOOTTIME askıyı sayar.
+        if hasattr(time_module, "CLOCK_BOOTTIME"):
+            try:
+                return time_module.clock_gettime(time_module.CLOCK_BOOTTIME)
+            except OSError:
+                pass
         return time_module.monotonic()
 
 
@@ -201,7 +213,19 @@ class BellScheduler:
                 wall_elapsed = (now - self._last_now).total_seconds()
                 monotonic_elapsed = max(0.0, monotonic_now - self._last_monotonic)
                 clock_drift = wall_elapsed - monotonic_elapsed
-                if abs(clock_drift) > 2:
+                if clock_drift > SUSPEND_DRIFT_THRESHOLD_SECONDS:
+                    # Monotonik sayacın askıyı saymadığı platformlarda uyanma
+                    # büyük pozitif kayma olarak görünür; sonuçları ileri saat
+                    # düzeltmesiyle aynıdır (kaçırılanlar denetlenir), bu
+                    # yüzden kritik değil uyarıdır.
+                    notices.append(
+                        SchedulerNotice(
+                            "uyarı",
+                            "Uyku, bekleme veya saatin ileri alınması algılandı "
+                            f"(+{clock_drift:.0f} sn); kaçırılan ziller denetleniyor.",
+                        )
+                    )
+                elif abs(clock_drift) > 2:
                     notices.append(
                         SchedulerNotice(
                             "kritik",

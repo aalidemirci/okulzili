@@ -86,6 +86,21 @@ class PackagingDefinitionTests(unittest.TestCase):
         self.assertIn("systemctl --user cat okul-zili.service", verifier)
         self.assertIn("--ses-cihazi-kontrol", verifier)
 
+    def test_linux_package_embeds_gui_dependencies(self) -> None:
+        # K1: customtkinter/darkdetect/packaging Pardus depolarında yok;
+        # temiz makinede ModuleNotFoundError yaşanmaması için her iki deb
+        # üretim yolu da vendor/ kopyalarını gömer, doğrulama betiği
+        # importlarını denetler.
+        build_script = (ROOT / "packaging" / "linux" / "build-deb.sh").read_text(encoding="utf-8")
+        verifier = (ROOT / "tools" / "verify-linux-install.sh").read_text(encoding="utf-8")
+        for name in ("customtkinter", "darkdetect", "packaging"):
+            self.assertIn(f'vendor/{name}"', build_script)
+            self.assertTrue((ROOT / "vendor" / name / "__init__.py").is_file())
+        self.assertIn(
+            "import okul_zili, tkinter, PIL, pystray, six, customtkinter, darkdetect, packaging",
+            verifier,
+        )
+
     def test_runtime_has_no_network_client_dependency(self) -> None:
         # Bilinçli iki istisna dışında hiçbir modül ağ istemcisi içeremez:
         # sound_catalog yalnız yönetici onayıyla MEB indirmesi yapar,

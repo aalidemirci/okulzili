@@ -45,6 +45,12 @@ class DebBuilderTests(unittest.TestCase):
                 self.assertIn("./usr/lib/python3/dist-packages/okul_zili/assets/sounds/meb-ogretmen.wav", names)
                 self.assertIn("./usr/lib/python3/dist-packages/okul_zili/assets/sounds/meb-ogrenci-teneffus.wav", names)
                 self.assertIn("./usr/lib/python3/dist-packages/pystray/_win32.py", names)
+                # K1: arayüz bağımlılıkları Pardus depolarında yok; pakete gömülür.
+                self.assertIn("./usr/lib/python3/dist-packages/customtkinter/__init__.py", names)
+                self.assertIn("./usr/lib/python3/dist-packages/customtkinter/assets/themes/blue.json", names)
+                self.assertIn("./usr/lib/python3/dist-packages/darkdetect/__init__.py", names)
+                self.assertIn("./usr/lib/python3/dist-packages/packaging/version.py", names)
+                self.assertIn("./usr/share/doc/okul-zili/THIRD_PARTY_LICENSES/packaging-LICENSE.txt", names)
                 self.assertIn("./usr/lib/systemd/user/okul-zili.service", names)
                 self.assertIn("./usr/share/doc/okul-zili/SURUM-NOTLARI.md", names)
                 self.assertIn("./usr/share/doc/okul-zili/SES-KAYNAKLARI.md", names)

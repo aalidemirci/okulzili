@@ -18,6 +18,11 @@ mkdir -p "$OUTPUT_DIR"
 
 cp -R "$PROJECT_ROOT/src/okul_zili" "$BUILD_ROOT/usr/lib/python3/dist-packages/"
 cp -R "$PROJECT_ROOT/src/pystray" "$BUILD_ROOT/usr/lib/python3/dist-packages/"
+# Pardus depolarında bulunmayan saf Python bağımlılıkları pakete gömülür
+# (bkz. vendor/README.md); kurulumda pip veya ağ erişimi gerekmez.
+cp -R "$PROJECT_ROOT/vendor/customtkinter" "$BUILD_ROOT/usr/lib/python3/dist-packages/"
+cp -R "$PROJECT_ROOT/vendor/darkdetect" "$BUILD_ROOT/usr/lib/python3/dist-packages/"
+cp -R "$PROJECT_ROOT/vendor/packaging" "$BUILD_ROOT/usr/lib/python3/dist-packages/"
 cp "$PROJECT_ROOT/packaging/linux/control" "$BUILD_ROOT/DEBIAN/control"
 cp "$PROJECT_ROOT/packaging/linux/postinst" "$BUILD_ROOT/DEBIAN/postinst"
 cp "$PROJECT_ROOT/packaging/linux/prerm" "$BUILD_ROOT/DEBIAN/prerm"

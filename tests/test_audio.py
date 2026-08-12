@@ -8,7 +8,14 @@ from unittest import mock
 import wave
 from array import array
 
-from okul_zili.audio import AudioError, PlatformAudioBackend, PlaybackManager, validate_wave
+from okul_zili.audio import (
+    AudioError,
+    PLAYBACK_TIMEOUT_CAP_SECONDS,
+    PlatformAudioBackend,
+    PlaybackManager,
+    playback_timeout_seconds,
+    validate_wave,
+)
 from tests.helpers import MockAudioBackend, write_wave
 
 
@@ -117,6 +124,26 @@ class AudioTests(unittest.TestCase):
         self.assertTrue(result.used_fallback)
         self.assertIn(("beep", "varsayilan"), backend.calls)
         self.assertIn("varsayılan çıkış", result.message)
+
+    def test_playback_timeout_covers_long_ceremony_recordings(self) -> None:
+        # Y2: 120 sn sabit tavan AFAD/tören kayıtlarını (~180 sn) ortadan
+        # kesiyordu; zaman aşımı artık dosya süresinden türetiliyor.
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "afad.wav"
+            with wave.open(str(path), "wb") as output:
+                output.setnchannels(1)
+                output.setsampwidth(2)
+                output.setframerate(8000)
+                output.writeframes(b"\x00\x00" * 8000 * 180)
+            timeout = playback_timeout_seconds(path)
+            self.assertGreater(timeout, 180)
+            self.assertLess(timeout, 240)
+
+    def test_playback_timeout_uses_cap_when_duration_unreadable(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "bozuk.wav"
+            path.write_text("ses değil", encoding="utf-8")
+            self.assertEqual(PLAYBACK_TIMEOUT_CAP_SECONDS, playback_timeout_seconds(path))
 
     def test_wave_validation_rejects_empty_file(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

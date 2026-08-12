@@ -56,6 +56,17 @@ def build(project_root: Path, output: Path) -> None:
     for source in sorted((project_root / "src" / "pystray").rglob("*.py")):
         relative = source.relative_to(project_root / "src")
         data_entries.append((source, f"./usr/lib/python3/dist-packages/{relative.as_posix()}", 0o644, None))
+    # Pardus depolarında bulunmayan saf Python bağımlılıkları pakete gömülür
+    # (bkz. vendor/README.md); customtkinter tema ve yazı tipi verileriyle
+    # birlikte kopyalanır, bu yüzden yalnız .py dosyalarıyla sınırlanamaz.
+    for package in ("customtkinter", "darkdetect", "packaging"):
+        for source in sorted(
+            item
+            for item in (project_root / "vendor" / package).rglob("*")
+            if item.is_file() and "__pycache__" not in item.parts
+        ):
+            relative = source.relative_to(project_root / "vendor")
+            data_entries.append((source, f"./usr/lib/python3/dist-packages/{relative.as_posix()}", 0o644, None))
     data_entries.extend(
         [
             (package_dir / "okul-zili", "./usr/bin/okul-zili", 0o755, None),
@@ -71,7 +82,6 @@ def build(project_root: Path, output: Path) -> None:
         "DONANIM.md",
         "KULLANIM.md",
         "SORUN-GIDERME.md",
-        "SES-KAYNAKLARI.md",
         "SES-KAYNAKLARI.md",
         "MIMARI.md",
         "SURUM-NOTLARI.md",

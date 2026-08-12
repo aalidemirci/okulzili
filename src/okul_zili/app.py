@@ -3128,7 +3128,8 @@ def main() -> int:
     if "--ses-cihazi-kontrol" in sys.argv:
         return 0 if PlatformAudioBackend().is_device_available("varsayilan") else 6
     if "--paket-kontrol" in sys.argv:
-        import miniaudio
+        import platform
+        import shutil
 
         from .audio import validate_wave
         from .defaults import default_config
@@ -3136,7 +3137,14 @@ def main() -> int:
 
         config = default_config()
         CalendarEngine(config).resolve(date.today())
-        if not miniaudio.__version__:
+        # Ses dönüştürücü: Windows paketinde miniaudio, Linux paketinde ffmpeg
+        # bulunur (sound_catalog her ikisini de kullanabilir).
+        if platform.system().lower() == "windows":
+            import miniaudio
+
+            if not miniaudio.__version__:
+                return 8
+        elif shutil.which("ffmpeg") is None:
             return 8
         with tempfile.TemporaryDirectory(prefix="okul-zili-paket-ses-") as directory:
             data_dir = Path(directory)

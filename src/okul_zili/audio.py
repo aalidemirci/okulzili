@@ -76,6 +76,26 @@ def validate_wave(path: Path) -> tuple[bool, str]:
     return True, "Ses dosyası kullanılabilir."
 
 
+PLAYBACK_TIMEOUT_MARGIN_SECONDS = 15.0
+PLAYBACK_TIMEOUT_CAP_SECONDS = 600.0
+
+
+def playback_timeout_seconds(path: Path) -> float:
+    """Çalma zaman aşımını dosya süresinden türetir.
+
+    Sabit bir tavan, uzun tören/ikaz kayıtlarını (ör. AFAD ~180 sn) ortadan
+    keser; bu yüzden süre + pay kullanılır, süre okunamazsa üst sınır döner.
+    """
+    try:
+        with wave.open(str(path), "rb") as source:
+            rate = source.getframerate()
+            if rate > 0:
+                return source.getnframes() / rate + PLAYBACK_TIMEOUT_MARGIN_SECONDS
+    except (wave.Error, EOFError, OSError):
+        pass
+    return PLAYBACK_TIMEOUT_CAP_SECONDS
+
+
 class PlatformAudioBackend(AudioBackend):
     PIPEWIRE_DEFAULT = "PipeWire varsayılan çıkış"
 
@@ -370,7 +390,7 @@ class PlatformAudioBackend(AudioBackend):
         with self._playback_state_lock:
             self._active_process = process
         try:
-            deadline = time_module.monotonic() + 120
+            deadline = time_module.monotonic() + playback_timeout_seconds(path)
             while process.poll() is None:
                 if self._stop_requested.wait(0.05):
                     process.terminate()

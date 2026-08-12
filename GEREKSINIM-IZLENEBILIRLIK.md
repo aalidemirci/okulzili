@@ -47,7 +47,7 @@ Bu matris `PLAN.md` gereksinimlerini tasarım, otomatik test ve saha kabul kanı
 |---|---|---|---|
 | OZ-PKG-WIN-001 | PyInstaller onedir ve Türkçe Inno kurucusu | `dist/OkulZili-Windows-x64`, `dist/installer` | Windows 11 paket kontrolü geçti |
 | OZ-PKG-WIN-002 | Oturum açılış görevi; AC kısıtı kapalı | `install-task.ps1`, `verify-windows-install.ps1` | Windows 11 gerçek kurulumunda oturum tetikleyicisi ve iki batarya ayarı geçti |
-| OZ-PKG-LNX-001 | `.deb`, systemd kullanıcı birimi, menü ve autostart | `dist/okul-zili_0.1.0_all.deb` | Paket içerik testi geçti; Pardus/Ubuntu kurulumu bekliyor |
+| OZ-PKG-LNX-001 | `.deb`, systemd kullanıcı birimi, menü ve autostart | `dist/okul-zili_0.6.2_all.deb` | Paket içerik testi geçti; arayüz bağımlılıkları (`customtkinter`, `darkdetect`, `packaging`) pakete gömülü; temiz Pardus/Ubuntu kurulumu bekliyor |
 | OZ-PKG-OFF-001 | Çevrimdışı çalışma/kurulum | Windows çalışma zamanı ve `vendor-windows`; Linux için `prepare-linux-offline-bundle.sh` | Windows paket hazır; dağıtıma özgü Linux belleğinin temiz hedef sürümünde üretilmesi ve ağsız kabulü bekliyor |
 | OZ-PKG-REL-001 | Karma, lisans, platform ve sürüm manifesti | `SHA256SUMS.txt`, `BAGIMLILIKLAR.md`, `SURUM-NOTLARI.md` | Geçti |
 | OZ-DOC-001 | Türkçe belge seti | README, KURULUM, DONANIM, KULLANIM, SORUN-GIDERME, MIMARI | Metinler mevcut; gerçek ekran görüntüleri bekliyor |

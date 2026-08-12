@@ -134,13 +134,32 @@ class SchedulerTests(unittest.TestCase):
             scheduler.tick()
             self.assertEqual(1, sum(kind == "file" for kind, _ in backend.calls))
 
-    def test_clock_jump_is_reported(self) -> None:
+    def test_backward_clock_jump_is_critical(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            scheduler, clock, _, _ = self._scheduler(directory, datetime(2026, 9, 7, 7, 0))
+            scheduler.tick()
+            clock.set(clock.now() - timedelta(minutes=10))
+            notices = scheduler.tick()
+            self.assertTrue(any("sıçrama" in item.message and item.level == "kritik" for item in notices))
+
+    def test_small_clock_jump_is_critical(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            scheduler, clock, _, _ = self._scheduler(directory, datetime(2026, 9, 7, 7, 0))
+            scheduler.tick()
+            clock.set(clock.now() + timedelta(seconds=10))
+            notices = scheduler.tick()
+            self.assertTrue(any("sıçrama" in item.message and item.level == "kritik" for item in notices))
+
+    def test_wakeup_without_suspend_aware_monotonic_is_warning_not_critical(self) -> None:
+        # O4: Linux'ta CLOCK_MONOTONIC askıyı saymaz; uyanma duvar saatinde
+        # büyük pozitif kayma gibi görünür. Bu kritik sıçrama değil uyarıdır.
         with tempfile.TemporaryDirectory() as directory:
             scheduler, clock, _, _ = self._scheduler(directory, datetime(2026, 9, 7, 7, 0))
             scheduler.tick()
             clock.set(clock.now() + timedelta(hours=2))
             notices = scheduler.tick()
-            self.assertTrue(any("sıçrama" in item.message for item in notices))
+            self.assertTrue(any("ileri alınması" in item.message and item.level == "uyarı" for item in notices))
+            self.assertFalse(any("sıçrama" in item.message for item in notices))
 
     def test_sleep_is_distinguished_from_wall_clock_jump(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

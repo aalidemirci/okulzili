@@ -264,19 +264,27 @@ Bunlar bugünkü Windows kullanıcısını da etkiliyor; sürüm beklemeden yap�
 Pardus hedefi bugün doğrulanmamış. **Temiz bir Pardus 23 sanal makinesinde
 uçtan uca kurulum testi yapılmadan Linux paketi dağıtılmamalı.**
 
-- [ ] **K1** — `customtkinter`+`darkdetect`+`packaging` kaynaklarını (saf Python,
-  MIT) `pystray` gibi deb içine göm **veya** `control` Depends + pip kurulum
-  adımını belgele. `--paket-kontrol`teki `miniaudio` importunu Linux'ta ffmpeg
-  denetimiyle değiştir. `verify-linux-install.sh`'a `python3 -c "import customtkinter"`
-  ekle.
-- [ ] **Y2** — Linux çalma yolunda zaman aşımını dosya süresinden türet (wave
-  başlığından kare/örnekleme + ~15 sn tampon); süre okunamıyorsa 120 yerine 600
-  sn üst sınır. Regresyon: 180 sn'lik WAV'ın kesilmediğini doğrula.
-- [ ] **O4** — Uyku/sıçrama ayrımında ek sinyal kullan: drift pozitif ve büyükse
-  "uyku" (uyarı) say; küçük/tutarsız farkları "saat sıçraması" (kritik). Alternatif:
-  Linux'ta `CLOCK_BOOTTIME`.
-- [ ] **O13** — 10 satırlık CI: `ubuntu-latest` + `windows-latest` üzerinde
-  `python -m unittest discover -s tests`. PR birleşmeden kırmızı/yeşil görünür.
+> **Durum (12.08.2026):** Dört madde de uygulandı; 143 test geçiyor. Temiz
+> Pardus 23 sanal makinesinde uçtan uca kurulum doğrulaması hâlâ zorunlu
+> kapı olarak bekliyor — bu, kod değil saha adımıdır.
+
+- [x] **K1** — `customtkinter` 5.2.2, `darkdetect` 0.8.0 ve `packaging` 26.2
+  `vendor/` altına alındı (bkz. `vendor/README.md`); her iki deb üretim yolu
+  (`build-deb.sh` ve `tools/build_deb.py`) bunları paket içine gömüyor —
+  kurulumda pip/ağ gerekmez. `--paket-kontrol` Linux'ta miniaudio yerine
+  ffmpeg varlığını denetliyor; `verify-linux-install.sh` importlara
+  `customtkinter, darkdetect, packaging` ekledi. `THIRD_PARTY_LICENSES`'a
+  packaging lisansı, `BAGIMLILIKLAR.md`'ye gömme notu eklendi.
+- [x] **Y2** — Linux çalma zaman aşımı dosya süresi + 15 sn payından
+  türetiliyor (`audio.playback_timeout_seconds`); süre okunamazsa 600 sn üst
+  sınır. Windows'un süre-türevli davranışıyla hizalandı. Regresyon: 180 sn'lik
+  WAV'ın zaman aşımı süreyi aşıyor.
+- [x] **O4** — İki katman: `SystemClock.monotonic` Linux'ta `CLOCK_BOOTTIME`
+  kullanıyor (askıda geçen süre sayılır); ayrıca 30 sn'yi aşan pozitif kayma
+  artık kritik "sıçrama" değil "uyku/bekleme veya saatin ileri alınması"
+  uyarısı. Geriye alma ve küçük ileri sıçramalar kritik kalıyor.
+- [x] **O13** — `.github/workflows/testler.yml`: her PR ve main push'unda
+  test paketi `ubuntu-latest` + `windows-latest` üzerinde koşuyor.
 
 ### Faz 2 — Küçük ekran, kullanılabilirlik, gözetimsiz çalışma
 - [ ] **Y5** — Tüm sabit boyutlu diyalogları `_dialog_card` üzerinden geçir veya
