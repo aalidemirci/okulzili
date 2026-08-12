@@ -38,11 +38,11 @@ jobs:
       - name: Kaynak kodu al
         uses: actions/checkout@v7
       - name: GitHub Pages'i yapılandır
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@v6
       - name: Site güvenlik ve içerik denetimleri
         run: node website/scripts/validate-site.mjs
       - name: Site paketini yükle
-        uses: actions/upload-pages-artifact@v4
+        uses: actions/upload-pages-artifact@v5
         with:
           path: website
 
@@ -59,4 +59,4 @@ jobs:
     steps:
       - name: GitHub Pages'e yayımla
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
