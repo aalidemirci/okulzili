@@ -144,7 +144,7 @@ class PackagingDefinitionTests(unittest.TestCase):
             r"\b(Cancel|Save|Settings|Exit|Error|Warning|Ready|Play|Stop|Next|Open|Close)\b"
         )
         violations: list[str] = []
-        for filename in ("app.py", "tray.py"):
+        for filename in ("app.py", "dialogs.py", "tray.py"):
             source = ROOT / "src" / "okul_zili" / filename
             tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
             for node in ast.walk(tree):

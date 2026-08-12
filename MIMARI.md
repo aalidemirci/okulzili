@@ -38,7 +38,8 @@ Destek:
 
 Arayüz:
 
-- `app.py`: Türkçe masaüstü arayüzü, diyaloglar ve ana akış
+- `app.py`: Ana pencere, sayfalar, zamanlayıcı köprüsü ve uygulama akışı
+- `dialogs.py`: SafeModalToplevel tabanı, Türkçe etiket sözlükleri ve tüm modal pencereler
 - `tray.py`: Sistem tepsisi yaşam döngüsü, durum simgesi ve hızlı eylemler
 - `ui_theme.py`: Renk paleti, tema çözümü ve görünüm kaydı
 - `branding.py`: Uygulama kimliği, pencere simgesi ve marka görselleri

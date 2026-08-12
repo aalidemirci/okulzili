@@ -355,9 +355,11 @@ uçtan uca kurulum testi yapılmadan Linux paketi dağıtılmamalı.**
   Kişisel ders saati düzeltmeleri `DaySchedule` parametreleriyle temsil
   edilemediğinden haftalık iskelet kalıcı kalır; "tam türetim" bilinçli
   olarak kapsam dışı bırakıldı.
-- [ ] **O10** — `app.py`'yi kademeli böl: (1) diyaloglar `dialogs.py`, (2) her
-  sayfa kendi sınıfı, (3) zamanlayıcı+kuyruk+tepsi köprüsü `runtime.py`. Her adım
-  `--arayuz-kontrol` smoke testi güvencesinde.
+- [ ] **O10** — `app.py`'yi kademeli böl: ✅ (1) diyaloglar `dialogs.py`'de
+  *(12.08.2026: 13 diyalog sınıfı + SafeModalToplevel + etiket sözlükleri
+  taşındı; app.py 3400 → 2640 satır; beş öz-test + 147 test güvencesinde)*;
+  ⬜ (2) her sayfa kendi sınıfı; ⬜ (3) zamanlayıcı+kuyruk+tepsi köprüsü
+  `runtime.py`.
 - [x] **O11/O12** *(12.08.2026)* — 14 sessiz `self.role != "yonetici"`
   kontrolü `_require_permission("yapilandir")` oldu: engellenen kullanıcı
   artık uyarı görüyor ve olay günlüğe yazılıyor (ölü `_edit_event` ailesi
