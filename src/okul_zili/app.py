@@ -17,7 +17,7 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 from typing import Callable
 
 from . import __version__
-from .auth import AuthRepository, ROLE_LABELS, is_action_allowed
+from .auth import AuthRepository, LoginThrottle, ROLE_LABELS, is_action_allowed
 from .academic_defaults import academic_calendar_template
 from .audio import PlatformAudioBackend, PlaybackManager
 from .backup import BackupError, export_bundle, import_bundle
@@ -1133,7 +1133,9 @@ class OkulZiliApp:
         self.root.after(350, self._open_first_run_sound_test)
 
     def _open_login(self) -> None:
-        dialog = LoginDialog(self.root, self.auth)
+        dialog = LoginDialog(
+            self.root, self.auth, LoginThrottle(self.data_dir / "giris-denemeleri.json")
+        )
         self.root.wait_window(dialog)
         if dialog.result is not None:
             self.set_role(dialog.result)
@@ -1805,7 +1807,7 @@ class OkulZiliApp:
         self.scheduler.update_config(self.config, self.engine)
         log_event(self.logger, "yedek_geri_yuklendi")
         self._refresh_all()
-        messagebox.showinfo("Geri yükleme tamamlandı", "Program ve ses dosyaları doğrulanarak geri yüklendi.", parent=self.root)
+        messagebox.showinfo("Geri yükleme tamamlandı", "Program ve ses dosyaları bozulmaya karşı denetlenerek geri yüklendi. Yedeği yalnızca güvendiğiniz bir kaynaktan alın.", parent=self.root)
 
     def _add_event(self) -> None:
         if not self._require_permission("yapilandir"):
@@ -2442,7 +2444,7 @@ def main() -> int:
             root = ctk.CTk()
             startup = _prepare_startup_root(root)
             auth = AuthRepository(Path(directory) / "profiller.json")
-            auth.set_pin("yonetici", "1234")
+            auth.set_pin("yonetici", "482613")
             dialog = LoginDialog(root, auth)
             result = {"code": 10}
 
@@ -2587,7 +2589,7 @@ def main() -> int:
                 parent=root,
             )
             while not auth.has_admin_pin():
-                first = simpledialog.askstring("Yönetici PIN'i", "4–12 rakamlı yönetici PIN'i:", show="●", parent=root)
+                first = simpledialog.askstring("Yönetici PIN'i", "6–12 rakamlı yönetici PIN'i:", show="●", parent=root)
                 if first is None:
                     root.destroy()
                     return 0
@@ -2622,7 +2624,7 @@ def main() -> int:
         # devam eder ve yönetim işlevleri PIN'e kadar kilitli kalır.
         app = OkulZiliApp(root, data_dir, "goruntuleme", auth)
         root.deiconify()
-        dialog = LoginDialog(root, auth)
+        dialog = LoginDialog(root, auth, LoginThrottle(data_dir / "giris-denemeleri.json"))
         root.wait_window(dialog)
         if dialog.result is not None:
             app.set_role(dialog.result)

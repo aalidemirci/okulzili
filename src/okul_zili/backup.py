@@ -98,6 +98,10 @@ def import_bundle(source: Path, data_dir: Path) -> SchoolConfig:
             ):
                 continue
             destination = staging.joinpath(*archive_path.parts[1:])
+            # Ad denetimlerine ek savunma katmanı: hedef, geçici dizinin
+            # dışına hiçbir koşulda çözülmemelidir.
+            if not destination.resolve().is_relative_to(staging.resolve()):
+                raise BackupError("Yedekte güvenli olmayan dosya yolu bulundu.")
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_bytes(data)
         for path in staging.rglob("*"):

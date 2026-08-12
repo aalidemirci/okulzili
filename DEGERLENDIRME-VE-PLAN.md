@@ -366,15 +366,22 @@ uçtan uca kurulum testi yapılmadan Linux paketi dağıtılmamalı.**
   Faz 0 çalışmasında zaten kaldırılmıştı).
 
 ### Faz 5 — Güvenlik sertleştirme (düşük ama ucuz)
-- [ ] Giriş ekranına profil bazlı deneme sayacı + artan gecikme; sayaç kalıcı.
-  Yönetici PIN asgari uzunluğu 6 hane.
-- [ ] `profiller.json`'a kısıtlayıcı izin (Linux 0o600, Windows kullanıcı ACL).
-  Belgede PIN'in "güvenlik sınırı değil caydırıcılık" olduğunu netleştir.
-- [ ] `backup.py` içe aktarmada `\` veya `:` içeren adları reddet ve
-  `resolve().is_relative_to(staging)` ile hedef sınırını doğrula (yukarıdaki
-  çelişen bulgu — ucuz ve kesin çözüm).
-- [ ] Yedek geri yükleme mesajını "bozulmaya karşı denetlendi" biçiminde düzelt
-  ("doğrulanmış/güvenli kaynak" imasından kaçın).
+- [x] *(12.08.2026)* Giriş ekranında profil bazlı kalıcı hatalı deneme
+  sayacı (`auth.LoginThrottle`, `giris-denemeleri.json`): dört serbest
+  denemeden sonra üstel artan bekleme (2, 4, 8… sn; tavan 300 sn); başarılı
+  giriş sayacı sıfırlar; dosya yazılamazsa giriş engellenmez. Yönetici PIN
+  asgari uzunluğu 6 hane (diğer profiller 4); ilk kurulum ve profil
+  yönetimi metinleri güncellendi.
+- [x] *(12.08.2026)* `profiller.json` POSIX'te 0o600 ile yazılıyor
+  (Windows'ta veri dizini kullanıcı ACL'siyle sınırlı — belgelendi).
+  `MIMARI.md` PIN'in "güvenlik sınırı değil caydırıcılık" olduğunu
+  açıkça söylüyor.
+- [x] Ters bölü/`:` reddi Faz 0'da yapılmıştı; kalan
+  `resolve().is_relative_to(staging)` savunma katmanı içe aktarmaya
+  eklendi *(12.08.2026)*.
+- [x] *(12.08.2026)* Geri yükleme mesajı "bozulmaya karşı denetlenerek geri
+  yüklendi" biçimine getirildi ve yedeğin güvenilir kaynaktan alınması
+  gerektiği eklendi.
 
 ---
 

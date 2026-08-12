@@ -16,7 +16,7 @@ from typing import Callable
 import customtkinter as ctk
 
 from .academic_defaults import academic_calendar_template
-from .auth import AuthRepository, ROLE_LABELS
+from .auth import AuthRepository, LoginThrottle, ROLE_LABELS
 from .branding import apply_window_icon, load_brand_image
 from .ceremonies import CEREMONY_SCENARIOS, ceremony_events
 from .config import ConfigError
@@ -635,7 +635,12 @@ class InitialSetupDialog(SafeModalToplevel):
 
 
 class LoginDialog(SafeModalToplevel):
-    def __init__(self, parent: tk.Misc, auth: AuthRepository) -> None:
+    def __init__(
+        self,
+        parent: tk.Misc,
+        auth: AuthRepository,
+        throttle: LoginThrottle | None = None,
+    ) -> None:
         super().__init__(parent)
         self.title("Okul Zili — Giriş")
         # The action row used to fall below the fixed 410 px client area on
@@ -646,6 +651,7 @@ class LoginDialog(SafeModalToplevel):
         self.resizable(True, True)
         self.configure(fg_color=CANVAS)
         self.auth = auth
+        self.throttle = throttle
         self.result: str | None = None
         roles = auth.configured_roles()
         self.role_var = tk.StringVar(value=roles[0])
@@ -670,10 +676,23 @@ class LoginDialog(SafeModalToplevel):
 
     def _login(self) -> None:
         role = self.role_var.get()
+        if self.throttle is not None:
+            wait = self.throttle.wait_seconds(role)
+            if wait > 0:
+                messagebox.showwarning(
+                    "Bekleme süresi",
+                    f"Çok sayıda hatalı deneme yapıldı. {wait} saniye sonra yeniden deneyin.",
+                    parent=self,
+                )
+                return
         if not self.auth.verify(role, self.pin_var.get()):
+            if self.throttle is not None:
+                self.throttle.register_failure(role)
             messagebox.showerror("Giriş başarısız", "Profil veya PIN yanlış.", parent=self)
             self.pin_var.set("")
             return
+        if self.throttle is not None:
+            self.throttle.register_success(role)
         self.result = role
         self.destroy()
 
@@ -705,7 +724,8 @@ class ProfileManager(SafeModalToplevel):
         _primary_button(self.frame, "Kapat", self.destroy, 110).grid(row=6, column=0, columnspan=3, sticky="e", padx=24, pady=(16, 22))
 
     def _set_pin(self, role: str) -> None:
-        first = simpledialog.askstring("PIN ayarla", f"{ROLE_LABELS[role]} için 4–12 rakamlı PIN:", show="●", parent=self)
+        minimum = 6 if role == "yonetici" else 4
+        first = simpledialog.askstring("PIN ayarla", f"{ROLE_LABELS[role]} için {minimum}–12 rakamlı PIN:", show="●", parent=self)
         if first is None:
             return
         second = simpledialog.askstring("PIN doğrula", "PIN'i yeniden girin:", show="●", parent=self)

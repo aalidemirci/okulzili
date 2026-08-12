@@ -5,7 +5,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from okul_zili.auth import AuthRepository, is_action_allowed
+from okul_zili.auth import AuthRepository, LoginThrottle, is_action_allowed
 
 
 class AuthTests(unittest.TestCase):
@@ -13,11 +13,11 @@ class AuthTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "profiller.json"
             auth = AuthRepository(path)
-            auth.set_pin("yonetici", "4826")
-            self.assertTrue(auth.verify("yonetici", "4826"))
-            self.assertFalse(auth.verify("yonetici", "0000"))
+            auth.set_pin("yonetici", "482613")
+            self.assertTrue(auth.verify("yonetici", "482613"))
+            self.assertFalse(auth.verify("yonetici", "000000"))
             raw = path.read_text(encoding="utf-8")
-            self.assertNotIn('"4826"', raw)
+            self.assertNotIn('"482613"', raw)
 
     def test_three_profiles_are_available(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -28,9 +28,39 @@ class AuthTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             auth = AuthRepository(Path(directory) / "profiller.json")
             with self.assertRaises(ValueError):
-                auth.set_pin("yonetici", "12ab")
+                auth.set_pin("yonetici", "12ab56")
             with self.assertRaises(ValueError):
-                auth.set_pin("yonetici", "123")
+                auth.set_pin("nobetci", "123")
+
+    def test_admin_pin_requires_six_digits_others_four(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            auth = AuthRepository(Path(directory) / "profiller.json")
+            with self.assertRaises(ValueError):
+                auth.set_pin("yonetici", "1234")
+            auth.set_pin("yonetici", "123456")
+            auth.set_pin("nobetci", "1234")
+
+    def test_login_throttle_delays_after_repeated_failures(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "giris-denemeleri.json"
+            throttle = LoginThrottle(path)
+            for _ in range(4):
+                throttle.register_failure("yonetici", now=1000.0)
+            self.assertEqual(0, throttle.wait_seconds("yonetici", now=1000.0))
+            throttle.register_failure("yonetici", now=1000.0)
+            self.assertEqual(2, throttle.wait_seconds("yonetici", now=1000.0))
+            throttle.register_failure("yonetici", now=1000.0)
+            self.assertEqual(4, throttle.wait_seconds("yonetici", now=1000.0))
+            # Bekleme süresi dolunca deneme yeniden serbesttir.
+            self.assertEqual(0, throttle.wait_seconds("yonetici", now=1004.0))
+            # Diğer profiller etkilenmez.
+            self.assertEqual(0, throttle.wait_seconds("nobetci", now=1000.0))
+            # Sayaç kalıcıdır: yeni örnek aynı durumu okur.
+            self.assertEqual(4, LoginThrottle(path).wait_seconds("yonetici", now=1000.0))
+            # Başarılı giriş sayacı sıfırlar.
+            throttle.register_success("yonetici")
+            self.assertEqual(0, throttle.wait_seconds("yonetici", now=1000.0))
+            self.assertEqual(0, LoginThrottle(path).wait_seconds("yonetici", now=1000.0))
 
     def test_corrupt_hash_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
