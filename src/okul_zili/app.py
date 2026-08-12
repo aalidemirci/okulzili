@@ -88,6 +88,23 @@ EVENT_LABELS = {
     EventType.CEREMONY: "Tören",
     EventType.MANUAL: "Manuel",
 }
+EVENT_TYPES_BY_LABEL = {label: item for item, label in EVENT_LABELS.items()}
+SESSION_LABELS = {
+    "normal": "Normal (tek öğretim)",
+    "sabah": "Sabah",
+    "ogle": "Öğleden sonra",
+    "ortak": "Ortak (her iki oturum)",
+}
+SESSIONS_BY_LABEL = {label: item for item, label in SESSION_LABELS.items()}
+
+
+def _parse_turkish_date(text: str) -> date:
+    """gg.aa.yyyy biçimini kabul eder; eski kayıtlar için ISO'ya da izin verir."""
+    cleaned = text.strip()
+    try:
+        return datetime.strptime(cleaned, "%d.%m.%Y").date()
+    except ValueError:
+        return date.fromisoformat(cleaned)
 
 
 def _read_primary_license() -> str:
@@ -112,6 +129,7 @@ RULE_LABELS = {
     ExceptionKind.EXAM: "Sınav günü",
     ExceptionKind.DATE_SCHEDULE: "Tarihe özel program",
 }
+RULES_BY_LABEL = {label: item for item, label in RULE_LABELS.items()}
 
 
 TEAL = ACCENT
@@ -251,10 +269,21 @@ class EventEditor(SafeModalToplevel):
         self.configure(fg_color=CANVAS)
         self.on_save = on_save
         self.time_var = tk.StringVar(value=event.at.strftime("%H:%M") if event else "08:20")
-        self.type_var = tk.StringVar(value=(event.event_type.value if event else EventType.LESSON_START.value))
+        event_type = event.event_type if event else EventType.LESSON_START
+        self.type_var = tk.StringVar(value=EVENT_LABELS[event_type])
         self.label_var = tk.StringVar(value=event.label if event else "Yeni zil")
-        self.sound_var = tk.StringVar(value=event.sound_id if event else "ogretmen")
-        self.session_var = tk.StringVar(value=event.session if event else "normal")
+        # O16: kullanıcı ham kimlik değil katalog etiketi görür; katalogda
+        # olmayan (elle düzenlenmiş) kimlik olduğu gibi listeye eklenir.
+        sound_id = event.sound_id if event else "ogretmen"
+        self._sound_options = [item.label for item in SOUND_DEFINITIONS]
+        if sound_id in SOUND_BY_ID:
+            initial_sound = SOUND_BY_ID[sound_id].label
+        else:
+            initial_sound = sound_id
+            self._sound_options.append(sound_id)
+        self.sound_var = tk.StringVar(value=initial_sound)
+        session = event.session if event else "normal"
+        self.session_var = tk.StringVar(value=SESSION_LABELS.get(session, session))
 
         card = ctk.CTkFrame(self, fg_color=SURFACE, corner_radius=18, border_width=1, border_color=BORDER)
         card.pack(fill="both", expand=True, padx=24, pady=24)
@@ -263,11 +292,11 @@ class EventEditor(SafeModalToplevel):
         form.pack(fill="both", expand=True, padx=26)
         form.grid_columnconfigure(1, weight=1)
         fields = (
-            ("Saat (SS:DD)", ctk.CTkEntry(form, textvariable=self.time_var, height=40, corner_radius=10, fg_color=SURFACE, border_color=BORDER)),
-            ("Tür", ctk.CTkComboBox(form, variable=self.type_var, values=[item.value for item in EventType], state="readonly", height=40, corner_radius=10, fg_color=SURFACE, border_color=BORDER, button_color=TEAL)),
-            ("Açıklama", ctk.CTkEntry(form, textvariable=self.label_var, height=40, corner_radius=10, fg_color=SURFACE, border_color=BORDER)),
-            ("Ses kimliği", ctk.CTkEntry(form, textvariable=self.sound_var, height=40, corner_radius=10, fg_color=SURFACE, border_color=BORDER)),
-            ("Oturum", ctk.CTkComboBox(form, variable=self.session_var, values=["normal", "sabah", "ogle", "ortak"], state="readonly", height=40, corner_radius=10, fg_color=SURFACE, border_color=BORDER, button_color=TEAL)),
+            ("Saat (SS:DD)", ctk.CTkEntry(form, textvariable=self.time_var, width=400, height=40, corner_radius=10, fg_color=SURFACE, border_color=BORDER)),
+            ("Tür", ctk.CTkComboBox(form, variable=self.type_var, values=[EVENT_LABELS[item] for item in EventType], state="readonly", width=400, height=40, corner_radius=10, fg_color=SURFACE, border_color=BORDER, button_color=TEAL)),
+            ("Açıklama", ctk.CTkEntry(form, textvariable=self.label_var, width=400, height=40, corner_radius=10, fg_color=SURFACE, border_color=BORDER)),
+            ("Ses", ctk.CTkComboBox(form, variable=self.sound_var, values=self._sound_options, state="readonly", width=400, height=40, corner_radius=10, fg_color=SURFACE, border_color=BORDER, button_color=TEAL)),
+            ("Oturum", ctk.CTkComboBox(form, variable=self.session_var, values=[SESSION_LABELS[item] for item in ("normal", "sabah", "ogle", "ortak")], state="readonly", width=400, height=40, corner_radius=10, fg_color=SURFACE, border_color=BORDER, button_color=TEAL)),
         )
         for row, (label, widget) in enumerate(fields):
             ctk.CTkLabel(form, text=label, anchor="w", text_color=INK_SUBTLE, font=ctk.CTkFont("Segoe UI Variable Text", 12, "bold")).grid(row=row, column=0, sticky="w", pady=9, padx=(0, 18))
@@ -280,16 +309,21 @@ class EventEditor(SafeModalToplevel):
     def _save(self) -> None:
         try:
             parsed_time = time.fromisoformat(self.time_var.get().strip())
+            sound_label = self.sound_var.get().strip()
+            sound_id = next(
+                (item.sound_id for item in SOUND_DEFINITIONS if item.label == sound_label),
+                sound_label,
+            )
             item = EventSpec(
                 at=parsed_time,
-                event_type=EventType(self.type_var.get()),
+                event_type=EVENT_TYPES_BY_LABEL[self.type_var.get()],
                 label=self.label_var.get().strip(),
-                sound_id=self.sound_var.get().strip(),
-                session=self.session_var.get(),
+                sound_id=sound_id,
+                session=SESSIONS_BY_LABEL.get(self.session_var.get(), self.session_var.get()),
             )
             if not item.label or not item.sound_id:
-                raise ValueError("Açıklama ve ses kimliği boş bırakılamaz.")
-        except ValueError as exc:
+                raise ValueError("Açıklama ve ses boş bırakılamaz.")
+        except (KeyError, ValueError) as exc:
             messagebox.showerror("Geçersiz bilgi", str(exc), parent=self)
             return
         self.on_save(item)
@@ -306,66 +340,75 @@ class RuleEditor(SafeModalToplevel):
     ) -> None:
         super().__init__(parent)
         self.title("İstisna düzenle" if rule else "Tatil veya istisna ekle")
-        self.resizable(True, True)
-        self.configure(fg_color=CANVAS)
         self.on_save = on_save
         self.weekly_schedule = weekly_schedule
         self.events = list(rule.events if rule else ())
         self.name_var = tk.StringVar(value=rule.name if rule else "Yeni tatil")
-        self.kind_var = tk.StringVar(value=(rule.kind.value if rule else ExceptionKind.HOLIDAY.value))
-        self.start_var = tk.StringVar(value=rule.start.isoformat() if rule else date.today().isoformat())
-        self.end_var = tk.StringVar(value=rule.end.isoformat() if rule else date.today().isoformat())
+        initial_kind = rule.kind if rule else ExceptionKind.HOLIDAY
+        self.kind_var = tk.StringVar(value=RULE_LABELS[initial_kind])
+        self.start_var = tk.StringVar(value=(rule.start if rule else date.today()).strftime("%d.%m.%Y"))
+        self.end_var = tk.StringVar(value=(rule.end if rule else date.today()).strftime("%d.%m.%Y"))
         self.target_var = tk.StringVar(value=WEEKDAYS[rule.target_weekday] if rule and rule.target_weekday is not None else WEEKDAYS[0])
 
-        form = ttk.Frame(self, padding=16)
-        form.grid(sticky="nsew")
-        ttk.Label(form, text="Ad").grid(row=0, column=0, sticky="w", pady=5, padx=(0, 10))
-        ttk.Entry(form, textvariable=self.name_var, width=32).grid(row=0, column=1, sticky="ew", pady=5)
-        ttk.Label(form, text="Tür").grid(row=1, column=0, sticky="w", pady=5, padx=(0, 10))
-        ttk.Combobox(
-            form,
-            textvariable=self.kind_var,
-            values=[item.value for item in ExceptionKind],
-            state="readonly",
-            width=29,
-        ).grid(row=1, column=1, sticky="ew", pady=5)
-        ttk.Label(form, text="Başlangıç (YYYY-AA-GG)").grid(row=2, column=0, sticky="w", pady=5, padx=(0, 10))
-        ttk.Entry(form, textvariable=self.start_var, width=32).grid(row=2, column=1, sticky="ew", pady=5)
-        ttk.Label(form, text="Bitiş (YYYY-AA-GG)").grid(row=3, column=0, sticky="w", pady=5, padx=(0, 10))
-        ttk.Entry(form, textvariable=self.end_var, width=32).grid(row=3, column=1, sticky="ew", pady=5)
-        ttk.Label(form, text="Telafi edilecek gün").grid(row=4, column=0, sticky="w", pady=5, padx=(0, 10))
-        ttk.Combobox(form, textvariable=self.target_var, values=WEEKDAYS, state="readonly", width=29).grid(row=4, column=1, sticky="ew", pady=5)
-        ttk.Label(
+        card = _dialog_card(self, 680, 760)
+        _dialog_title(
+            card,
+            "İstisnayı düzenle" if rule else "Tatil veya istisna ekle",
+            "Tatil, tören, sınav, kısaltılmış gün veya telafi gününü tanımlayın.",
+        )
+        buttons = ctk.CTkFrame(card, fg_color="transparent")
+        buttons.pack(side="bottom", fill="x", padx=26, pady=(10, 22))
+        _primary_button(buttons, "Kaydet", self._save, 120).pack(side="right")
+        _secondary_button(buttons, "İptal", self.destroy, 100).pack(side="right", padx=(0, 10))
+
+        form = ctk.CTkFrame(card, fg_color="transparent")
+        form.pack(fill="x", padx=26)
+        form.grid_columnconfigure(1, weight=1)
+        fields = (
+            ("Ad", ctk.CTkEntry(form, textvariable=self.name_var, height=40, corner_radius=10, fg_color=SURFACE, border_color=BORDER)),
+            ("Tür", ctk.CTkComboBox(form, variable=self.kind_var, values=[RULE_LABELS[item] for item in ExceptionKind], state="readonly", height=40, corner_radius=10, fg_color=SURFACE, border_color=BORDER, button_color=TEAL)),
+            ("Başlangıç (gg.aa.yyyy)", ctk.CTkEntry(form, textvariable=self.start_var, height=40, corner_radius=10, fg_color=SURFACE, border_color=BORDER)),
+            ("Bitiş (gg.aa.yyyy)", ctk.CTkEntry(form, textvariable=self.end_var, height=40, corner_radius=10, fg_color=SURFACE, border_color=BORDER)),
+            ("Telafi edilecek gün", ctk.CTkComboBox(form, variable=self.target_var, values=list(WEEKDAYS), state="readonly", height=40, corner_radius=10, fg_color=SURFACE, border_color=BORDER, button_color=TEAL)),
+        )
+        for row, (label, widget) in enumerate(fields):
+            ctk.CTkLabel(form, text=label, anchor="w", text_color=INK_SUBTLE, font=ctk.CTkFont("Segoe UI Variable Text", 12, "bold")).grid(row=row, column=0, sticky="w", pady=5, padx=(0, 18))
+            widget.grid(row=row, column=1, sticky="ew", pady=5)
+        ctk.CTkLabel(
             form,
             text="Telafi günü seçilirse belirtilen hafta gününün programı uygulanır.",
-            foreground=resolve(MUTED),
-            wraplength=380,
-        ).grid(row=5, column=0, columnspan=2, sticky="w", pady=(8, 0))
-        event_group = ttk.LabelFrame(form, text="Özel gün olayları", padding=10)
-        event_group.grid(row=6, column=0, columnspan=2, sticky="nsew", pady=(12, 0))
-        event_toolbar = ttk.Frame(event_group)
-        event_toolbar.pack(fill="x", pady=(0, 8))
-        ttk.Button(event_toolbar, text="Olay ekle", command=self._add_event).pack(side="left")
-        ttk.Button(event_toolbar, text="Düzenle", command=self._edit_event).pack(side="left", padx=6)
-        ttk.Button(event_toolbar, text="Sil", command=self._delete_event).pack(side="left")
-        ttk.Button(event_toolbar, text="Haftalık günü kopyala", command=self._copy_weekday).pack(side="right")
-        self.event_tree = ttk.Treeview(event_group, columns=("time", "type", "label", "sound"), show="headings", height=7)
-        for key, label, width in (("time", "Saat", 70), ("type", "Tür", 130), ("label", "Açıklama", 240), ("sound", "Ses", 100)):
+            anchor="w",
+            justify="left",
+            wraplength=520,
+            text_color=MUTED,
+            font=ctk.CTkFont("Segoe UI Variable Text", 12),
+        ).grid(row=len(fields), column=0, columnspan=2, sticky="w", pady=(4, 0))
+
+        events_card = ctk.CTkFrame(card, fg_color=SURFACE, corner_radius=12, border_width=1, border_color=BORDER)
+        events_card.pack(fill="both", expand=True, padx=26, pady=(14, 0))
+        ctk.CTkLabel(events_card, text="Özel gün olayları", anchor="w", text_color=INK_SUBTLE, font=ctk.CTkFont("Segoe UI Variable Text", 12, "bold")).pack(fill="x", padx=14, pady=(12, 4))
+        toolbar = ctk.CTkFrame(events_card, fg_color="transparent")
+        toolbar.pack(fill="x", padx=14, pady=(0, 8))
+        _secondary_button(toolbar, "Olay ekle", self._add_event, 104).pack(side="left")
+        _secondary_button(toolbar, "Düzenle", self._edit_event, 96).pack(side="left", padx=8)
+        _secondary_button(toolbar, "Sil", self._delete_event, 70).pack(side="left")
+        _secondary_button(toolbar, "Haftalık günü kopyala", self._copy_weekday, 180).pack(side="right")
+        self.event_tree = ttk.Treeview(events_card, columns=("time", "type", "label", "sound"), show="headings", height=6)
+        for key, label, width in (("time", "Saat", 70), ("type", "Tür", 150), ("label", "Açıklama", 220), ("sound", "Ses", 160)):
             self.event_tree.heading(key, text=label)
             self.event_tree.column(key, width=width, anchor="w")
-        self.event_tree.pack(fill="both", expand=True)
+        self.event_tree.pack(fill="both", expand=True, padx=14, pady=(0, 14))
         self.event_tree.bind("<Double-1>", lambda event: self._edit_event())
-        buttons = ttk.Frame(form)
-        buttons.grid(row=7, column=0, columnspan=2, sticky="e", pady=(14, 0))
-        ttk.Button(buttons, text="İptal", command=self.destroy).pack(side="right")
-        ttk.Button(buttons, text="Kaydet", command=self._save).pack(side="right", padx=8)
         self._refresh_events()
 
     def _save(self) -> None:
         try:
-            kind = ExceptionKind(self.kind_var.get())
-            start = date.fromisoformat(self.start_var.get().strip())
-            end = date.fromisoformat(self.end_var.get().strip())
+            kind = RULES_BY_LABEL[self.kind_var.get()]
+            try:
+                start = _parse_turkish_date(self.start_var.get())
+                end = _parse_turkish_date(self.end_var.get())
+            except ValueError:
+                raise ValueError("Tarihleri gg.aa.yyyy biçiminde yazın (ör. 23.04.2027).")
             if end < start:
                 raise ValueError("Bitiş tarihi başlangıçtan önce olamaz.")
             if not self.name_var.get().strip():
@@ -375,7 +418,7 @@ class RuleEditor(SafeModalToplevel):
             if kind not in (ExceptionKind.HOLIDAY, ExceptionKind.MAKEUP) and not events:
                 raise ValueError("Bu istisna türü için en az bir olay ekleyin veya haftalık günü kopyalayın.")
             item = DateRule(self.name_var.get().strip(), kind, start, end, events, target)
-        except ValueError as exc:
+        except (KeyError, ValueError) as exc:
             messagebox.showerror("Geçersiz bilgi", str(exc), parent=self)
             return
         self.on_save(item)
@@ -386,7 +429,8 @@ class RuleEditor(SafeModalToplevel):
             self.event_tree.delete(item)
         self.events = list(sort_specs(self.events))
         for index, event in enumerate(self.events):
-            self.event_tree.insert("", "end", iid=str(index), values=(event.at.strftime("%H:%M"), EVENT_LABELS[event.event_type], event.label, event.sound_id))
+            sound = SOUND_BY_ID[event.sound_id].label if event.sound_id in SOUND_BY_ID else event.sound_id
+            self.event_tree.insert("", "end", iid=str(index), values=(event.at.strftime("%H:%M"), EVENT_LABELS[event.event_type], event.label, sound))
 
     def _selected_event_index(self) -> int | None:
         selected = self.event_tree.selection()
@@ -419,9 +463,9 @@ class RuleEditor(SafeModalToplevel):
 
     def _copy_weekday(self) -> None:
         try:
-            day = date.fromisoformat(self.start_var.get().strip())
+            day = _parse_turkish_date(self.start_var.get())
         except ValueError:
-            messagebox.showerror("Geçersiz tarih", "Önce geçerli başlangıç tarihini yazın.", parent=self)
+            messagebox.showerror("Geçersiz tarih", "Önce geçerli başlangıç tarihini gg.aa.yyyy biçiminde yazın.", parent=self)
             return
         self.events = list(self.weekly_schedule.get(day.weekday(), ()))
         self._refresh_events()
@@ -2508,7 +2552,7 @@ class OkulZiliApp:
                 "",
                 "end",
                 iid=str(index),
-                values=(rule.name, RULE_LABELS.get(rule.kind, rule.kind.value), rule.start.isoformat(), rule.end.isoformat(), target),
+                values=(rule.name, RULE_LABELS.get(rule.kind, rule.kind.value), rule.start.strftime("%d.%m.%Y"), rule.end.strftime("%d.%m.%Y"), target),
             )
 
     def _show_alerts(self, alerts: list[CheckResult]) -> None:
@@ -3226,6 +3270,41 @@ def main() -> int:
         root.update_idletasks()
         root.destroy()
         return 0 if valid else 5
+    if "--istisna-kontrol" in sys.argv:
+        # O16/RuleEditor kabulü: diyaloglar Türkçe etiket ve gg.aa.yyyy
+        # girişini iç değerlere doğru çeviriyor mu?
+        root = ctk.CTk()
+        root.withdraw()
+        captured: dict[str, object] = {}
+        editor = RuleEditor(root, None, {}, lambda item: captured.__setitem__("rule", item))
+        editor.withdraw()
+        editor.name_var.set("23 Nisan")
+        editor.kind_var.set(RULE_LABELS[ExceptionKind.HOLIDAY])
+        editor.start_var.set("23.04.2027")
+        editor.end_var.set("23.04.2027")
+        editor._save()
+        saved_rule = captured.get("rule")
+        rule_ok = (
+            isinstance(saved_rule, DateRule)
+            and saved_rule.kind is ExceptionKind.HOLIDAY
+            and saved_rule.start == date(2027, 4, 23)
+        )
+        event_editor = EventEditor(root, None, lambda item: captured.__setitem__("event", item))
+        event_editor.withdraw()
+        event_editor.type_var.set(EVENT_LABELS[EventType.CEREMONY])
+        event_editor.sound_var.set(SOUND_BY_ID["istiklal_sozlu"].label)
+        event_editor.session_var.set(SESSION_LABELS["ortak"])
+        event_editor._save()
+        saved_event = captured.get("event")
+        event_ok = (
+            isinstance(saved_event, EventSpec)
+            and saved_event.sound_id == "istiklal_sozlu"
+            and saved_event.event_type is EventType.CEREMONY
+            and saved_event.session == "ortak"
+        )
+        root.update_idletasks()
+        root.destroy()
+        return 0 if rule_ok and event_ok else 13
     if "--baslangic-kontrol" in sys.argv:
         root = ctk.CTk()
         startup = _prepare_startup_root(root)

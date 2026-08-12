@@ -301,12 +301,17 @@ uçtan uca kurulum testi yapılmadan Linux paketi dağıtılmamalı.**
 - [x] **O7** *(12.08.2026)* — Çalma anındaki cihaz kaybında yedek bip
   başarısızsa `'varsayilan'` çıkışta bir kez daha deneniyor; iki dal aynı
   davranışta. Regresyon testi eklendi.
-- [ ] **O16** — EventEditor'da `EVENT_LABELS` etiketleri, ses için katalog
-  etiketli readonly combobox, oturum için Türkçe etiketler kullan.
-- [ ] **RuleEditor'ı CTk tasarımına geçir (saha bulgusu)** — `_dialog_card` +
-  `_dialog_title` + CTkEntry/CTkComboBox kalıbına al; "Tür" kutusunda Türkçe
-  etiketler göster; tarih girişini gg.aa.yyyy kabul edecek şekilde düzelt.
-  İçindeki olay tablosu ttk.Treeview kalabilir (stil zaten tanımlı).
+- [x] **O16** *(12.08.2026)* — EventEditor artık tür için `EVENT_LABELS`,
+  ses için katalog etiketli readonly combobox (katalogda olmayan kimlik
+  olduğu gibi listelenir), oturum için Türkçe etiketler kullanıyor; ham
+  kimlik hiçbir alanda görünmüyor.
+- [x] **RuleEditor CTk geçişi** *(12.08.2026)* — `_dialog_card` +
+  `_dialog_title` + CTkEntry/CTkComboBox kalıbına alındı; "Tür" kutusu
+  `RULE_LABELS` Türkçe etiketleriyle, tarih girişleri gg.aa.yyyy (eski ISO da
+  kabul edilir, `_parse_turkish_date`). Olay tablosu stilli ttk.Treeview
+  olarak kaldı ve ses sütunu katalog etiketi gösteriyor; kurallar sayfası
+  tarihleri de gg.aa.yyyy oldu. Kabul: yeni `--istisna-kontrol` öz-testi
+  (iki doğrulama betiğine eklendi) + ekran görüntüsüyle görsel doğrulama.
 
 ### Faz 3 — Belge ve depo hijyeni
 > Karar (11.08.2026): **Zil sesleri paketten ve depodan çıkarılmayacak.**
