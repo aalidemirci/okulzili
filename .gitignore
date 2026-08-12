@@ -13,3 +13,4 @@ dist/
 runtime/
 *.log
 *.bak
+.DS_Store
