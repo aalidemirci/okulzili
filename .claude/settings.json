@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Get-Process *)",
+      "PowerShell(tasklist *)",
+      "PowerShell(python -m unittest *)",
+      "Bash(python -m unittest *)",
+      "Bash(PYTHONPATH=src python -m unittest *)",
+      "Bash(gh run watch *)",
+      "PowerShell(gh run watch *)"
+    ]
+  }
+}
