@@ -13,11 +13,25 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from okul_zili import __version__ as VERSION
 
 
+# Windows çalışma kopyasında CRLF'ye dönmüş olabilecek metin dosyaları pakete
+# LF ile girer; aksi hâlde "#!/bin/sh\r" Pardus'ta çalışmaz, control dosyası
+# dpkg tarafından okunamaz (8.1).
+_TEXT_SUFFIXES = {".sh", ".py", ".desktop", ".service", ".md", ".txt"}
+_TEXT_NAMES = {"control", "postinst", "prerm", "okul-zili", "LICENSE", "NOTICE"}
+
+
+def _read_entry(source: Path) -> bytes:
+    data = source.read_bytes()
+    if source.suffix in _TEXT_SUFFIXES or source.name in _TEXT_NAMES:
+        return data.replace(b"\r\n", b"\n")
+    return data
+
+
 def _tar_xz(entries: list[tuple[Path | None, str, int, bytes | None]]) -> bytes:
     output = io.BytesIO()
     with tarfile.open(fileobj=output, mode="w:xz", format=tarfile.GNU_FORMAT) as archive:
         for source, name, mode, inline in entries:
-            data = inline if inline is not None else source.read_bytes()  # type: ignore[union-attr]
+            data = inline if inline is not None else _read_entry(source)  # type: ignore[arg-type]
             info = tarfile.TarInfo(name=name)
             info.size = len(data)
             info.mode = mode
@@ -111,10 +125,10 @@ def build(project_root: Path, output: Path) -> None:
     md5_lines: list[str] = []
     installed_bytes = 0
     for source, name, _mode, inline in data_entries:
-        data = inline if inline is not None else source.read_bytes()  # type: ignore[union-attr]
+        data = inline if inline is not None else _read_entry(source)  # type: ignore[arg-type]
         installed_bytes += len(data)
         md5_lines.append(f"{hashlib.md5(data).hexdigest()}  {name[2:]}\n")
-    control_text = (package_dir / "control").read_text(encoding="utf-8").rstrip("\n")
+    control_text = _read_entry(package_dir / "control").decode("utf-8").rstrip("\n")
     control_text += f"\nInstalled-Size: {max(1, (installed_bytes + 1023) // 1024)}\n"
     control_entries[0] = (None, "./control", 0o644, control_text.encode("utf-8"))
     control_entries.append((None, "./md5sums", 0o644, "".join(md5_lines).encode("utf-8")))

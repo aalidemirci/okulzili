@@ -41,6 +41,7 @@ class DebBuilderTests(unittest.TestCase):
                 # 8.1: dpkg araçlarının beklediği alanlar.
                 self.assertIn("./md5sums", archive.getnames())
                 control_text = archive.extractfile("./control").read().decode("utf-8")  # type: ignore[union-attr]
+                self.assertNotIn("\r", control_text)
                 self.assertRegex(control_text, r"Installed-Size: \d+")
                 self.assertIn("tzdata", control_text)
                 md5_text = archive.extractfile("./md5sums").read().decode("utf-8")  # type: ignore[union-attr]
@@ -48,6 +49,9 @@ class DebBuilderTests(unittest.TestCase):
             with tarfile.open(fileobj=io.BytesIO(members["data.tar.xz"]), mode="r:xz") as archive:
                 names = archive.getnames()
                 self.assertIn("./usr/bin/okul-zili", names)
+                # 8.1: Windows çalışma kopyası CRLF olsa da paket içi betikler LF'dir.
+                for text_member in ("./usr/bin/okul-zili", "./usr/share/okul-zili/tools/verify-linux-install.sh", "./usr/lib/systemd/user/okul-zili.service"):
+                    self.assertNotIn(b"\r", archive.extractfile(text_member).read(), text_member)  # type: ignore[union-attr]
                 self.assertIn("./usr/lib/python3/dist-packages/okul_zili/app.py", names)
                 self.assertIn("./usr/lib/python3/dist-packages/okul_zili/assets/sounds/meb-ogretmen.wav", names)
                 self.assertIn("./usr/lib/python3/dist-packages/okul_zili/assets/sounds/meb-ogrenci-teneffus.wav", names)
