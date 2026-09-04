@@ -192,7 +192,7 @@ class DaySchedule:
         for session in sessions:
             errors.extend(session.validate(f"{prefix}{session.name}: "))
 
-        bounds: list[tuple[int, int, str]] = []
+        bounds: list[tuple[int, int, str, int]] = []
         for session in sessions:
             try:
                 parsed = time.fromisoformat(session.first_lesson)
@@ -208,10 +208,14 @@ class DaySchedule:
                     cursor += session.lunch_minutes if completed == session.lunch_after else session.break_minutes
             if cursor >= 24 * 60:
                 errors.append(f"{prefix}{session.name}: program aynı gün içinde bitmelidir.")
-            bounds.append((start, cursor, session.name))
+            # Öğrenci zili oturum başlangıcından önce çaldığı için oturumun
+            # gerçek ilk sesi bu kadar dakika erkendir; çakışma denetimi onu
+            # da kapsar (aksi hâlde öğle öğrenci zili sabahın son dersinde çalar).
+            lead = session.student_bell_minutes if session.student_bell_enabled else 0
+            bounds.append((start, cursor, session.name, lead))
         bounds.sort()
         for previous, current in zip(bounds, bounds[1:]):
-            if current[0] <= previous[1]:
+            if current[0] - current[3] <= previous[1]:
                 errors.append(
                     f"{prefix}{previous[2]} ile {current[2]} oturumları veya geçiş zilleri çakışıyor."
                 )
@@ -383,6 +387,11 @@ class BellEvent:
     @classmethod
     def create(cls, day: date, spec: EventSpec, source: str) -> "BellEvent":
         scheduled_at = datetime.combine(day, spec.at)
+        # Kimlik yalnız zilin KENDİSİNİ tanımlayan alanlardan türetilir; kaynak
+        # kural adı bilinçli olarak dışarıda tutulur. Aksi hâlde gün içinde bir
+        # tören kuralı eklemek/adını düzeltmek günün tüm kimliklerini değiştirir
+        # ve tolerans içindeki zil ikinci kez çalardı (D1). Formül değişirse
+        # scheduler.STATE_IDENTITY_VERSION artırılır.
         identity = "|".join(
             (
                 day.isoformat(),
@@ -391,7 +400,6 @@ class BellEvent:
                 spec.sound_id,
                 spec.session,
                 str(spec.sequence),
-                source,
             )
         )
         event_id = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:24]

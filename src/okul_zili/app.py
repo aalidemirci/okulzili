@@ -166,7 +166,7 @@ class OkulZiliApp:
 
             self.config = default_config()
         self.backend = PlatformAudioBackend()
-        self.playback = PlaybackManager(self.backend)
+        self.playback = PlaybackManager(self.backend, cache_dir=self.data_dir / "onbellek" / "zil-seviye")
         self.recess_music = RecessMusicManager(self.data_dir / "onbellek" / "teneffus-muzigi")
         self.engine = CalendarEngine(self.config)
         self.notice_queue: queue.Queue[SchedulerNotice] = queue.Queue(maxsize=500)
@@ -226,6 +226,7 @@ class OkulZiliApp:
         log_event(self.logger, "sistem_tepsisi", etkin=tray_started)
         self._start_scheduler_worker()
         self._start_time_check_worker()
+        self._prewarm_volume_cache()
         self._refresh_all()
         self.root.after(100, self._drain_notices)
         self.root.after(350, self._open_first_run_sound_test)
@@ -1841,10 +1842,13 @@ class OkulZiliApp:
             if show_error:
                 messagebox.showerror("Kaydetme hatası", str(exc), parent=self.root)
             return False
+        previous = self.config
         self.config = new_config
         self.engine = CalendarEngine(new_config)
         self.scheduler.update_config(new_config, self.engine)
         log_event(self.logger, "yapilandirma_kaydedildi")
+        if previous.bell_volume != new_config.bell_volume or previous.sounds != new_config.sounds:
+            self._prewarm_volume_cache()
         self._refresh_all()
         return True
 
@@ -2107,12 +2111,35 @@ class OkulZiliApp:
         )
         self._scheduler_thread.start()
 
+    def _prewarm_volume_cache(self) -> None:
+        """Ses düzeyi %100 değilse ölçeklenmiş kopyaları arka planda hazırlar (D5).
+
+        İlk zil, saniyeler süren örnek örnek ölçeklemeyi beklemez; kopyalar
+        önbellekte hazır durur ve sonraki çalmalarda yeniden kullanılır.
+        """
+        if int(self.config.bell_volume) == 100:
+            return
+        paths = [self.data_dir / relative for relative in sorted(set(self.config.sounds.values()))]
+        volume = self.config.bell_volume
+
+        def worker() -> None:
+            try:
+                prepared = self.playback.prewarm_volume_cache(paths, volume)
+                log_event(self.logger, "ses_duzeyi_onbellegi", hazirlanan=prepared, ses_yuzde=volume)
+            except Exception as exc:  # önbellek konfor katmanıdır; çalma yolunu etkilemez
+                log_event(self.logger, "ses_duzeyi_onbellegi", level="uyarı", hata=repr(exc))
+
+        threading.Thread(target=worker, name="ses-duzeyi-onbellek", daemon=True).start()
+
     def _scheduler_loop(self) -> None:
         while not self._shutdown_event.is_set():
             wait_seconds = 1.0
-            if self.scheduler_running:
+            if not self._shutdown_event.is_set():
                 try:
-                    self.scheduler.tick()
+                    # Duraklatılmışken de tur döner: vadesi gelen olaylar
+                    # "duraklatma nedeniyle çalınmadı" olarak işaretlenir,
+                    # saat/uyku denetimi sürer (6.5).
+                    self.scheduler.tick(paused=not self.scheduler_running)
                     if self._scheduler_failure_count:
                         log_event(
                             self.logger,

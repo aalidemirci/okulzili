@@ -28,6 +28,10 @@ def _split_extra_events_v7(raw: dict[str, Any]) -> dict[str, Any]:
     skeleton: dict[str, list[Any]] = {}
     extras: dict[str, list[Any]] = {}
     for day, events in dict(raw.get("weekly_schedule", {})).items():
+        if not all(isinstance(item, dict) for item in events):
+            # Elle bozulmuş v6 dosyası: açılışta çökmek yerine karantina
+            # zincirine (ConfigError) düşer.
+            raise ConfigError(f"{day}. gün olay listesinde nesne olmayan öğe var.")
         skeleton[day] = [
             item for item in events if item.get("event_type") in _LESSON_FLOW_TYPE_VALUES
         ]
@@ -80,7 +84,7 @@ class ConfigRepository:
             return config
         try:
             return self._read_validated(self.path)
-        except (OSError, ValueError, KeyError, TypeError, AssertionError, ConfigError) as primary_error:
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, AssertionError, ConfigError) as primary_error:
             backup = self.path.with_suffix(self.path.suffix + ".bak")
             if backup.exists():
                 try:
@@ -92,7 +96,7 @@ class ConfigRepository:
                         f"Neden: {primary_error}"
                     )
                     return recovered
-                except (OSError, ValueError, KeyError, TypeError, AssertionError, ConfigError):
+                except (OSError, ValueError, KeyError, TypeError, AttributeError, AssertionError, ConfigError):
                     pass
             quarantined = self._quarantine(self.path)
             self._quarantine(backup)

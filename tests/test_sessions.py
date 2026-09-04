@@ -127,6 +127,17 @@ class SessionAndBlockScheduleTests(unittest.TestCase):
         )
         self.assertTrue(any("geçiş zilleri" in item for item in schedule.validate()))
 
+    def test_student_bell_lead_counts_toward_session_overlap(self) -> None:
+        # 6.7: öğle öğrenci zili sabahın son dersinin içine düşmemeli.
+        make = lambda start: DaySchedule(
+            sessions=(
+                SessionSchedule(session_id="sabah", name="Sabah", first_lesson="08:00", lesson_count=1, lunch_after=0, student_bell_enabled=False),
+                SessionSchedule(session_id="ogle", name="Öğleden sonra", first_lesson=start, lesson_count=1, lunch_after=0, student_bell_enabled=True, student_bell_minutes=2),
+            )
+        )
+        self.assertTrue(any("çakışıyor" in item for item in make("08:41").validate()))
+        self.assertEqual([], make("08:43").validate())
+
     def test_lunch_cannot_split_a_block(self) -> None:
         session = SessionSchedule(
             lesson_count=4,

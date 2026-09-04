@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 
 from .domain import (
     CURRENT_SCHEMA_VERSION,
@@ -12,6 +12,16 @@ from .domain import (
     SessionSchedule,
     sort_specs,
 )
+
+
+def _parse_clock(value: str) -> datetime:
+    """"08:20" ya da "08:20:00" biçimindeki saati sabit bir güne bağlar.
+
+    ``time.fromisoformat`` her ikisini de kabul eder; domain doğrulaması da
+    aynı ayrıştırıcıyı kullandığından "geçerli sayılıp üretimde patlayan"
+    saat kalmaz (6.7).
+    """
+    return datetime.combine(date(1900, 1, 1), time.fromisoformat(value.strip()))
 
 
 def _event(at: datetime, event_type: EventType, label: str, sound_id: str) -> EventSpec:
@@ -44,7 +54,7 @@ def generate_day(
 def generate_session(
     session: SessionSchedule, *, include_session_name: bool = False
 ) -> tuple[EventSpec, ...]:
-    cursor = datetime.strptime(session.first_lesson, "%H:%M")
+    cursor = _parse_clock(session.first_lesson)
     events: list[EventSpec] = []
     completed_lessons = 0
     for block_index, block_size in enumerate(session.effective_blocks):
@@ -347,7 +357,7 @@ def suggest_next_session_start(session: SessionSchedule, gap_minutes: int = 20) 
     ``gap_minutes`` dakikalık geçiş payı eklenir ve saat beşer dakikaya
     yuvarlanır.
     """
-    cursor = datetime.strptime(session.first_lesson, "%H:%M")
+    cursor = _parse_clock(session.first_lesson)
     blocks = session.effective_blocks
     completed = 0
     for index, size in enumerate(blocks):

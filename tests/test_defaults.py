@@ -32,6 +32,14 @@ class DefaultScheduleTests(unittest.TestCase):
         self.assertEqual(18, len(config.weekly_schedule[0]))
         self.assertEqual(set(range(5)), set(config.weekly_schedule))
 
+    def test_seconds_in_first_lesson_time_are_accepted(self) -> None:
+        # 6.7: domain doğrulaması "08:20:00" biçimini kabul eder; üretim de etmeli.
+        from okul_zili.domain import SessionSchedule
+        from okul_zili.defaults import generate_session
+
+        events = generate_session(SessionSchedule(first_lesson="08:20:00", student_bell_enabled=False))
+        self.assertEqual(time(8, 20), events[0].at)
+
     def test_default_day_has_eight_starts_and_ends(self) -> None:
         events = generate_day()
         self.assertEqual(24, len(events))

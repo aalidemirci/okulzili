@@ -62,6 +62,53 @@ class CalendarEngineTests(unittest.TestCase):
         self.assertIn("Bayrak töreni anonsu", merged_labels)
         self.assertIn("Tören", merged_labels)
 
+    def test_two_ceremonies_on_the_same_day_both_ring(self) -> None:
+        # D2: ikili eğitimde sabah ve öğle İstiklâl Marşı için iki tören kuralı.
+        monday = date(2026, 9, 7)
+        make = lambda name, at: DateRule(
+            name, ExceptionKind.CEREMONY, monday, monday,
+            (EventSpec(at, EventType.CEREMONY, name, "istiklal_sozlu", session="ortak"),),
+        )
+        rules = [make("İstiklâl Marşı — sabah", time(8, 15)), make("İstiklâl Marşı — öğle", time(13, 15))]
+        result = CalendarEngine(replace(self.config, date_rules=rules)).resolve(monday)
+        ceremonies = [event for event in result.events if event.event_type is EventType.CEREMONY]
+        self.assertEqual(["İstiklâl Marşı — sabah", "İstiklâl Marşı — öğle"], [event.label for event in ceremonies])
+        self.assertEqual(("İstiklâl Marşı — sabah", "İstiklâl Marşı — öğle"), result.applied_rules)
+        self.assertEqual((), result.suppressed_rules)
+        # Haftalık olaylar da yerinde: tören katmanı iskeleti silmez.
+        self.assertGreater(len(result.events), 2)
+
+    def test_ceremony_with_exam_day_keeps_exam_program(self) -> None:
+        day = date(2026, 10, 12)
+        exam = DateRule("Sınav", ExceptionKind.EXAM, day, day, (EventSpec(time(10, 30), EventType.ANNOUNCEMENT, "Sınav başlangıcı", "anons"),))
+        ceremony = DateRule("Tören", ExceptionKind.CEREMONY, day, day, (EventSpec(time(9, 5), EventType.CEREMONY, "Tören", "istiklal_sozlu"),))
+        result = CalendarEngine(replace(self.config, date_rules=[exam, ceremony])).resolve(day)
+        self.assertEqual(["Tören", "Sınav başlangıcı"], [event.label for event in result.events])
+        self.assertEqual(["Tören", "Sınav"], [event.source for event in result.events])
+        self.assertEqual("Sınav + Tören", result.source)
+
+    def test_ceremony_replaces_only_same_time_and_sequence_slot(self) -> None:
+        monday = date(2026, 9, 7)
+        first_start = next(item for item in self.config.combined_weekly(0) if item.event_type is EventType.LESSON_START)
+        ceremony = DateRule(
+            "Tören", ExceptionKind.CEREMONY, monday, monday,
+            (EventSpec(first_start.at, EventType.CEREMONY, "Tören", "istiklal_sozlu", sequence=first_start.sequence),),
+        )
+        plain = CalendarEngine(self.config).resolve(monday)
+        merged = CalendarEngine(replace(self.config, date_rules=[ceremony])).resolve(monday)
+        self.assertEqual(len(plain.events), len(merged.events))
+        self.assertNotIn(first_start.label, [event.label for event in merged.events])
+        self.assertIn("Tören", [event.label for event in merged.events])
+
+    def test_event_ids_do_not_depend_on_producing_rule(self) -> None:
+        # D1: bugüne tören eklenmesi haftalık olayların kimliğini değiştirmez.
+        monday = date(2026, 9, 7)
+        plain = {event.label: event.event_id for event in CalendarEngine(self.config).resolve(monday).events}
+        ceremony = DateRule("Tören", ExceptionKind.CEREMONY, monday, monday, (EventSpec(time(9, 5), EventType.CEREMONY, "Tören", "istiklal_sozlu"),))
+        merged = {event.label: event.event_id for event in CalendarEngine(replace(self.config, date_rules=[ceremony])).resolve(monday).events}
+        for label, event_id in plain.items():
+            self.assertEqual(event_id, merged[label], label)
+
     def test_event_ids_are_stable_and_date_specific(self) -> None:
         engine = CalendarEngine(self.config)
         first = engine.resolve(date(2026, 9, 7)).events[0]

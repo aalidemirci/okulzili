@@ -70,8 +70,11 @@ class SchoolYearSimulationTests(unittest.TestCase):
         clock = FakeClock(datetime(2026, 9, 1))
         result = AcademicYearSimulator(CalendarEngine(config), clock).run(date(2026, 9, 1), date(2027, 6, 30))
         self.assertEqual(303, len(result.days))
-        self.assertEqual("Bayram töreni", result.days[special_day].source)
-        self.assertTrue(any(event.event_type is EventType.CEREMONY for event in result.days[special_day].events))
+        # Tatil temel program, tören onun üzerine bindirilir: yalnız tören çalar.
+        self.assertEqual("Bayram tatili + Bayram töreni", result.days[special_day].source)
+        self.assertEqual(("Bayram tatili", "Bayram töreni"), result.days[special_day].applied_rules)
+        self.assertTrue(all(event.event_type is EventType.CEREMONY for event in result.days[special_day].events))
+        self.assertEqual(1, len(result.days[special_day].events))
         self.assertEqual(("sabah",), tuple(event.session for event in result.days[date(2027, 4, 12)].events))
         self.assertEqual(8, len(result.days[date(2027, 6, 18)].events))
         self.assertEqual(datetime(2027, 6, 30), clock.now())
@@ -115,8 +118,16 @@ class SchoolYearSimulationTests(unittest.TestCase):
             if holiday_start <= current <= holiday_end:
                 specs, source = (), "Ara tatil"
             elif current == ceremony_day:
-                # Tören aynı saat/sıradaki normal olayı değiştirir, kalan şemayla birleşir.
-                specs, source = (weekly[0], ceremony, weekly[2], weekly[3]), "Bayram töreni"
+                # Tören aynı saat/sıradaki normal olayı değiştirir, kalan şemayla
+                # birleşir; her olay kendi kuralının adını taşır.
+                expected[current] = (
+                    self._expected_signature(current, weekly[0], "haftalık şema"),
+                    self._expected_signature(current, ceremony, "Bayram töreni"),
+                    self._expected_signature(current, weekly[2], "haftalık şema"),
+                    self._expected_signature(current, weekly[3], "haftalık şema"),
+                )
+                current += timedelta(days=1)
+                continue
             elif current == exam_day:
                 specs, source = (exam,), "Sınav günü"
             elif current == shortened_day:
