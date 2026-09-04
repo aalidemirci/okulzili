@@ -33,7 +33,7 @@ Sistem aşağıdaki koşullar sağlandığında okulda kullanılabilir kabul edi
 - Bulut hesabı, lisans sunucusu, çevrimiçi etkinleştirme veya zorunlu internet bağlantısı olmayacak.
 - Telemetri, analiz veya kullanım verisi toplanmayacak.
 - Öğrenci ya da öğretmen kişisel verisi saklanmayacak.
-- Telifli müzik paketlenmeyecek. Örnek sesler yalnızca doğrulanmış telifsiz veya kamu malı kaynaklardan seçilecek ve kaynak/lisans bilgisi paket içinde tutulacak.
+- Telifli müzik paketlenmeyecek. Örnek sesler yalnızca doğrulanmış telifsiz veya kamu malı kaynaklardan seçilecek ve kaynak/lisans bilgisi paket içinde tutulacak. *(Güncelleme, 11.08.2026 kararı: 0.6.0'dan itibaren proje sahibinin yeniden dağıtım iznini teyit ettiği resmî MEB, Cumhurbaşkanlığı ve AFAD kayıtları pakete gömülür; teneffüs müziği yalnız kamu malı bestelerden yerel sentezdir. Ayrıntı: SES-KAYNAKLARI.md ve NOTICE.)*
 - Faz 3'te teneffüs müziği eklenirse kullanıcıya MESAM/MSG yükümlülükleri hakkında açık uyarı gösterilecek.
 - Arayüzde kullanıcıya görünen İngilizce metin bırakılmayacak.
 

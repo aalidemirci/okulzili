@@ -14,4 +14,7 @@ dist/
 runtime/
 *.log
 *.bak
+*.tmp
+*.okulzili
+Thumbs.db
 .DS_Store

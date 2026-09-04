@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+from importlib import metadata
 from pathlib import Path
 import re
 import unittest
@@ -28,6 +29,9 @@ class PackagingDefinitionTests(unittest.TestCase):
         self.assertIn("okul-zili_${VERSION}_all.deb", build_script)
         setup_guide = (ROOT / "KURULUM.md").read_text(encoding="utf-8")
         self.assertIn(f"okul-zili_{__version__}_all.deb", setup_guide)
+        self.assertIn(f"OkulZili-Kurulum-{__version__}.exe", setup_guide)
+        # uv.lock de sürümü taşır; bayat kalmasın.
+        self.assertIn(f'name = "okul-zili"\nversion = "{__version__}"', (ROOT / "uv.lock").read_text(encoding="utf-8"))
         release_notes = (ROOT / "SURUM-NOTLARI.md").read_text(encoding="utf-8")
         self.assertIn(f"## {__version__}", release_notes)
 
@@ -49,6 +53,19 @@ class PackagingDefinitionTests(unittest.TestCase):
         self.assertIn('SetupIconFile=', script)
         self.assertIn('LICENSE', script)
         self.assertIn('NOTICE', script)
+        # D13: görev kaydı kurulumu başlatan hesapta; yükseltmede çalışan uygulama durur.
+        self.assertRegex(script, r"install-task\.ps1.*runasoriginaluser")
+        self.assertIn("function PrepareToInstall", script)
+        self.assertIn("VersionInfoVersion={#MyAppVersion}", script)
+        self.assertIn("version=str(version_file)", spec)
+        self.assertTrue((ROOT / "packaging" / "windows" / "make_version_info.py").is_file())
+        task_script = (ROOT / "packaging" / "windows" / "install-task.ps1").read_text(encoding="utf-8")
+        self.assertIn("USERDOMAIN", task_script)
+        build_script = (ROOT / "packaging" / "windows" / "build.ps1").read_text(encoding="utf-8")
+        # D12: derleme yorumlayıcısı PATH'ten değil, sürüm ve modül denetimiyle seçilir.
+        self.assertIn("(3, 12)", build_script)
+        self.assertIn("make_version_info.py", build_script)
+        self.assertNotIn('$python = "python"', build_script)
 
     def test_windows_logon_task_allows_battery_operation(self) -> None:
         script = (ROOT / "packaging" / "windows" / "install-task.ps1").read_text(
@@ -108,6 +125,7 @@ class PackagingDefinitionTests(unittest.TestCase):
         # importlarını denetler.
         build_script = (ROOT / "packaging" / "linux" / "build-deb.sh").read_text(encoding="utf-8")
         verifier = (ROOT / "tools" / "verify-linux-install.sh").read_text(encoding="utf-8")
+        launcher = (ROOT / "packaging" / "linux" / "okul-zili").read_text(encoding="utf-8")
         for name in ("customtkinter", "darkdetect", "packaging"):
             self.assertIn(f'vendor/{name}"', build_script)
             self.assertTrue((ROOT / "vendor" / name / "__init__.py").is_file())
@@ -115,13 +133,66 @@ class PackagingDefinitionTests(unittest.TestCase):
             "import okul_zili, tkinter, PIL, pystray, six, customtkinter, darkdetect, packaging",
             verifier,
         )
+        # D10: gömülü kütüphaneler sistemin dist-packages dizinine yazılmaz;
+        # başlatıcı ve doğrulama betiği aynı vendor yolunu kullanır.
+        self.assertIn("/usr/lib/okul-zili/vendor", build_script)
+        self.assertNotIn('vendor/packaging" "$BUILD_ROOT/usr/lib/python3/dist-packages', build_script)
+        self.assertIn("/usr/lib/okul-zili/vendor", launcher)
+        self.assertIn("PYTHONPATH", launcher)
+        self.assertIn("PYTHONPATH=/usr/lib/okul-zili/vendor", verifier)
+        self.assertIn("md5sums", build_script)
+        self.assertIn("Installed-Size", build_script)
+
+    def test_timezone_data_is_an_explicit_dependency(self) -> None:
+        # D11: tzdata derleme makinesinde tesadüfen kurulu olduğu için çalışıyordu.
+        project = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        spec = (ROOT / "packaging" / "windows" / "okul-zili.spec").read_text(encoding="utf-8")
+        control = (ROOT / "packaging" / "linux" / "control").read_text(encoding="utf-8")
+        workflow = (ROOT / ".github" / "workflows" / "testler.yml").read_text(encoding="utf-8")
+        self.assertRegex(project, r'"tzdata>=')
+        self.assertIn('collect_data_files("tzdata")', spec)
+        self.assertIn("tzdata", control)
+        # CI bağımlılıkları pyproject'ten kurar; ayrı bir liste ayrışamaz.
+        self.assertIn("pip install -e .", workflow)
+
+    def test_ci_matrix_covers_target_python_versions(self) -> None:
+        # 8.5: Pardus 23 = 3.11, Ubuntu 22.04 = 3.10, Windows paketi = 3.12.
+        workflow = (ROOT / ".github" / "workflows" / "testler.yml").read_text(encoding="utf-8")
+        for version in ("3.10", "3.11", "3.12"):
+            self.assertIn(f'"{version}"', workflow)
+        self.assertIn("windows-latest", workflow)
+
+    def test_vendored_customtkinter_matches_pinned_and_installed_version(self) -> None:
+        # 8.3: Windows paketi pip kopyasını, Linux paketi vendor kopyasını taşır;
+        # ikisi ayrışırsa arayüz iki platformda farklı davranır.
+        vendored = re.search(r'__version__ = "([^"]+)"', (ROOT / "vendor" / "customtkinter" / "__init__.py").read_text(encoding="utf-8"))
+        self.assertIsNotNone(vendored)
+        project = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        self.assertIn(f'"customtkinter=={vendored.group(1)}"', project)  # type: ignore[union-attr]
+        try:
+            installed = metadata.version("customtkinter")
+        except metadata.PackageNotFoundError:
+            self.skipTest("customtkinter kurulu değil")
+        self.assertEqual(vendored.group(1), installed)  # type: ignore[union-attr]
+
+    def test_third_party_license_texts_cover_bundled_components(self) -> None:
+        # 8.7: Windows paketine cffi ve tzdata, her iki pakete Roboto yazı tipi giriyor.
+        licenses = {item.name for item in (ROOT / "THIRD_PARTY_LICENSES").iterdir()}
+        for expected in ("tzdata-LICENSE.txt", "cffi-LICENSE.txt", "Roboto-LICENSE.txt", "packaging-LICENSE.txt"):
+            self.assertIn(expected, licenses)
 
     def test_runtime_has_no_network_client_dependency(self) -> None:
         # Bilinçli iki istisna dışında hiçbir modül ağ istemcisi içeremez:
         # sound_catalog yalnız yönetici onayıyla MEB indirmesi yapar,
         # time_check yalnız isteğe bağlı SNTP saat karşılaştırması yapar.
         allowed_sources = {"sound_catalog.py", "time_check.py"}
-        forbidden = {"requests", "httpx", "socket", "urllib", "http.client"}
+        forbidden = {"requests", "httpx", "socket", "urllib", "http.client", "ftplib", "smtplib", "xmlrpc", "asyncio"}
+        # 8.6: import düğümü dışındaki kaçış yolları — alt süreçle indirme aracı,
+        # dinamik içe aktarma, WinINet. (webbrowser bilinçli istisna: yalnız
+        # kullanıcı tıklamasıyla dış bağlantı açar, bkz. MIMARI.md.)
+        forbidden_text = re.compile(
+            r"\b(curl|wget|Invoke-WebRequest|WinHttp|WinINet|urlmon|import_module\(\s*['\"](urllib|socket|http))\b"
+        )
 
         def is_forbidden(name: str) -> bool:
             return any(name == item or name.startswith(item + ".") for item in forbidden)
@@ -130,7 +201,10 @@ class PackagingDefinitionTests(unittest.TestCase):
         for source in (ROOT / "src" / "okul_zili").glob("*.py"):
             if source.name in allowed_sources:
                 continue
-            tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
+            text = source.read_text(encoding="utf-8")
+            for match in forbidden_text.finditer(text):
+                violations.append(f"{source.name}: metin '{match.group(0)}'")
+            tree = ast.parse(text, filename=str(source))
             for node in ast.walk(tree):
                 if isinstance(node, ast.Import):
                     names = [alias.name for alias in node.names]

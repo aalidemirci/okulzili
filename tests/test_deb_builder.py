@@ -38,6 +38,13 @@ class DebBuilderTests(unittest.TestCase):
             self.assertIn("data.tar.xz", members)
             with tarfile.open(fileobj=io.BytesIO(members["control.tar.xz"]), mode="r:xz") as archive:
                 self.assertIn("./control", archive.getnames())
+                # 8.1: dpkg araçlarının beklediği alanlar.
+                self.assertIn("./md5sums", archive.getnames())
+                control_text = archive.extractfile("./control").read().decode("utf-8")  # type: ignore[union-attr]
+                self.assertRegex(control_text, r"Installed-Size: \d+")
+                self.assertIn("tzdata", control_text)
+                md5_text = archive.extractfile("./md5sums").read().decode("utf-8")  # type: ignore[union-attr]
+                self.assertRegex(md5_text, r"(?m)^[0-9a-f]{32}  usr/bin/okul-zili$")
             with tarfile.open(fileobj=io.BytesIO(members["data.tar.xz"]), mode="r:xz") as archive:
                 names = archive.getnames()
                 self.assertIn("./usr/bin/okul-zili", names)
@@ -46,10 +53,14 @@ class DebBuilderTests(unittest.TestCase):
                 self.assertIn("./usr/lib/python3/dist-packages/okul_zili/assets/sounds/meb-ogrenci-teneffus.wav", names)
                 self.assertIn("./usr/lib/python3/dist-packages/pystray/_win32.py", names)
                 # K1: arayüz bağımlılıkları Pardus depolarında yok; pakete gömülür.
-                self.assertIn("./usr/lib/python3/dist-packages/customtkinter/__init__.py", names)
-                self.assertIn("./usr/lib/python3/dist-packages/customtkinter/assets/themes/blue.json", names)
-                self.assertIn("./usr/lib/python3/dist-packages/darkdetect/__init__.py", names)
-                self.assertIn("./usr/lib/python3/dist-packages/packaging/version.py", names)
+                # D10: sistemin dist-packages dizinine DEĞİL, uygulamanın vendor
+                # dizinine — python3-packaging ile dosya çakışması olmasın.
+                self.assertIn("./usr/lib/okul-zili/vendor/customtkinter/__init__.py", names)
+                self.assertIn("./usr/lib/okul-zili/vendor/customtkinter/assets/themes/blue.json", names)
+                self.assertIn("./usr/lib/okul-zili/vendor/darkdetect/__init__.py", names)
+                self.assertIn("./usr/lib/okul-zili/vendor/packaging/version.py", names)
+                self.assertFalse(any(name.startswith("./usr/lib/python3/dist-packages/packaging/") for name in names))
+                self.assertFalse(any(name.startswith("./usr/lib/python3/dist-packages/customtkinter/") for name in names))
                 self.assertIn("./usr/share/doc/okul-zili/THIRD_PARTY_LICENSES/packaging-LICENSE.txt", names)
                 self.assertIn("./usr/lib/systemd/user/okul-zili.service", names)
                 self.assertIn("./usr/share/doc/okul-zili/SURUM-NOTLARI.md", names)

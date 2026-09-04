@@ -46,12 +46,16 @@ a = Analysis(
         (str(root / "SES-KAYNAKLARI.md"), "."),
         (str(root / "THIRD_PARTY_LICENSES"), "THIRD_PARTY_LICENSES"),
         *collect_data_files("customtkinter"),
+        # Saat dilimi verisi: Windows'ta zoneinfo yalnız tzdata paketinden okur (D11).
+        *collect_data_files("tzdata"),
     ],
-    hiddenimports=["tkinter", "miniaudio", "_cffi_backend", "PIL.Image", "PIL.ImageDraw", "six", "six.moves", *collect_submodules("pystray")],
+    hiddenimports=["tkinter", "miniaudio", "_cffi_backend", "PIL.Image", "PIL.ImageDraw", "six", "six.moves", "tzdata", *collect_submodules("pystray")],
     runtime_hooks=[str(root / "packaging" / "windows" / "runtime-tk.py")],
     noarchive=False,
 )
 pyz = PYZ(a.pure)
+# build.ps1 make_version_info.py ile üretir; elle PyInstaller çağrısında yoksa atlanır.
+version_file = root / "build" / "version_info.txt"
 exe = EXE(
     pyz,
     a.scripts,
@@ -61,6 +65,7 @@ exe = EXE(
     console=False,
     disable_windowed_traceback=False,
     icon=str(root / "assets" / "branding" / "okul-zili.ico"),
+    version=str(version_file) if version_file.exists() else None,
 )
 coll = COLLECT(
     exe,

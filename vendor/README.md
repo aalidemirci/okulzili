@@ -11,8 +11,12 @@ ağ erişimi istemek ürün ilkesine aykırıdır.
 | `darkdetect` | 0.8.0 | BSD-3 | customtkinter'ın tema algılama bağımlılığı |
 | `packaging` | 26.2 | Apache-2.0 / BSD-2 | customtkinter `packaging.version` kullanıyor |
 
-- Yalnız `packaging/linux/build-deb.sh` bu klasörü kullanır; Windows paketi
-  (PyInstaller) kütüphaneleri pip kurulumundan toplar.
+- Yalnız iki deb üreticisi (`packaging/linux/build-deb.sh`, `tools/build_deb.py`)
+  bu klasörü kullanır ve kopyaları `/usr/lib/okul-zili/vendor` altına koyar;
+  `/usr/bin/okul-zili` başlatıcısı `PYTHONPATH` verir. Sistemin `dist-packages`
+  dizinine yazılmaz (Debian `python3-packaging` ile çakışmasın). Windows paketi
+  (PyInstaller) kütüphaneleri pip kurulumundan toplar; `pyproject.toml`
+  `customtkinter` sürümünü buradaki kopyayla birebir sabitler.
 - Lisans metinleri `THIRD_PARTY_LICENSES/` altındadır ve `.deb` içinde
   `usr/share/doc/okul-zili/` altına kopyalanır.
 

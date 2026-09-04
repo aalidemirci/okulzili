@@ -18,20 +18,21 @@ Okul Zili; Windows ve Linux üzerinde çevrimdışı çalışan, Türkçe masaü
 - Değiştirilebilir WAV/MP3/FLAC/OGG sesleri ve merkez MEB duyurusu/üçüncü taraf dosya ayrımı
 - Paketle gelen çevrimdışı öğrenci, öğretmen ve teneffüs kayıtlarından oluşan MEB Resmî Zil Sesleri grubu
 - Hazır tören akışları, 10 Kasım senaryosu ve korumalı tatbikat sirenleri
-- İlk açılışta okul adı, başlangıç saati, ders/teneffüs ve öğle arası bilgilerini alan kurulum sihirbazı
+- İlk açılışta yalnız okul adı ve zil ses çıkışını soran kurulum; zil düzeni Ders zilleri sayfasından tam gün veya ikili eğitim seçilerek kurulur
 - Ders satırı tablosundan öğrenci, öğretmen ve bitiş saatlerini gün bazında düzeltme
 - Tarih aralığı olarak tatil ve hafta sonuna telafi günü tanımlama
-- Tören, sınav, kısaltılmış gün ve tarihe özel olay listeleri
+- Tören, sınav, kısaltılmış gün ve tarihe özel olay listeleri; aynı güne birden çok tören, tören diğer kuralların üzerine biner
 - Sabah/öğleden sonra oturumları ve kayıtlı anons olayları
 - Zil ve anonslar için aynı ya da ayrı ses çıkışı seçimi
 - Her çalmadan önce cihaz ve WAV dosyası kontrolü
 - Eksik ya da bozuk dosyada yedek bip ve kritik görsel uyarı
 - Seçili USB cihazı kaybolduğunda erişilebilen varsayılan çıkıştan yedek bip denemesi
 - Aynı anda iki sesin başlamasını engelleyen tek oynatma kuyruğu
-- Uyku/uyanma ve kaçırılmış zil toleransı
+- Uyku/uyanma ve kaçırılmış zil toleransı; uzun tören/ikaz yayını sırasında vadesi gelen zil yayın bitince çalar
+- Kaçırılan, bekletilen ve sessize alınan ziller genel durum panelinde ve sistem tepsisinde uyarı olarak görünür
 - Açılış ön kontrol paneli ve yerel JSON satır günlüğü
 - Sonraki zil, kritik durum ve hızlı eylemleri gösteren sistem tepsisi
-- PIN korumalı yönetici, nöbetçi ve salt görüntüleme profilleri
+- PIN korumalı yönetici, nöbetçi ve salt görüntüleme profilleri; tek tıkla oturum kilitleme
 - Karmayla doğrulanan, PIN ve günlük içermeyen paylaşılabilir yedekler
 - Windows 10/11 ile Pardus 23 ve Ubuntu 22.04+ paketleme tanımları
 - Bulut, hesap, telemetri ve çevrimiçi etkinleştirme olmadan çalışma
@@ -62,7 +63,7 @@ Ayrıntılı kurulum için [KURULUM.md](KURULUM.md), günlük kullanım için [K
 
 İlk açılışta oluşturulan örnek zil ve AFAD ikaz sesleri uygulamanın matematiksel olarak ürettiği tonlardır. Teneffüs havuzundaki sözsüz parçalar kamu malı bestelerden yerel olarak sentezlenir; üçüncü taraf icra kaydı içermez. Ayrıntılı kaynak ve kullanım notları [SES-KAYNAKLARI.md](SES-KAYNAKLARI.md) dosyasındadır. Kullanıcı kendi müzik veya anons dosyalarının kullanım hakkından sorumludur.
 
-Sistem tepsisi için LGPLv3 lisanslı `pystray` 0.19.5 kaynakları paketlenir. Lisans metinleri `THIRD_PARTY_LICENSES` dizinindedir. Pillow ve six lisansları dağıtım oluşturulurken ilgili paketlerden kurulum paketine eklenir.
+Sistem tepsisi için LGPLv3 lisanslı `pystray` 0.19.5 kaynakları paketlenir. Pillow, six, CustomTkinter, darkdetect, packaging, miniaudio, cffi, tzdata ve Roboto yazı tipi lisans metinleri `THIRD_PARTY_LICENSES` dizinindedir ve her kurulum paketine kopyalanır.
 
 ## Lisans ve iletişim
 

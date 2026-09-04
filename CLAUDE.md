@@ -18,8 +18,13 @@ python -m unittest tests.test_scheduler -v   # tek test dosyası
 
 Paketleme: Windows `packaging\windows\build.ps1` (önce testleri koşar, sonra
 PyInstaller + Inno Setup 6); Linux `python tools/build_deb.py`. CI
-(`.github/workflows/testler.yml`) Ubuntu + Windows üzerinde Python 3.12 ile
-unittest koşar.
+(`.github/workflows/testler.yml`) Ubuntu'da Python 3.10/3.11/3.12, Windows'ta
+3.12 ile bağımlılıkları `pip install -e .` ile kurup unittest koşar.
+
+**Bu makinede yorumlayıcı:** PATH'teki `python` 3.11'dir ve bağımlılıkları
+yoktur; `.venv` 3.13'tür ve PyInstaller içermez. Testleri ve derlemeyi
+`py -3.12` ile koşun (`build.ps1` zaten 3.12'yi zorunlu kılar ve PATH'teki
+`python`'ı kullanmaz).
 
 ## Bağlayıcı kurallar
 

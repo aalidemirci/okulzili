@@ -4,7 +4,7 @@ Bu kılavuz teknik olmayan okul personeli için hazırlanmıştır. Kuruluma ba�
 
 ## Windows 10 ve Windows 11
 
-1. Size verilen `OkulZili-Kurulum.exe` dosyasını USB bellekten bilgisayara kopyalayın.
+1. Size verilen `OkulZili-Kurulum-0.7.1.exe` dosyasını USB bellekten bilgisayara kopyalayın. Kurulumu, zil bilgisayarında **günlük kullanılan hesapta** oturum açmışken başlatın; UAC penceresine başka bir yönetici hesabının bilgileri girilse de otomatik başlatma görevi kurulumu başlatan hesaba yazılır.
 2. Dosyaya çift tıklayın. Windows koruma uyarısı gösterirse dosyanın okul yönetiminin teslim ettiği kopya olduğunu ve yanında verilen `SHA256SUMS.txt` değeriyle eşleştiğini doğrulayın. Sonra **Ek bilgi → Yine de çalıştır** yolunu kullanın. Paket kod imzalı değildir; bu nedenle SmartScreen uyarısı beklenir.
 3. Kurulum dilinde Türkçeyi seçin ve **İleri** düğmelerini izleyin.
 4. “Oturum açıldığında Okul Zili'ni başlat” görevinin seçili olduğundan emin olun.
@@ -56,7 +56,7 @@ Kaldırıcı, yalnızca kendi kurulum dizinindeki çalışan `OkulZili.exe` sür
 
 Bu sürüm bir masaüstü uygulamasıdır. `enable-linger` tek başına grafik ekranı veya kullanıcı ses oturumunu oluşturmaz; bu nedenle oturum açılmadan zil çalacağı varsayılmamalıdır. Bu komut ancak kullanılan masaüstü ve ses oturumuyla saha testi yapılmışsa etkinleştirilmelidir. Oturumdan önce çalışma zorunluysa kısıtlı bir okul hesabında güvenli otomatik oturum açma seçeneği kurum politikasıyla değerlendirilmelidir.
 
-Sistem tepsisi için paket `python3-pil`, `python3-six`, `python3-xlib`, `python3-gi` ve Ayatana AppIndicator çalışma zamanını ister. Pardus 23'te bunlar sistem paketlerinden kurulur; Ubuntu 22.04 çevrimdışı kurulum belleğinde bu bağımlılıkların `.deb` dosyaları da bulunmalıdır. Arayüz kütüphaneleri (`customtkinter`, `darkdetect`, `packaging`) Pardus depolarında bulunmadığından `.deb` paketinin içinde gömülü gelir; ayrıca kurulum gerekmez. Tepsi arka ucu açılamazsa uygulama görev çubuğunda çalışmayı sürdürür ve olay günlüğüne uyarı yazar.
+Sistem tepsisi için paket `python3-pil`, `python3-six`, `python3-xlib`, `python3-gi` ve Ayatana AppIndicator çalışma zamanını ister. Pardus 23'te bunlar sistem paketlerinden kurulur; Ubuntu 22.04 çevrimdışı kurulum belleğinde bu bağımlılıkların `.deb` dosyaları da bulunmalıdır. Arayüz kütüphaneleri (`customtkinter`, `darkdetect`, `packaging`) Pardus depolarında bulunmadığından `.deb` paketinin içinde `/usr/lib/okul-zili/vendor` altına gömülü gelir; sistemin kendi Python paketleriyle çakışmaz, ayrıca kurulum gerekmez. Linux'ta çarpı düğmesi pencereyi görev çubuğuna küçültür; masaüstünde tepsi simgesi görünmese bile uygulama görev çubuğundan geri açılabilir. Tepsi arka ucu açılamazsa uygulama görev çubuğunda çalışmayı sürdürür ve olay günlüğüne uyarı yazar.
 
 > Ekran görüntüsü yer tutucusu: Pardus paket yükleyici
 
@@ -78,14 +78,8 @@ sudo ./tools/prepare-linux-offline-bundle.sh \
 
 Üretilen dizindeki tüm `.deb` dosyaları ve `SHA256SUMS.txt` USB belleğe birlikte kopyalanır. Araç kurulu paketleri yeniden indirmek için `--reinstall` kullanır; yine de ağsız kabul testi mutlaka ayrı temiz makinede yapılmalıdır.
 
-Kaynak dağıtımındaki Python wheel paketini Windows'ta çevrimdışı kurmak isteyen teknik personel, aynı dağıtımla verilen `vendor-windows` dizinini kullanabilir:
-
-```powershell
-python -m pip install --no-index --find-links .\vendor-windows .\okul_zili-0.7.1-py3-none-any.whl
-```
-
-Normal okul kurulumu için bu komut gerekmez; `OkulZili-Kurulum-0.7.1.exe` tercih edilmelidir.
+Windows için yalnız kurulum programı (`OkulZili-Kurulum-0.7.1.exe`) ve taşınabilir zip dağıtılır; ikisi de Python çalışma zamanını, arayüz kütüphanelerini ve saat dilimi verisini içinde taşır, ek kurulum gerektirmez. Kaynak koddan çalıştırmak isteyen teknik personel için gereken paketler `pyproject.toml` içinde listelenir.
 
 ### Güncelleme
 
-Yeni sürümü eskisinin üzerine kurmadan önce ayarlar dosyasını yedekleyin. Uygulama yalnızca güncel ayar şemasını destekler; eski veya okunamayan ayar dosyası silinmez, `ayarlar.json.bozuk-<tarih>` adıyla kenara alınır ve uygulama varsayılanlarla açılıp durumu kritik uyarı panelinde bildirir. İnternetten otomatik güncelleme yapılmaz.
+Yeni sürümü eskisinin üzerine kurmadan önce ayarlar dosyasını yedekleyin. Windows kurucusu, çalışan Okul Zili'ni (sistem tepsisinde olsa da) dosyaları kopyalamadan önce kendisi kapatır; kurulum bitince uygulamayı yeniden başlatın. Uygulama yalnızca güncel ayar şemasını destekler; eski veya okunamayan ayar dosyası silinmez, `ayarlar.json.bozuk-<tarih>` adıyla kenara alınır ve uygulama varsayılanlarla açılıp durumu kritik uyarı panelinde bildirir. İnternetten otomatik güncelleme yapılmaz.

@@ -21,6 +21,11 @@ application (see SES-KAYNAKLARI.md for sources and details):
 - The three AFAD civil-defence alert recordings (yellow warning, red alarm,
   black/CBRN alarm), added in 0.6.0.
 
+The original source files these WAV recordings were converted from (MP3/WMA/
+M4A files under src/zilsesleri/ in the source repository) are kept only for
+regeneration, are not shipped in installation packages, and are covered by
+the same permission confirmation.
+
 Responsibility for the redistribution confirmation of these recordings rests
 with the project owner. The application's PolyForm Noncommercial license
 covers the application code only and does not extend to these recordings.

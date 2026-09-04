@@ -409,83 +409,88 @@ ortam bağımlılığı sınıfından. Aşağıdaki Faz 6–8 bu bulguların pla
 | D14 | Yedek geri yükleme atomik değil (sesler tek tek değişir, ayar en son); sentez ses dosyaları atomik yazılmıyor; ağ importu denetimi yalnız `import` düğümlerine bakıyor. | `backup.py:107`, `sound_assets.py:268`, `test_packaging.py:120` |
 | D15 | Belge bayatlığı: README ilk kurulum satırı 0.7.1 ile çelişiyor; KURULUM/BAGIMLILIKLAR var olmayan `vendor-windows`/.whl anlatıyor; uv.lock 0.6.0; PLAN.md 2.2 "telifli müzik paketlenmeyecek" 0.6.0 kararıyla çelişiyor; `src/zilsesleri` ham kayıtlar NOTICE/SES-KAYNAKLARI'nda yok; cffi/tzdata/Roboto lisansı eksik; iki WAV (`meb-ogretmen.wav`, `meb-ogrenci-teneffus.wav`, 8 MB) kodda kullanılmadan pakete giriyor. | çeşitli |
 
+> **Durum (04.09.2026):** Faz 6–8 `claude/faz6-saglik-duzeltmeleri` dalında
+> uygulandı; 219 test + altı arayüz öz-testi + gerçek uygulama duman testi
+> geçiyor. Saha adımları (Pardus VM kapısı, standart kullanıcı + ayrı yönetici
+> hesabıyla Windows kurulumu, USB kart çekme) hâlâ açık.
+
 ### Faz 6 — Zil motoru bütünlüğü (D1–D5)
-- [ ] **6.1 Olay kimliği kural adından bağımsız.** `BellEvent.create` kimliği
+- [x] **6.1 Olay kimliği kural adından bağımsız.** `BellEvent.create` kimliği
   yalnız tarih/saat/tür/ses/oturum/sıra ile türetir. `RunState` kimlik
   sürümü taşır; eski sürümle yazılmış durum dosyası ilk turda sessizce
   eşitlenir (geçmiş olaylar bir kez tamamlandı sayılır, tek bilgi kaydı) —
   yükseltme sonrası sahte "kaçırıldı" yağmuru olmaz.
-- [ ] **6.2 Kural çözümü: temel kural + tören katmanı.** Temel program
+- [x] **6.2 Kural çözümü: temel kural + tören katmanı.** Temel program
   tarihe özel > sınav > telafi > kısaltılmış > tatil > haftalık sırasıyla
   seçilir; **tüm** eşleşen tören kuralları bu programın üzerine bindirilir
   (aynı saat/sıra anahtarındaki olayı değiştirir). Böylece aynı gün iki tören
   çalar, tatilde yalnız tören çalar, kısaltılmış gün + tören kısaltılmış
   kalır, telafi + tören telafi programını korur. Öğretim yılı kâhini ve
   öncelik testleri yeni semantiğe göre güncellenir.
-- [ ] **6.3 RunState dayanıklılığı.** Yazma hatası `tick`'i kesmez (bellek
+- [x] **6.3 RunState dayanıklılığı.** Yazma hatası `tick`'i kesmez (bellek
   sürer, tek kritik uyarı, sonraki yazımda yeniden dener); `completed`
   zaman damgalı sözlük olur ve 7 günden eski kayıtlar düşer (sözlüksel
   kırpma kalkar); yazım fsync'li; okunamayan dosya karantinaya alınıp
   uyarılır; aynı tur içinde aynı kimlik ikinci kez çalmaz.
-- [ ] **6.4 Meşgul penceresi.** Zamanlayıcı ya da elle yayın çalarken vadesi
+- [x] **6.4 Meşgul penceresi.** Zamanlayıcı ya da elle yayın çalarken vadesi
   gelen olayın gecikmesi çalma bitişinden ölçülür; uzun tören/AFAD kaydı
   sonrası tolerans içinde çalar, kaçırılmaz.
-- [ ] **6.5 Duraklatma semantiği.** Duraklatılmışken vadesi gelen ziller
+- [x] **6.5 Duraklatma semantiği.** Duraklatılmışken vadesi gelen ziller
   "duraklatma nedeniyle çalınmadı" olarak işaretlenir; sürdürünce sahte
   uyku uyarısı ve yığılma olmaz.
-- [ ] **6.6 Ses düzeyi önbelleği.** Ölçeklenmiş kopya dosya/mtime/yüzde
+- [x] **6.6 Ses düzeyi önbelleği.** Ölçeklenmiş kopya dosya/mtime/yüzde
   anahtarıyla bir kez üretilir, açılışta arka planda ısıtılır; teneffüs
   müziği ölçeklemesi işçi iş parçacığına taşınır.
-- [ ] **6.7 Küçükler.** Oturum çakışması öğrenci zili payını hesaba katar;
+- [x] **6.7 Küçükler.** Oturum çakışması öğrenci zili payını hesaba katar;
   `HH:MM:SS` kabul edilir; v6→v7 ayrıştırmasında `AttributeError`
   karantinaya düşer; sentez ses dosyaları atomik yazılır.
 
 ### Faz 7 — Görünürlük, yetki ve arayüz (D6–D9)
-- [ ] **7.1** Kaçırılan/bekletilen/sessize alınan zil ve uyku uyarıları
+- [x] **7.1** Kaçırılan/bekletilen/sessize alınan zil ve uyku uyarıları
   panelde "UYARI" satırı + tepsi bildirimi; sistem durumu "Uyarı var";
   "Uyarıları onayla" ikisini de temizler.
-- [ ] **7.2** Olay günlüğü sayfası mesaj ve olay adını gösterir.
-- [ ] **7.3** Sesi durdurma `gunluk_eylem` yetkisi ister (tepsi dahil, ana
+- [x] **7.2** Olay günlüğü sayfası mesaj ve olay adını gösterir.
+- [x] **7.3** Sesi durdurma `gunluk_eylem` yetkisi ister (tepsi dahil, ana
   iş parçacığına aktarılır).
-- [ ] **7.4** Üst çubukta **Kilitle** düğmesi (yetkili rol → salt görüntüleme);
+- [x] **7.4** Üst çubukta **Kilitle** düğmesi (yetkili rol → salt görüntüleme);
   "PIN unutuldu" yolu SORUN-GIDERME'de belgelenir.
-- [ ] **7.5** Cihaz kutuları salt seçim; ön kontrol beş dakikada bir arka
+- [x] **7.5** Cihaz kutuları salt seçim; ön kontrol beş dakikada bir arka
   planda yenilenir (cihaz kaybı panelde görünür).
-- [ ] **7.6** `preparation_enabled` tek efendi: genel ayar kaydı oturum
+- [x] **7.6** `preparation_enabled` tek efendi: genel ayar kaydı oturum
   bayraklarını yalnız anahtar değiştiyse yazar.
-- [ ] **7.7** Linux'ta çarpı pencereyi görev çubuğuna küçültür (AppIndicator
+- [x] **7.7** Linux'ta çarpı pencereyi görev çubuğuna küçültür (AppIndicator
   güvenilmez); SORUN-GIDERME "pencere kayboldu" maddesi.
-- [ ] **7.8** Yetki boşlukları: yönetim merkezi ve profil yöneticisi
+- [x] **7.8** Yetki boşlukları: yönetim merkezi ve profil yöneticisi
   `_require_permission`; Sesler sayfası tören düğmeleri `_apply_permissions`
   kapsamında; elle çalmada "meşgul" sonucu uyarı seviyesi; ses testi işaret
   dosyası yazılamazsa pencere yine kapanır; bozuk `profiller.json` üzerine
   yazılmaz (karantina + kritik uyarı).
-- [ ] **7.9** Tepsi ve yaşam döngüsü: ikinci başlatma `_show_window` kullanır;
+- [x] **7.9** Tepsi ve yaşam döngüsü: ikinci başlatma `_show_window` kullanır;
   duraklatma tepsi başlığında kalır; `main()` istisna yolunda tepsi durur;
   yedek geri yükleme `_apply_config` ile ve başlık güncellenir;
   `CloseHandle` argtypes.
-- [ ] **7.10** Kurulum doğrulama betiği zaman aşımını başarısızlık sayar;
+- [x] **7.10** Kurulum doğrulama betiği zaman aşımını başarısızlık sayar;
   `--tepsi-kontrol` bekçisi sıfır dışı kodla çıkar.
 
 ### Faz 8 — Paketleme, derleme ve belge (D10–D15)
-- [ ] **8.1** deb: gömülü kütüphaneler `/usr/lib/okul-zili/vendor` altına,
+- [x] **8.1** deb: gömülü kütüphaneler `/usr/lib/okul-zili/vendor` altına,
   başlatıcı `PYTHONPATH` verir; `python3-packaging` çakışması kalkar;
   `md5sums` + `Installed-Size`; `build-deb.sh` aynı düzen.
-- [ ] **8.2** `tzdata` açık bağımlılık (pyproject, CI, deb Depends, spec
+- [x] **8.2** `tzdata` açık bağımlılık (pyproject, CI, deb Depends, spec
   `collect_data_files("tzdata")`) + paketleme testi.
-- [ ] **8.3** `build.ps1` Python 3.12'yi zorunlu kılar ve bağımlılıkları
+- [x] **8.3** `build.ps1` Python 3.12'yi zorunlu kılar ve bağımlılıkları
   önden denetler; EXE/kurucuya sürüm bilgisi; `customtkinter==5.2.2`
   sabitlemesi + vendor sürüm eşitliği testi.
-- [ ] **8.4** Inno: görev kaydı `runasoriginaluser`; `install-task.ps1`
+- [x] **8.4** Inno: görev kaydı `runasoriginaluser`; `install-task.ps1`
   `USERDOMAIN\USERNAME`; yükseltme öncesi çalışan uygulama
   `PrepareToInstall` ile durdurulur.
-- [ ] **8.5** CI matrisi Ubuntu 3.10/3.11/3.12 + Windows 3.12.
-- [ ] **8.6** Ağ denetimi metin taraması (curl/wget/Invoke-WebRequest/ftplib/
+- [x] **8.5** CI matrisi Ubuntu 3.10/3.11/3.12 + Windows 3.12.
+- [x] **8.6** Ağ denetimi metin taraması (curl/wget/Invoke-WebRequest/ftplib/
   smtplib/xmlrpc/`importlib`+urllib); `webbrowser` MIMARI'de belgelenir.
-- [ ] **8.7** Lisanslar: tzdata, cffi, Roboto; BAGIMLILIKLAR tablosu.
-- [ ] **8.8** Yedek geri yükleme atomik (önceki dosyalar anlık kopyada; kayıt
+- [x] **8.7** Lisanslar: tzdata, cffi, Roboto; BAGIMLILIKLAR tablosu.
+- [x] **8.8** Yedek geri yükleme atomik (önceki dosyalar anlık kopyada; kayıt
   düşerse geri alınır); arşiv boyut sınırı.
-- [ ] **8.9** Belgeler: README, KURULUM, BAGIMLILIKLAR, MIMARI, GEREKSINIM,
+- [x] **8.9** Belgeler: README, KURULUM, BAGIMLILIKLAR, MIMARI, GEREKSINIM,
   KULLANIM, SORUN-GIDERME, SES-KAYNAKLARI/NOTICE (`src/zilsesleri`),
   PLAN.md 2.2 notu, CLAUDE.md derleme notu, `.gitignore`, SURUM-NOTLARI
   "yayımlanmamış" bölümü, `uv.lock` yeniden üretimi.

@@ -18,6 +18,10 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayIcon={app}\{#MyAppExeName}
 SetupIconFile=..\..\assets\branding\okul-zili.ico
+VersionInfoVersion={#MyAppVersion}.0
+VersionInfoProductVersion={#MyAppVersion}.0
+VersionInfoCompany=Okul Zili Projesi
+VersionInfoDescription=Okul Zili kurulum programı
 
 [Languages]
 Name: "turkish"; MessagesFile: "compiler:Languages\Turkish.isl"
@@ -51,8 +55,27 @@ Name: "{group}\Okul Zili"; Filename: "{app}\{#MyAppExeName}"
 Name: "{autodesktop}\Okul Zili"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
-Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\install-task.ps1"""; Flags: runhidden waituntilterminated; Tasks: autostart
+; runasoriginaluser: görev, UAC'ye kimlik giren yönetici hesabına değil
+; kurulumu başlatan (günlük kullanılan) hesaba yazılır (D13).
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\install-task.ps1"""; Flags: runhidden waituntilterminated runasoriginaluser; Tasks: autostart
 Filename: "{app}\{#MyAppExeName}"; Description: "Okul Zili'ni çalıştır ve ses testini yap"; Flags: nowait postinstall skipifsilent
+
+[Code]
+{ Yükseltme: uygulama her oturumda otomatik açılır ve çarpı onu kapatmaz;
+  önceki kurulumun durdurma betiği varsa dosyalar kopyalanmadan önce çalışan
+  süreç kapatılır. Aksi hâlde dosyalar kilitli kalır (D13). }
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  StopScript: String;
+  ResultCode: Integer;
+begin
+  Result := '';
+  StopScript := ExpandConstant('{app}\uninstall-stop.ps1');
+  if FileExists(StopScript) then
+    Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
+      '-NoProfile -ExecutionPolicy Bypass -File "' + StopScript + '"',
+      '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+end;
 
 [UninstallRun]
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\uninstall-stop.ps1"""; Flags: runhidden waituntilterminated; RunOnceId: "StopOkulZili"
