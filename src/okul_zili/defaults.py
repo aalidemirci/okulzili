@@ -337,3 +337,124 @@ def copy_schedule_to_days(
     if errors:
         raise ValueError("\n".join(errors))
     return updated
+
+
+def suggest_next_session_start(session: SessionSchedule, gap_minutes: int = 20) -> str:
+    """Verilen oturum bittikten sonra başlayacak ikinci oturum için saat önerir.
+
+    İkili eğitimde öğleden sonra oturumunun sabah oturumuyla çakışmaması için
+    kullanılır: sabah oturumunun gerçek bitişi hesaplanır, üzerine en az
+    ``gap_minutes`` dakikalık geçiş payı eklenir ve saat beşer dakikaya
+    yuvarlanır.
+    """
+    cursor = datetime.strptime(session.first_lesson, "%H:%M")
+    blocks = session.effective_blocks
+    completed = 0
+    for index, size in enumerate(blocks):
+        cursor += timedelta(minutes=size * session.lesson_minutes)
+        completed += size
+        if index < len(blocks) - 1:
+            cursor += timedelta(
+                minutes=session.lunch_minutes
+                if completed == session.lunch_after
+                else session.break_minutes
+            )
+    cursor += timedelta(minutes=max(gap_minutes, session.student_bell_minutes + 5))
+    minute = ((cursor.minute + 4) // 5) * 5
+    if minute == 60:
+        cursor = cursor.replace(minute=0) + timedelta(hours=1)
+    else:
+        cursor = cursor.replace(minute=minute)
+    return cursor.strftime("%H:%M")
+
+
+def build_dual_sessions(
+    base: SessionSchedule, gap_minutes: int = 20
+) -> tuple[SessionSchedule, SessionSchedule]:
+    """Tek oturumlu bir ders akışından çakışmayan sabah/öğleden sonra ikilisi üretir."""
+    morning = replace(base, session_id="sabah", name="Sabah")
+    afternoon = replace(
+        base,
+        session_id="ogle",
+        name="Öğleden sonra",
+        first_lesson=suggest_next_session_start(morning, gap_minutes),
+        lunch_after=0,
+        lunch_minutes=base.break_minutes,
+    )
+    return morning, afternoon
+
+
+def repair_session_overlap(
+    schedule: DaySchedule, gap_minutes: int = 20
+) -> DaySchedule | None:
+    """Çakışan ikili eğitim oturumlarını, ikinci oturumu öteleyerek onarır.
+
+    Onarılamıyorsa (tek oturum, ikiden fazla oturum ya da ders akışının kendisi
+    geçersiz) ``None`` döner; çağıran tarafın kullanıcıya hata göstermesi
+    beklenir.
+    """
+    sessions = schedule.effective_sessions
+    if len(sessions) != 2:
+        return None
+    morning, afternoon = sessions
+    repaired_afternoon = replace(
+        afternoon, first_lesson=suggest_next_session_start(morning, gap_minutes)
+    )
+    repaired = replace(schedule, sessions=(morning, repaired_afternoon))
+    if repaired.validate():
+        return None
+    return repaired
+
+
+def reset_weekly_schedule(
+    config: SchoolConfig,
+    *,
+    schedule: DaySchedule,
+    build_days: tuple[int, ...],
+    clear_days: tuple[int, ...] | None = None,
+    clear_extra_events: bool = False,
+) -> SchoolConfig:
+    """Zil saatlerini ve periyotları sıfırlayıp seçilen günler için yeniden üretir.
+
+    ``clear_days`` günlerinin ders akışı ve otomatik hesaplama ayarları tamamen
+    silinir (varsayılan: yalnız yeniden oluşturulacak günler). Ardından
+    ``build_days`` günleri verilen ``schedule`` ile sıfırdan kurulur. Elle
+    eklenen anons/tören olayları yalnız ``clear_extra_events`` istendiğinde
+    silinir; aksi hâlde korunur.
+    """
+    if not build_days:
+        raise ValueError("En az bir gün seçilmelidir.")
+    targets = tuple(dict.fromkeys(clear_days if clear_days is not None else build_days))
+    if any(day not in range(7) for day in (*build_days, *targets)):
+        raise ValueError("Geçersiz hafta günü seçildi.")
+    errors = schedule.validate()
+    if errors:
+        raise ValueError("\n".join(errors))
+
+    weekly = dict(config.weekly_schedule)
+    schedules = dict(config.day_schedules)
+    extras = dict(config.extra_events)
+    for day in targets:
+        weekly.pop(day, None)
+        schedules.pop(day, None)
+        if clear_extra_events:
+            extras.pop(day, None)
+    events = generate_from_day_schedule(schedule)
+    for day in dict.fromkeys(build_days):
+        weekly[day] = events
+        schedules[day] = schedule
+        if clear_extra_events:
+            extras.pop(day, None)
+    updated = replace(
+        config,
+        weekly_schedule=weekly,
+        day_schedules=schedules,
+        extra_events=extras,
+        preparation_enabled=any(
+            session.student_bell_enabled for session in schedule.effective_sessions
+        ),
+    )
+    remaining = updated.validate()
+    if remaining:
+        raise ValueError("\n".join(remaining))
+    return updated

@@ -26,6 +26,7 @@ Bu matris `PLAN.md` gereksinimlerini tasarım, otomatik test ve saha kabul kanı
 | OZ-SCH-002 | Uyku sonrası eski ziller topluca çalınmaz | tolerans ve kaçırma politikası | uyku, gecikme ve sessize alma testleri | Geçti |
 | OZ-SCH-003 | Saat sıçraması uyku süresinden ayrılır | duvar saati/tekdüze saat farkı | ileri saat sıçraması ve uyku ayrımı testleri | Geçti |
 | OZ-SCH-004 | Türe göre kaçırma toleransı | `grace_seconds_by_type` | tür bazlı tolerans testi | Geçti |
+| OZ-CAL-005 | İkili eğitimde sabah ve öğleden sonra oturumları çakışmadan üretilir | `defaults.build_dual_sessions`, `repair_session_overlap`, ders zilleri sayfasındaki oturum taslağı | `DualSessionSuggestionTests`, `SessionOverlapRepairTests` | Geçti |
 | OZ-SIM-001 | Tam yılın her günündeki her olay alanı doğrulanır | `SimulationResult.compare` | bağımsız yıl kâhini; zaman, tür, oturum, ses, sıra ve kaynak karşılaştırması | Geçti |
 
 ## Yapılandırma, güvenlik ve arayüz
@@ -37,7 +38,10 @@ Bu matris `PLAN.md` gereksinimlerini tasarım, otomatik test ve saha kabul kanı
 | OZ-CFG-003 | Paylaşılabilir güvenli yedek/geri yükleme | karmalı `.okulzili`; PIN ve günlük hariç | tur, değiştirilmiş paket ve üst dizin saldırısı testleri | Geçti |
 | OZ-SEC-001 | Üç rol, karmalı PIN ve en az yetki | PBKDF2-HMAC-SHA256 ve rol izinleri | PIN/bozuk özet/tepsi eylemi izin testleri | Geçti |
 | OZ-UI-001 | Türkçe ana pencere, tepsi ve hızlı eylemler | Tk arayüzü ve `TrayController` | kaynak/paket arayüz ve tepsi açılış kontrolleri | Otomatik geçti; manuel görsel tarama bekliyor |
-| OZ-UI-002 | İlk kurulum şema sihirbazı ve ses testi | `InitialSetupDialog`, `SoundTestDialog` | ilk kurulum ve arayüz kontrol kipleri | Geçti |
+| OZ-UI-002 | İlk kurulum sihirbazı ve ses testi | `InitialSetupDialog` (yalnız okul adı ve ses çıkışı), `SoundTestDialog` | ilk kurulum/arayüz kontrol kipleri, `test_initial_setup_only_asks_for_school_identity` | Geçti |
+| OZ-UI-003 | Zil saatleri ve periyotları tümüyle sıfırlanıp yeniden oluşturulabilir | `ScheduleResetDialog`, `defaults.reset_weekly_schedule` | `WeeklyScheduleResetTests` | Geçti |
+| OZ-UI-004 | Girişten sonra ana pencere açık kalır; çarpı sistem tepsisine indirir | `app._reveal_main_window`, `_hide_to_taskbar`, `_show_window` | `MainWindowRevealTests`, tepsi açılış kontrolü | Otomatik katman geçti; Windows'ta görsel doğrulama bekliyor |
+| OZ-UI-005 | PIN oluşturma penceresi uygulamanın tasarım diliyle uyumlu | `PinDialog` | `test_pin_windows_no_longer_use_the_legacy_input_boxes`, kipli pencere yaşam döngüsü testi | Geçti |
 | OZ-PRE-001 | Saat, cihaz, dosya, yarınki tören, program, sonraki zil, yapılandırma ve depolama ön kontrolü | `PreflightService` | eksik dosya/tören/cihaz/saat dilimi/yazılabilirlik testleri | Geçti |
 | OZ-LOG-001 | Yerel dönen günlük ve dışa aktarma | `RotatingFileHandler`, Olay günlüğü arayüzü | yapılandırılmış kayıt, döndürme ve veri dizini değiştirme testleri | Geçti |
 

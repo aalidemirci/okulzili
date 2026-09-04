@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import date, datetime, time
 import tkinter as tk
-from tkinter import messagebox, simpledialog, ttk
+from tkinter import messagebox, ttk
 from typing import Callable
 
 import customtkinter as ctk
@@ -20,15 +20,17 @@ from .auth import AuthRepository, LoginThrottle, ROLE_LABELS
 from .branding import apply_window_icon, load_brand_image
 from .ceremonies import CEREMONY_SCENARIOS, ceremony_events
 from .config import ConfigError
-from .defaults import build_school_config
+from .defaults import build_dual_sessions, build_school_config, suggest_next_session_start
 from .domain import (
     AcademicCalendar,
     DateRange,
     DateRule,
+    DaySchedule,
     EventSpec,
     EventType,
     ExceptionKind,
     SchoolConfig,
+    SessionSchedule,
     sort_specs,
 )
 from .sound_catalog import SOUND_BY_ID, SOUND_DEFINITIONS
@@ -39,6 +41,7 @@ from .ui_theme import (
     ACCENT_STRONG,
     BORDER,
     CANVAS,
+    CRITICAL,
     HOVER,
     INFO_BG,
     INFO_TEXT,
@@ -50,6 +53,8 @@ from .ui_theme import (
     SUCCESS_BG,
     SURFACE,
     SURFACE_ALT,
+    WARNING_BG,
+    WARNING_TEXT,
     resolve,
 )
 
@@ -75,6 +80,21 @@ SESSION_LABELS = {
     "ortak": "Ortak (her iki oturum)",
 }
 SESSIONS_BY_LABEL = {label: item for item, label in SESSION_LABELS.items()}
+
+# Ders zilleri sayfası ile sıfırlama penceresi aynı etiketleri kullanır;
+# eğitim modeli adları tek yerde tanımlıdır.
+MODE_FULL_DAY = "Tam gün"
+MODE_DUAL = "İkili eğitim"
+EDUCATION_MODES = (MODE_FULL_DAY, MODE_DUAL)
+SESSION_NAME_FULL_DAY = "Normal"
+SESSION_NAME_MORNING = "Sabah"
+SESSION_NAME_AFTERNOON = "Öğleden sonra"
+DUAL_SESSION_NAMES = (SESSION_NAME_MORNING, SESSION_NAME_AFTERNOON)
+SESSION_ID_BY_NAME = {
+    SESSION_NAME_FULL_DAY: "normal",
+    SESSION_NAME_MORNING: "sabah",
+    SESSION_NAME_AFTERNOON: "ogle",
+}
 
 
 def _parse_turkish_date(text: str) -> date:
@@ -524,48 +544,54 @@ class ExtraEventsDialog(SafeModalToplevel):
 
 
 class InitialSetupDialog(SafeModalToplevel):
+    """İlk açılışta yalnız okul kimliğini ve ses çıkışını sorar.
+
+    Zil saatleri burada sorulmaz: ders akışı, "Ders zilleri" sayfasında tam gün
+    ya da ikili eğitim seçilerek kurulur. İlk kurulumda hem okul bilgisi hem
+    zil düzeni istendiğinde, sonradan ikili eğitime geçen okullarda varsayılan
+    saatler kalıyor ve oturumlar çakışıyordu.
+    """
+
     def __init__(self, parent: tk.Misc, devices: tuple[str, ...]) -> None:
         super().__init__(parent)
         self.title("Okul Zili — İlk kurulum")
-        self.geometry("720x810")
+        apply_window_icon(self)
+        self.geometry("640x620")
+        self.minsize(520, 560)
         self.resizable(True, True)
         self.configure(fg_color=CANVAS)
         self.result: SchoolConfig | None = None
         self.school_var = tk.StringVar(value="Okulumuz")
-        self.first_lesson_var = tk.StringVar(value="08:20")
-        self.lesson_count_var = tk.StringVar(value="8")
-        self.lesson_minutes_var = tk.StringVar(value="40")
-        self.break_minutes_var = tk.StringVar(value="10")
-        self.lunch_after_var = tk.StringVar(value="4")
-        self.lunch_minutes_var = tk.StringVar(value="45")
-        self.preparation_var = tk.BooleanVar(value=True)
-        self.preparation_minutes_var = tk.StringVar(value="2")
         self.device_var = tk.StringVar(value="varsayilan")
 
         card = ctk.CTkFrame(self, fg_color=SURFACE, corner_radius=18, border_width=1, border_color=BORDER)
         card.pack(fill="both", expand=True, padx=24, pady=24)
-        _dialog_title(card, "Okulunuzu hazırlayalım", "Ders akışını bir kez girin; zil programı otomatik oluşturulsun. Tüm değerleri daha sonra değiştirebilirsiniz.")
+        self._brand_image = ctk.CTkImage(light_image=load_brand_image(), dark_image=load_brand_image(), size=(52, 52))
+        ctk.CTkLabel(card, text="", image=self._brand_image, width=52, height=52).pack(pady=(26, 8))
+        _dialog_title(
+            card,
+            "Okulunuzu tanıyalım",
+            "Şimdilik yalnız okul bilgisi yeterli. Zil saatlerini az sonra "
+            "\"Ders zilleri\" sayfasından tam gün veya ikili eğitim seçerek "
+            "oluşturacaksınız.",
+        )
         form = ctk.CTkFrame(card, fg_color="transparent")
-        form.pack(fill="both", expand=True, padx=26)
+        form.pack(fill="x", padx=26)
         form.grid_columnconfigure(1, weight=1)
         fields = (
-            ("Okul adı", ctk.CTkEntry(form, textvariable=self.school_var, height=38, corner_radius=10, fg_color=SURFACE, border_color=BORDER)),
-            ("İlk ders (SS:DD)", ctk.CTkEntry(form, textvariable=self.first_lesson_var, height=38, corner_radius=10, fg_color=SURFACE, border_color=BORDER)),
-            ("Günlük ders sayısı", ctk.CTkEntry(form, textvariable=self.lesson_count_var, height=38, corner_radius=10, fg_color=SURFACE, border_color=BORDER)),
-            ("Ders süresi (dk)", ctk.CTkEntry(form, textvariable=self.lesson_minutes_var, height=38, corner_radius=10, fg_color=SURFACE, border_color=BORDER)),
-            ("Teneffüs süresi (dk)", ctk.CTkEntry(form, textvariable=self.break_minutes_var, height=38, corner_radius=10, fg_color=SURFACE, border_color=BORDER)),
-            ("Uzun ara kaçıncı dersten sonra (0 = yok)", ctk.CTkEntry(form, textvariable=self.lunch_after_var, height=38, corner_radius=10, fg_color=SURFACE, border_color=BORDER)),
-            ("Uzun ara süresi (dk)", ctk.CTkEntry(form, textvariable=self.lunch_minutes_var, height=38, corner_radius=10, fg_color=SURFACE, border_color=BORDER)),
-            ("Öğrenci zili kaç dakika önce", ctk.CTkEntry(form, textvariable=self.preparation_minutes_var, height=38, corner_radius=10, fg_color=SURFACE, border_color=BORDER)),
+            (
+                "Okul adı",
+                ctk.CTkEntry(form, textvariable=self.school_var, height=42, corner_radius=10, fg_color=INPUT, border_color=BORDER, placeholder_text="Örnek: Atatürk Anadolu Lisesi"),
+            ),
             (
                 "Zil ses çıkışı",
                 ctk.CTkComboBox(
                     form,
                     variable=self.device_var,
                     values=list(("varsayilan", *devices)),
-                    height=38,
+                    height=42,
                     corner_radius=10,
-                    fg_color=SURFACE,
+                    fg_color=INPUT,
                     border_color=BORDER,
                     button_color=TEAL,
                 ),
@@ -573,64 +599,183 @@ class InitialSetupDialog(SafeModalToplevel):
         )
         for row, (label, widget) in enumerate(fields):
             ctk.CTkLabel(form, text=label, anchor="w", text_color=INK_SUBTLE, font=ctk.CTkFont("Segoe UI Variable Text", 12, "bold")).grid(
-                row=row, column=0, sticky="w", padx=(0, 14), pady=4
+                row=row, column=0, sticky="w", padx=(0, 16), pady=8
             )
-            widget.grid(row=row, column=1, sticky="ew", pady=4)
-        ctk.CTkSwitch(
-            form,
-            text="Öğrenci ve öğretmen zili ayrı çalsın",
-            variable=self.preparation_var,
-            progress_color=TEAL,
-        ).grid(row=9, column=0, columnspan=2, sticky="w", pady=(12, 0))
+            widget.grid(row=row, column=1, sticky="ew", pady=8)
+        info = ctk.CTkFrame(card, fg_color=INFO_BG, corner_radius=12)
+        info.pack(fill="x", padx=26, pady=(18, 0))
+        ctk.CTkLabel(
+            info,
+            text=(
+                "ⓘ  Başlangıç için 08:20'de başlayan 8 derslik hafta içi programı "
+                "kurulur. Ders zilleri sayfasındaki “Sıfırla ve yeniden oluştur” "
+                "düğmesi bu saatleri tümüyle silip okulunuza göre yeniden kurar."
+            ),
+            text_color=INFO_TEXT,
+            justify="left",
+            anchor="w",
+            wraplength=470,
+            font=ctk.CTkFont("Segoe UI Variable Text", 12),
+        ).pack(fill="x", padx=14, pady=12)
         buttons = ctk.CTkFrame(card, fg_color="transparent")
-        buttons.pack(fill="x", padx=26, pady=(12, 24))
-        _primary_button(buttons, "Programı oluştur", self._save, 160).pack(side="right")
-        _secondary_button(buttons, "Varsayılanlarla devam", self._use_defaults, 180).pack(side="right", padx=(0, 10))
+        buttons.pack(fill="x", padx=26, pady=(18, 24))
+        _primary_button(buttons, "Kurulumu tamamla", self._save, 170).pack(side="right")
         self.protocol("WM_DELETE_WINDOW", self._use_defaults)
+        self.bind("<Return>", lambda event: self._save())
+
+    def _new_config(self, school_name: str, device: str) -> SchoolConfig:
+        year = date.today().year if date.today().month >= 7 else date.today().year - 1
+        config = build_school_config(school_name=school_name, selected_device=device)
+        return replace(config, academic_calendar=academic_calendar_template(year))
 
     def _use_defaults(self) -> None:
-        year = date.today().year if date.today().month >= 7 else date.today().year - 1
-        self.result = replace(build_school_config(), academic_calendar=academic_calendar_template(year))
+        # Pencere çarpıyla kapatılırsa kurulum durmaz: girilmiş okul adı varsa
+        # korunur, yoksa varsayılan bilgiyle devam edilir.
+        self.result = self._new_config(
+            self.school_var.get().strip() or "Okulumuz",
+            self.device_var.get().strip() or "varsayilan",
+        )
         self.destroy()
 
     def _save(self) -> None:
-        try:
-            school_name = self.school_var.get().strip()
-            first_lesson = self.first_lesson_var.get().strip()
-            time.fromisoformat(first_lesson)
-            lesson_count = int(self.lesson_count_var.get())
-            lesson_minutes = int(self.lesson_minutes_var.get())
-            break_minutes = int(self.break_minutes_var.get())
-            lunch_after = int(self.lunch_after_var.get())
-            lunch_minutes = int(self.lunch_minutes_var.get())
-            preparation_minutes = int(self.preparation_minutes_var.get())
-            if not school_name:
-                raise ValueError("Okul adı boş bırakılamaz.")
-            if not 1 <= lesson_count <= 20:
-                raise ValueError("Ders sayısı 1–20 arasında olmalıdır.")
-            if not 1 <= lesson_minutes <= 180 or not 0 <= break_minutes <= 120:
-                raise ValueError("Ders veya teneffüs süresi geçersiz.")
-            if not 0 <= lunch_after <= lesson_count or not 0 <= lunch_minutes <= 240:
-                raise ValueError("Uzun ara bilgileri geçersiz.")
-            if not 0 <= preparation_minutes <= 30:
-                raise ValueError("Öğrenci zili farkı 0–30 dakika olmalıdır.")
-            self.result = build_school_config(
-                school_name=school_name,
-                first_lesson=first_lesson,
-                lesson_count=lesson_count,
-                lesson_minutes=lesson_minutes,
-                break_minutes=break_minutes,
-                lunch_after=lunch_after,
-                lunch_minutes=lunch_minutes,
-                preparation_enabled=self.preparation_var.get(),
-                preparation_minutes=preparation_minutes,
-                selected_device=self.device_var.get().strip() or "varsayilan",
+        school_name = self.school_var.get().strip()
+        if not school_name:
+            messagebox.showerror(
+                "Geçersiz okul bilgisi", "Okul adı boş bırakılamaz.", parent=self
             )
-            year = date.today().year if date.today().month >= 7 else date.today().year - 1
-            self.result = replace(self.result, academic_calendar=academic_calendar_template(year))
-        except ValueError as exc:
-            messagebox.showerror("Geçersiz ilk kurulum bilgisi", str(exc), parent=self)
             return
+        self.result = self._new_config(
+            school_name, self.device_var.get().strip() or "varsayilan"
+        )
+        self.destroy()
+
+
+class PinDialog(SafeModalToplevel):
+    """PIN oluşturma/değiştirme penceresi.
+
+    Eski ``simpledialog`` kutularının yerini alır: tek pencerede iki alan,
+    satır içi doğrulama ve uygulamanın geri kalanıyla aynı kart tasarımı.
+    """
+
+    def __init__(
+        self,
+        parent: tk.Misc,
+        role: str = "yonetici",
+        *,
+        first_run: bool = False,
+    ) -> None:
+        super().__init__(parent)
+        self.role = role
+        self.minimum = 6 if role == "yonetici" else 4
+        self.result: str | None = None
+        self.title("Okul Zili — PIN")
+        apply_window_icon(self)
+        self.geometry("520x610")
+        self.minsize(460, 560)
+        self.resizable(True, True)
+        self.configure(fg_color=CANVAS)
+        self.pin_var = tk.StringVar()
+        self.repeat_var = tk.StringVar()
+
+        card = ctk.CTkFrame(self, fg_color=SURFACE, corner_radius=20, border_width=1, border_color=BORDER)
+        card.pack(fill="both", expand=True, padx=30, pady=30)
+        self._brand_image = ctk.CTkImage(light_image=load_brand_image(), dark_image=load_brand_image(), size=(52, 52))
+        ctk.CTkLabel(card, text="", image=self._brand_image, width=52, height=52).pack(pady=(26, 10))
+        heading = (
+            "Yönetici PIN'i oluşturun"
+            if first_run
+            else f"{ROLE_LABELS.get(role, role)} PIN'i"
+        )
+        description = (
+            "Zil programını yalnız PIN bilen kişiler değiştirebilir. "
+            "PIN bu bilgisayarda şifrelenerek saklanır, hiçbir yere gönderilmez."
+            if first_run
+            else "Yeni PIN'i iki kez girin. PIN bu bilgisayarda şifrelenerek saklanır."
+        )
+        ctk.CTkLabel(card, text=heading, text_color=INK, font=ctk.CTkFont("Segoe UI Variable Display", 22, "bold")).pack()
+        ctk.CTkLabel(
+            card,
+            text=description,
+            text_color=MUTED,
+            justify="left",
+            wraplength=360,
+            font=ctk.CTkFont("Segoe UI Variable Text", 12),
+        ).pack(pady=(6, 18))
+        ctk.CTkLabel(card, text="PIN", text_color=INK_SUBTLE, anchor="w", font=ctk.CTkFont("Segoe UI Variable Text", 12, "bold")).pack(fill="x", padx=28)
+        pin_entry = ctk.CTkEntry(
+            card,
+            textvariable=self.pin_var,
+            show="●",
+            height=44,
+            corner_radius=10,
+            fg_color=INPUT,
+            border_color=BORDER,
+            placeholder_text=f"{self.minimum}–12 rakam",
+        )
+        pin_entry.pack(fill="x", padx=28, pady=(5, 12))
+        ctk.CTkLabel(card, text="PIN (tekrar)", text_color=INK_SUBTLE, anchor="w", font=ctk.CTkFont("Segoe UI Variable Text", 12, "bold")).pack(fill="x", padx=28)
+        repeat_entry = ctk.CTkEntry(
+            card,
+            textvariable=self.repeat_var,
+            show="●",
+            height=44,
+            corner_radius=10,
+            fg_color=INPUT,
+            border_color=BORDER,
+            placeholder_text="Aynı PIN'i yeniden girin",
+        )
+        repeat_entry.pack(fill="x", padx=28, pady=(5, 8))
+        self.message_label = ctk.CTkLabel(
+            card,
+            text=f"PIN yalnızca rakamlardan oluşur ve {self.minimum}–12 hane uzunluğundadır.",
+            text_color=MUTED,
+            anchor="w",
+            justify="left",
+            wraplength=380,
+            font=ctk.CTkFont("Segoe UI Variable Text", 11),
+        )
+        self.message_label.pack(fill="x", padx=28, pady=(0, 14))
+        buttons = ctk.CTkFrame(card, fg_color="transparent")
+        buttons.pack(fill="x", padx=28, pady=(0, 26))
+        ctk.CTkButton(
+            buttons,
+            text="Vazgeç",
+            command=self.destroy,
+            height=44,
+            corner_radius=10,
+            fg_color=SURFACE,
+            hover_color=HOVER,
+            text_color=INK_SUBTLE,
+            border_width=1,
+            border_color=BORDER,
+        ).pack(side="left", fill="x", expand=True, padx=(0, 5))
+        ctk.CTkButton(
+            buttons,
+            text="PIN'i kaydet",
+            command=self._save,
+            height=44,
+            corner_radius=10,
+            fg_color=ACCENT_STRONG,
+            hover_color=ACCENT_HOVER,
+            text_color="#FFFFFF",
+        ).pack(side="left", fill="x", expand=True, padx=(5, 0))
+        self.bind("<Return>", lambda event: self._save())
+        pin_entry.focus_set()
+
+    def _warn(self, message: str) -> None:
+        self.message_label.configure(text=message, text_color=CRITICAL)
+
+    def _save(self) -> None:
+        pin = self.pin_var.get().strip()
+        repeat = self.repeat_var.get().strip()
+        if not pin.isdigit() or not self.minimum <= len(pin) <= 12:
+            self._warn(f"PIN {self.minimum}–12 rakamdan oluşmalıdır.")
+            return
+        if pin != repeat:
+            self._warn("Girilen iki PIN aynı değil. Lütfen yeniden deneyin.")
+            self.repeat_var.set("")
+            return
+        self.result = pin
         self.destroy()
 
 
@@ -724,18 +869,12 @@ class ProfileManager(SafeModalToplevel):
         _primary_button(self.frame, "Kapat", self.destroy, 110).grid(row=6, column=0, columnspan=3, sticky="e", padx=24, pady=(16, 22))
 
     def _set_pin(self, role: str) -> None:
-        minimum = 6 if role == "yonetici" else 4
-        first = simpledialog.askstring("PIN ayarla", f"{ROLE_LABELS[role]} için {minimum}–12 rakamlı PIN:", show="●", parent=self)
-        if first is None:
-            return
-        second = simpledialog.askstring("PIN doğrula", "PIN'i yeniden girin:", show="●", parent=self)
-        if second is None:
-            return
-        if first != second:
-            messagebox.showerror("PIN uyuşmuyor", "Girilen PIN değerleri aynı değil.", parent=self)
+        dialog = PinDialog(self, role)
+        self.wait_window(dialog)
+        if dialog.result is None:
             return
         try:
-            self.auth.set_pin(role, first)
+            self.auth.set_pin(role, dialog.result)
         except ValueError as exc:
             messagebox.showerror("Geçersiz PIN", str(exc), parent=self)
             return
@@ -1089,3 +1228,291 @@ class CeremonyDialog(SafeModalToplevel):
         self.destroy()
 
 
+
+
+class ScheduleResetDialog(SafeModalToplevel):
+    """Zil saatlerini ve periyotları tümüyle silip yeniden oluşturur.
+
+    İlk kurulumdan gelen varsayılan saatler, ikili eğitime geçen okullarda
+    elle temizlenemiyordu. Bu pencere seçilen günlerin ders akışını ve
+    otomatik hesaplama ayarlarını sıfırlar, ardından tam gün ya da ikili
+    eğitim düzenini sıfırdan kurar.
+    """
+
+    SCOPE_WEEKDAYS = "Hafta içi (Pazartesi–Cuma)"
+    SCOPE_WEEK = "Tüm hafta (Pazartesi–Pazar)"
+
+    def __init__(
+        self,
+        parent: tk.Misc,
+        weekday: int,
+        current: DaySchedule | None,
+        on_apply: Callable[[tuple[int, ...], tuple[int, ...], DaySchedule, bool], None],
+    ) -> None:
+        super().__init__(parent)
+        self.title("Zil programını sıfırla")
+        apply_window_icon(self)
+        self.geometry("760x780")
+        self.minsize(620, 600)
+        self.resizable(True, True)
+        self.configure(fg_color=CANVAS)
+        self.on_apply = on_apply
+        self.weekday = weekday
+        self.scope_single = f"Yalnız {WEEKDAYS[weekday]}"
+
+        sessions = (current or DaySchedule()).effective_sessions
+        morning, afternoon = (
+            (sessions[0], sessions[1])
+            if len(sessions) > 1
+            else build_dual_sessions(sessions[0])
+        )
+        self.mode_var = tk.StringVar(
+            value=MODE_DUAL if len(sessions) > 1 else MODE_FULL_DAY
+        )
+        self.scope_var = tk.StringVar(value=self.SCOPE_WEEKDAYS)
+        self.clear_extras_var = tk.BooleanVar(value=False)
+        self.student_bell_var = tk.BooleanVar(value=sessions[0].student_bell_enabled)
+        self.student_bell_minutes_var = tk.StringVar(
+            value=str(sessions[0].student_bell_minutes)
+        )
+        self.block_bell_var = tk.BooleanVar(
+            value=sessions[0].block_transition_bell_enabled
+        )
+        self.first_vars = self._session_vars(morning)
+        self.second_vars = self._session_vars(afternoon)
+
+        page = ctk.CTkScrollableFrame(self, fg_color=CANVAS, corner_radius=0)
+        page.pack(fill="both", expand=True, padx=18, pady=(18, 0))
+        card = ctk.CTkFrame(page, fg_color=SURFACE, corner_radius=18, border_width=1, border_color=BORDER)
+        card.pack(fill="both", expand=True)
+        _dialog_title(
+            card,
+            "Zil programını sıfırla",
+            "Seçilen günlerin bütün zil saatleri ve periyotları silinir, "
+            "aşağıdaki değerlerle sıfırdan oluşturulur.",
+        )
+        top = ctk.CTkFrame(card, fg_color="transparent")
+        top.pack(fill="x", padx=26, pady=(0, 4))
+        top.grid_columnconfigure((0, 1), weight=1)
+        ctk.CTkLabel(top, text="Eğitim modeli", anchor="w", text_color=INK_SUBTLE, font=ctk.CTkFont("Segoe UI Variable Text", 12, "bold")).grid(row=0, column=0, sticky="ew", padx=(0, 6))
+        ctk.CTkLabel(top, text="Hangi günler sıfırlansın?", anchor="w", text_color=INK_SUBTLE, font=ctk.CTkFont("Segoe UI Variable Text", 12, "bold")).grid(row=0, column=1, sticky="ew", padx=(6, 0))
+        ctk.CTkComboBox(
+            top, variable=self.mode_var, values=list(EDUCATION_MODES), state="readonly",
+            height=42, corner_radius=10, fg_color=INPUT, border_color=BORDER,
+            button_color=TEAL, command=lambda _selected: self._render_mode(),
+        ).grid(row=1, column=0, sticky="ew", padx=(0, 6), pady=(4, 0))
+        ctk.CTkComboBox(
+            top, variable=self.scope_var,
+            values=[self.SCOPE_WEEKDAYS, self.SCOPE_WEEK, self.scope_single],
+            state="readonly", height=42, corner_radius=10, fg_color=INPUT,
+            border_color=BORDER, button_color=TEAL,
+        ).grid(row=1, column=1, sticky="ew", padx=(6, 0), pady=(4, 0))
+
+        self.first_card = self._session_card(card, "Tam gün oturumu", self.first_vars)
+        self.second_card = self._session_card(
+            card, "Öğleden sonra oturumu", self.second_vars, with_suggestion=True
+        )
+
+        bells = ctk.CTkFrame(card, fg_color=SURFACE_ALT, corner_radius=12)
+        bells.pack(fill="x", padx=26, pady=(12, 0))
+        student_row = ctk.CTkFrame(bells, fg_color="transparent")
+        student_row.pack(fill="x", padx=12, pady=(10, 4))
+        ctk.CTkSwitch(
+            student_row, text="Öğrenci / öğretmen zili ayrı çalsın",
+            variable=self.student_bell_var, progress_color=TEAL, text_color=INK_SUBTLE,
+            font=ctk.CTkFont("Segoe UI Variable Text", 12, "bold"),
+        ).pack(side="left")
+        ctk.CTkEntry(
+            student_row, textvariable=self.student_bell_minutes_var, width=72, height=34,
+            corner_radius=8, fg_color=INPUT, border_color=BORDER,
+        ).pack(side="right")
+        ctk.CTkLabel(student_row, text="Öğrenci zili kaç dakika önce?", text_color=MUTED, font=ctk.CTkFont("Segoe UI Variable Text", 11, "bold")).pack(side="right", padx=(0, 10))
+        ctk.CTkSwitch(
+            bells, text="Blok içi sınıf değişim zili çalsın", variable=self.block_bell_var,
+            progress_color=TEAL, text_color=INK_SUBTLE,
+            font=ctk.CTkFont("Segoe UI Variable Text", 12, "bold"),
+        ).pack(anchor="w", padx=12, pady=(4, 6))
+        ctk.CTkSwitch(
+            bells, text="Elle eklenen anons ve tören olayları da silinsin",
+            variable=self.clear_extras_var, progress_color=TEAL, text_color=INK_SUBTLE,
+            font=ctk.CTkFont("Segoe UI Variable Text", 12, "bold"),
+        ).pack(anchor="w", padx=12, pady=(0, 12))
+
+        warning = ctk.CTkFrame(card, fg_color=WARNING_BG, corner_radius=12)
+        warning.pack(fill="x", padx=26, pady=(12, 0))
+        ctk.CTkLabel(
+            warning,
+            text=(
+                "⚠  Bu işlem geri alınamaz. Sıfırlanan günlerdeki elle düzeltilmiş "
+                "ders saatleri de silinir; tatil ve tören kuralları korunur."
+            ),
+            text_color=WARNING_TEXT, justify="left", anchor="w", wraplength=600,
+            font=ctk.CTkFont("Segoe UI Variable Text", 12),
+        ).pack(fill="x", padx=14, pady=12)
+
+        buttons = ctk.CTkFrame(self, fg_color="transparent")
+        buttons.pack(fill="x", padx=18, pady=18)
+        _primary_button(buttons, "Sıfırla ve oluştur", self._save, 180).pack(side="right")
+        _secondary_button(buttons, "Vazgeç", self.destroy, 110).pack(side="right", padx=(0, 10))
+        self._render_mode()
+
+    @staticmethod
+    def _session_vars(session: SessionSchedule) -> dict[str, tk.StringVar]:
+        return {
+            "first_lesson": tk.StringVar(value=session.first_lesson),
+            "lesson_count": tk.StringVar(value=str(session.lesson_count)),
+            "lesson_minutes": tk.StringVar(value=str(session.lesson_minutes)),
+            "break_minutes": tk.StringVar(value=str(session.break_minutes)),
+            "lunch_after": tk.StringVar(value=str(session.lunch_after)),
+            "lunch_minutes": tk.StringVar(value=str(session.lunch_minutes)),
+            "block_sizes": tk.StringVar(
+                value="+".join(str(item) for item in session.block_sizes)
+            ),
+        }
+
+    def _session_card(
+        self,
+        parent: ctk.CTkFrame,
+        title: str,
+        variables: dict[str, tk.StringVar],
+        *,
+        with_suggestion: bool = False,
+    ) -> ctk.CTkFrame:
+        card = ctk.CTkFrame(parent, fg_color=SURFACE_ALT, corner_radius=12)
+        card.pack(fill="x", padx=26, pady=(12, 0))
+        header = ctk.CTkFrame(card, fg_color="transparent")
+        header.pack(fill="x", padx=14, pady=(12, 2))
+        label = ctk.CTkLabel(header, text=title, anchor="w", text_color=INK, font=ctk.CTkFont("Segoe UI Variable Text", 14, "bold"))
+        label.pack(side="left")
+        card.title_label = label  # type: ignore[attr-defined]
+        if with_suggestion:
+            _secondary_button(
+                header, "Sabaha göre hesapla", self._suggest_second_start, 170
+            ).pack(side="right")
+        grid = ctk.CTkFrame(card, fg_color="transparent")
+        grid.pack(fill="x", padx=9, pady=(4, 12))
+        grid.columnconfigure((0, 1, 2), weight=1)
+        for index, (key, text) in enumerate((
+            ("first_lesson", "İlk ders (SS:DD)"),
+            ("lesson_count", "Ders sayısı"),
+            ("lesson_minutes", "Ders süresi (dk)"),
+            ("break_minutes", "Teneffüs (dk)"),
+            ("lunch_after", "Uzun ara kaçıncı dersten sonra? (0 = yok)"),
+            ("lunch_minutes", "Uzun ara (dk)"),
+            ("block_sizes", "Blok düzeni (ör. 2+2+1; normal ders için boş)"),
+        )):
+            field = ctk.CTkFrame(grid, fg_color="transparent")
+            field.grid(row=index // 3, column=index % 3, sticky="ew", padx=5, pady=4)
+            ctk.CTkLabel(field, text=text, anchor="w", text_color=MUTED, font=ctk.CTkFont("Segoe UI Variable Text", 11, "bold")).pack(fill="x", pady=(0, 2))
+            ctk.CTkEntry(field, textvariable=variables[key], height=38, corner_radius=9, fg_color=INPUT, border_color=BORDER).pack(fill="x")
+        return card
+
+    def _render_mode(self) -> None:
+        dual = self.mode_var.get() == MODE_DUAL
+        self.first_card.title_label.configure(  # type: ignore[attr-defined]
+            text="Sabah oturumu" if dual else "Tam gün oturumu"
+        )
+        if dual:
+            self.second_card.pack(fill="x", padx=26, pady=(12, 0), after=self.first_card)
+        else:
+            self.second_card.pack_forget()
+
+    def _suggest_second_start(self) -> None:
+        try:
+            morning = self._session_from_form(
+                self.first_vars, SESSION_NAME_MORNING, "Sabah oturumu"
+            )
+        except ValueError as exc:
+            messagebox.showerror("Geçersiz ders akışı", str(exc), parent=self)
+            return
+        self.second_vars["first_lesson"].set(suggest_next_session_start(morning))
+
+    def _session_from_form(
+        self, variables: dict[str, tk.StringVar], name: str, prefix: str
+    ) -> SessionSchedule:
+        value = lambda key: variables[key].get().strip()
+        block_text = value("block_sizes").replace(",", "+").replace(" ", "")
+        try:
+            block_sizes = (
+                tuple(int(item) for item in block_text.split("+") if item)
+                if block_text
+                else ()
+            )
+            session = SessionSchedule(
+                session_id=SESSION_ID_BY_NAME[name],
+                name=name,
+                first_lesson=value("first_lesson"),
+                lesson_count=int(value("lesson_count")),
+                lesson_minutes=int(value("lesson_minutes")),
+                break_minutes=int(value("break_minutes")),
+                lunch_after=int(value("lunch_after")),
+                lunch_minutes=int(value("lunch_minutes")),
+                student_bell_enabled=self.student_bell_var.get(),
+                student_bell_minutes=int(self.student_bell_minutes_var.get().strip() or "2"),
+                block_sizes=block_sizes,
+                block_transition_bell_enabled=self.block_bell_var.get(),
+            )
+        except ValueError as exc:
+            raise ValueError(f"{prefix}: sayısal alanlara yalnız tam sayı girin.") from exc
+        errors = session.validate(f"{prefix}: ")
+        if errors:
+            raise ValueError("\n".join(errors))
+        return session
+
+    def _scope_days(self) -> tuple[tuple[int, ...], tuple[int, ...]]:
+        scope = self.scope_var.get()
+        if scope == self.SCOPE_WEEKDAYS:
+            return tuple(range(7)), (0, 1, 2, 3, 4)
+        if scope == self.SCOPE_WEEK:
+            return tuple(range(7)), tuple(range(7))
+        return (self.weekday,), (self.weekday,)
+
+    def _save(self) -> None:
+        try:
+            if self.mode_var.get() == MODE_DUAL:
+                morning = self._session_from_form(
+                    self.first_vars, SESSION_NAME_MORNING, "Sabah oturumu"
+                )
+                afternoon = self._session_from_form(
+                    self.second_vars, SESSION_NAME_AFTERNOON, "Öğleden sonra oturumu"
+                )
+                sessions = (morning, afternoon)
+            else:
+                sessions = (
+                    self._session_from_form(
+                        self.first_vars, SESSION_NAME_FULL_DAY, "Tam gün oturumu"
+                    ),
+                )
+            base = sessions[0]
+            schedule = DaySchedule(
+                first_lesson=base.first_lesson,
+                lesson_count=base.lesson_count,
+                lesson_minutes=base.lesson_minutes,
+                break_minutes=base.break_minutes,
+                lunch_after=base.lunch_after,
+                lunch_minutes=base.lunch_minutes,
+                student_bell_enabled=base.student_bell_enabled,
+                student_bell_minutes=base.student_bell_minutes,
+                sessions=sessions,
+            )
+            errors = schedule.validate()
+            if errors:
+                raise ValueError("\n".join(errors))
+        except ValueError as exc:
+            messagebox.showerror("Geçersiz ders akışı", str(exc), parent=self)
+            return
+        clear_days, build_days = self._scope_days()
+        day_text = (
+            WEEKDAYS[self.weekday]
+            if len(build_days) == 1
+            else f"{len(build_days)} gün"
+        )
+        if not messagebox.askyesno(
+            "Zil programını sıfırla",
+            f"{day_text} için tanımlı bütün zil saatleri silinip yeniden "
+            "oluşturulacak. Devam edilsin mi?",
+            parent=self,
+        ):
+            return
+        self.on_apply(clear_days, build_days, schedule, self.clear_extras_var.get())
+        self.destroy()

@@ -60,9 +60,11 @@ class UiThemeTests(unittest.TestCase):
             InitialSetupDialog,
             LessonTimesDialog,
             LoginDialog,
+            PinDialog,
             ProfileManager,
             RuleEditor,
             SafeModalToplevel,
+            ScheduleResetDialog,
             SettingsDialog,
             SoundTestDialog,
         )
@@ -76,8 +78,10 @@ class UiThemeTests(unittest.TestCase):
             InitialSetupDialog,
             LessonTimesDialog,
             LoginDialog,
+            PinDialog,
             ProfileManager,
             RuleEditor,
+            ScheduleResetDialog,
             SettingsDialog,
             SoundTestDialog,
         )
