@@ -5,7 +5,9 @@ import hashlib
 import hmac
 import json
 from pathlib import Path, PurePosixPath
+import shutil
 import tempfile
+from typing import Callable
 import zipfile
 
 from .config import ConfigError, ensure_current_schema
@@ -14,6 +16,11 @@ from .domain import SchoolConfig
 
 class BackupError(RuntimeError):
     pass
+
+
+# Açılan yedeğin toplam boyut sınırı: sıkıştırma bombası ya da yanlış dosya
+# arayüz iş parçacığını MemoryError ile düşürmesin (8.8).
+MAX_BUNDLE_BYTES = 512 * 1024 * 1024
 
 
 def _digest(data: bytes) -> str:
@@ -49,10 +56,27 @@ def export_bundle(config: SchoolConfig, data_dir: Path, destination: Path) -> No
         raise BackupError(f"Yedek oluşturulamadı: {exc}") from exc
 
 
-def import_bundle(source: Path, data_dir: Path) -> SchoolConfig:
+def import_bundle(
+    source: Path,
+    data_dir: Path,
+    commit: Callable[[SchoolConfig], None] | None = None,
+) -> SchoolConfig:
+    """Yedeği doğrular ve veri dizinine uygular.
+
+    ``commit`` verilirse (ör. ``ConfigRepository.save``) ses dosyaları
+    değiştirildikten sonra çağrılır; başarısız olursa değiştirilen dosyalar
+    anlık kopyadan geri alınır ve ``BackupError`` yükseltilir. Böylece
+    "sesler yeni, ayar eski" tutarsız durumu oluşmaz (8.8).
+    """
     try:
         with zipfile.ZipFile(source, "r") as archive:
             names = archive.namelist()
+            total_size = sum(info.file_size for info in archive.infolist())
+            if total_size > MAX_BUNDLE_BYTES:
+                raise BackupError(
+                    f"Yedek çok büyük ({total_size // (1024 * 1024)} MB); "
+                    f"üst sınır {MAX_BUNDLE_BYTES // (1024 * 1024)} MB."
+                )
             for name in names:
                 # Windows'ta joinpath ters bölüyü ayraç sayar; Python dışı bir
                 # araçla üretilmiş arşivlerde dizin kaçışına izin vermemek için
@@ -87,8 +111,12 @@ def import_bundle(source: Path, data_dir: Path) -> SchoolConfig:
         raise BackupError("; ".join(errors))
 
     data_dir.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(dir=data_dir, prefix="yedek-al-") as temporary_name:
+    with (
+        tempfile.TemporaryDirectory(dir=data_dir, prefix="yedek-al-") as temporary_name,
+        tempfile.TemporaryDirectory(dir=data_dir, prefix="yedek-eski-") as snapshot_name,
+    ):
         staging = Path(temporary_name)
+        snapshot = Path(snapshot_name)
         for name, data in contents.items():
             archive_path = PurePosixPath(name)
             if (
@@ -104,10 +132,33 @@ def import_bundle(source: Path, data_dir: Path) -> SchoolConfig:
                 raise BackupError("Yedekte güvenli olmayan dosya yolu bulundu.")
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_bytes(data)
-        for path in staging.rglob("*"):
-            if not path.is_file():
-                continue
-            destination = data_dir / path.relative_to(staging)
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            path.replace(destination)
+        replaced: list[tuple[Path, Path | None]] = []
+        try:
+            for path in sorted(item for item in staging.rglob("*") if item.is_file()):
+                relative = path.relative_to(staging)
+                destination = data_dir / relative
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                previous: Path | None = None
+                if destination.exists():
+                    previous = snapshot / relative
+                    previous.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(destination, previous)
+                path.replace(destination)
+                replaced.append((destination, previous))
+            if commit is not None:
+                commit(config)
+        except Exception as exc:
+            for destination, previous in reversed(replaced):
+                try:
+                    if previous is not None:
+                        shutil.copy2(previous, destination)
+                    else:
+                        destination.unlink(missing_ok=True)
+                except OSError:
+                    continue
+            if isinstance(exc, BackupError):
+                raise
+            raise BackupError(
+                f"Geri yükleme tamamlanamadı; önceki dosyalar geri alındı. Neden: {exc}"
+            ) from exc
     return config

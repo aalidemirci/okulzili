@@ -21,9 +21,11 @@ Bu matris `PLAN.md` gereksinimlerini tasarım, otomatik test ve saha kabul kanı
 | OZ-CAL-001 | Haftalık şema ve manuel düzenleme | `generate_day`, haftalık program arayüzü | varsayılan şema ve ilk kurulum testleri | Geçti |
 | OZ-CAL-002 | Tatil ilk/son günleri dâhil programı kapatır | `DateRule.matches`, `CalendarEngine` | yıl ve takvim testleri | Geçti |
 | OZ-CAL-003 | Tören, sınav, kısaltılmış gün, telafi ve ikili oturum | tarih kuralı türleri, olay oturumu | öncelik ve tam yıl bağımsız beklenen liste testi | Geçti |
-| OZ-CAL-004 | Çakışmalar kesin öncelikle çözülür ve gerekçe gösterilir | `RulePriority`, uygulanan/bastırılan kurallar | ayrı öncelik test kümesi, ön kontrol karar metni | Geçici §4.5 sırasıyla geçti |
-| OZ-SCH-001 | Olay kimliği kalıcı olarak tekilleştirilir | `RunState.completed` | tekrar çalmama ve yeniden başlatma testleri | Geçti |
-| OZ-SCH-002 | Uyku sonrası eski ziller topluca çalınmaz | tolerans ve kaçırma politikası | uyku, gecikme ve sessize alma testleri | Geçti |
+| OZ-CAL-004 | Çakışmalar kesin öncelikle çözülür ve gerekçe gösterilir | `CalendarEngine`: temel kural zinciri + tören katmanı, uygulanan/bastırılan kurallar | `test_priority` (zincir, her temel kural üzerine tören), `test_calendar_engine` (iki tören, tatil/sınav/kısaltılmış/telafi + tören), ön kontrol karar metni | Geçti (temel sıra geçici §4.5; tören katmanı 04.09.2026) |
+| OZ-SCH-001 | Olay kimliği kalıcı olarak tekilleştirilir | `BellEvent.create` (kaynak kuraldan bağımsız kimlik), `RunState.completed` (zaman damgalı, kimlik sürümlü) | tekrar çalmama, yeniden başlatma, gün içi kural değişikliği, erteleme kalıcılığı, eski/bozuk/yeni durum dosyası eşitleme testleri | Geçti |
+| OZ-SCH-002 | Uyku sonrası eski ziller topluca çalınmaz | tolerans ve kaçırma politikası; duraklatma sessize almayla aynı sözleşmede | uyku, gecikme, sessize alma ve duraklatma testleri | Geçti |
+| OZ-SCH-005 | Uzun yayın sırasında vadesi gelen zil kaçırılmaz | `BellScheduler` meşgul penceresi (gecikme yayın bitişinden ölçülür) | `test_bell_due_during_long_scheduled_playback_plays_afterwards`, `..._manual_playback_plays_after_release` | Geçti |
+| OZ-SCH-006 | Durum dosyası yazılamasa da ziller çalar, bozuk dosya veri kaybı üretmez | `RunState._save` hata yutma + tek kritik uyarı, karantina, 7 gün saklama | `test_state_save_failure_keeps_ticking_and_reports_once`, `..._quarantined_and_resynced`, `..._expire_by_age` | Geçti |
 | OZ-SCH-003 | Saat sıçraması uyku süresinden ayrılır | duvar saati/tekdüze saat farkı | ileri saat sıçraması ve uyku ayrımı testleri | Geçti |
 | OZ-SCH-004 | Türe göre kaçırma toleransı | `grace_seconds_by_type` | tür bazlı tolerans testi | Geçti |
 | OZ-CAL-005 | İkili eğitimde sabah ve öğleden sonra oturumları çakışmadan üretilir | `defaults.build_dual_sessions`, `repair_session_overlap`, ders zilleri sayfasındaki oturum taslağı | `DualSessionSuggestionTests`, `SessionOverlapRepairTests` | Geçti |
@@ -36,12 +38,15 @@ Bu matris `PLAN.md` gereksinimlerini tasarım, otomatik test ve saha kabul kanı
 | OZ-CFG-001 | Sürümlü, doğrulanan ve atomik yapılandırma | `ConfigRepository` | atomik tur, `.bak`, yol sınırı testleri | Geçti |
 | OZ-CFG-002 | Yalnız güncel şema; eski/bozuk dosyada karantina + varsayılanla açılış | `config.ensure_current_schema`, `ConfigRepository.load` | eski sürüm/bozuk dosya kurtarma testleri | Geçti (göç zinciri 0.7'de bilinçli kaldırıldı; saha kurulumu yok) |
 | OZ-CFG-003 | Paylaşılabilir güvenli yedek/geri yükleme | karmalı `.okulzili`; PIN ve günlük hariç | tur, değiştirilmiş paket ve üst dizin saldırısı testleri | Geçti |
-| OZ-SEC-001 | Üç rol, karmalı PIN ve en az yetki | PBKDF2-HMAC-SHA256 ve rol izinleri | PIN/bozuk özet/tepsi eylemi izin testleri | Geçti |
+| OZ-SEC-001 | Üç rol, karmalı PIN ve en az yetki | PBKDF2-HMAC-SHA256 ve rol izinleri; bozuk profil dosyası karantinası | PIN/bozuk özet/tepsi eylemi izin testleri, `test_unreadable_profile_file_is_quarantined_not_overwritten` | Geçti |
+| OZ-SEC-002 | Yetki denetimi düğme durumuna bırakılmaz; yetkili oturum kilitlenebilir | `_require_permission` (ses durdurma, yönetim merkezi, profil yöneticisi dâhil), **Kilitle** düğmesi | `test_permissions` (kaynak ağacı denetimi) | Geçti |
 | OZ-UI-001 | Türkçe ana pencere, tepsi ve hızlı eylemler | Tk arayüzü ve `TrayController` | kaynak/paket arayüz ve tepsi açılış kontrolleri | Otomatik geçti; manuel görsel tarama bekliyor |
 | OZ-UI-002 | İlk kurulum sihirbazı ve ses testi | `InitialSetupDialog` (yalnız okul adı ve ses çıkışı), `SoundTestDialog` | ilk kurulum/arayüz kontrol kipleri, `test_initial_setup_only_asks_for_school_identity` | Geçti |
 | OZ-UI-003 | Zil saatleri ve periyotları tümüyle sıfırlanıp yeniden oluşturulabilir | `ScheduleResetDialog`, `defaults.reset_weekly_schedule` | `WeeklyScheduleResetTests` | Geçti |
 | OZ-UI-004 | Girişten sonra ana pencere açık kalır; çarpı sistem tepsisine indirir | `app._reveal_main_window`, `_hide_to_taskbar`, `_show_window` | `MainWindowRevealTests`, tepsi açılış kontrolü | Otomatik katman geçti; Windows'ta görsel doğrulama bekliyor |
 | OZ-UI-005 | PIN oluşturma penceresi uygulamanın tasarım diliyle uyumlu | `PinDialog` | `test_pin_windows_no_longer_use_the_legacy_input_boxes`, kipli pencere yaşam döngüsü testi | Geçti |
+| OZ-UI-006 | Kaçırılan/bekletilen/sessize alınan zil kullanıcıya görünür | `alerts.AlertLedger`, panel "Uyarı var", tepsi bildirimi, günlük sayfasında mesaj | `test_alerts` | Geçti |
+| OZ-UI-007 | Cihaz kaybı çalışma sırasında fark edilir | beş dakikada bir arka plan ön kontrolü, salt seçim cihaz kutuları | kod incelemesi; gerçek USB çekme testi bekliyor | Otomatik katman hazır; saha testi bekliyor |
 | OZ-PRE-001 | Saat, cihaz, dosya, yarınki tören, program, sonraki zil, yapılandırma ve depolama ön kontrolü | `PreflightService` | eksik dosya/tören/cihaz/saat dilimi/yazılabilirlik testleri | Geçti |
 | OZ-LOG-001 | Yerel dönen günlük ve dışa aktarma | `RotatingFileHandler`, Olay günlüğü arayüzü | yapılandırılmış kayıt, döndürme ve veri dizini değiştirme testleri | Geçti |
 
@@ -50,10 +55,11 @@ Bu matris `PLAN.md` gereksinimlerini tasarım, otomatik test ve saha kabul kanı
 | Kimlik | Gereksinim | Paket/kanıt | Durum |
 |---|---|---|---|
 | OZ-PKG-WIN-001 | PyInstaller onedir ve Türkçe Inno kurucusu | `dist/OkulZili-Windows-x64`, `dist/installer` | Windows 11 paket kontrolü geçti |
-| OZ-PKG-WIN-002 | Oturum açılış görevi; AC kısıtı kapalı | `install-task.ps1`, `verify-windows-install.ps1` | Windows 11 gerçek kurulumunda oturum tetikleyicisi ve iki batarya ayarı geçti |
-| OZ-PKG-LNX-001 | `.deb`, systemd kullanıcı birimi, menü ve autostart | `dist/okul-zili_0.7.1_all.deb` | Paket içerik testi geçti; arayüz bağımlılıkları (`customtkinter`, `darkdetect`, `packaging`) pakete gömülü; temiz Pardus/Ubuntu kurulumu bekliyor |
-| OZ-PKG-OFF-001 | Çevrimdışı çalışma/kurulum | Windows çalışma zamanı ve `vendor-windows`; Linux için `prepare-linux-offline-bundle.sh` | Windows paket hazır; dağıtıma özgü Linux belleğinin temiz hedef sürümünde üretilmesi ve ağsız kabulü bekliyor |
-| OZ-PKG-REL-001 | Karma, lisans, platform ve sürüm manifesti | `SHA256SUMS.txt`, `BAGIMLILIKLAR.md`, `SURUM-NOTLARI.md` | Geçti |
+| OZ-PKG-WIN-002 | Oturum açılış görevi; AC kısıtı kapalı; görev kurulumu başlatan hesaba yazılır | `install-task.ps1` (`USERDOMAIN\USERNAME`), Inno `runasoriginaluser`, `PrepareToInstall` ile çalışan uygulamanın durdurulması, `verify-windows-install.ps1` (zaman aşımı = başarısız) | Windows 11 gerçek kurulumunda oturum tetikleyicisi ve iki batarya ayarı geçti (0.7.1); `runasoriginaluser` sonrası standart kullanıcı + ayrı yönetici hesabıyla yeniden test bekliyor |
+| OZ-PKG-LNX-001 | `.deb`, systemd kullanıcı birimi, menü ve autostart | `dist/okul-zili_0.8.0_all.deb`; gömülü kütüphaneler `/usr/lib/okul-zili/vendor`, `md5sums` + `Installed-Size` | Paket içerik testi geçti; `python3-packaging` çakışması kaldırıldı; temiz Pardus/Ubuntu kurulumu bekliyor |
+| OZ-PKG-OFF-001 | Çevrimdışı çalışma/kurulum | Windows kurucusu çalışma zamanını ve `tzdata`yı içerir; Linux için `prepare-linux-offline-bundle.sh` | Windows paket hazır; dağıtıma özgü Linux belleğinin temiz hedef sürümünde üretilmesi ve ağsız kabulü bekliyor |
+| OZ-PKG-REL-001 | Karma, lisans, platform ve sürüm manifesti | `SHA256SUMS.txt`, `BAGIMLILIKLAR.md`, `SURUM-NOTLARI.md`, `THIRD_PARTY_LICENSES` (cffi, tzdata, Roboto dâhil), EXE/kurucu sürüm bilgisi | Geçti |
+| OZ-PKG-BLD-001 | Derleme tekrarlanabilir: Python 3.12 zorunlu, bağımlılık ön denetimi, CI 3.10/3.11/3.12 | `build.ps1`, `testler.yml`, `customtkinter==5.2.2` sabitlemesi + vendor eşitlik testi | `test_packaging` | Geçti |
 | OZ-DOC-001 | Türkçe belge seti | README, KURULUM, DONANIM, KULLANIM, SORUN-GIDERME, MIMARI | Metinler mevcut; gerçek ekran görüntüleri bekliyor |
 | OZ-ACC-001 | Beş öğretim günü pilot | olay kimlikli günlük, uygulama içi pilot denetleyicisi ve `SAHA-KABUL.md` | Araç hazır; gerçek beş günlük günlük bekliyor |
 | OZ-ACC-002 | Windows 10/11, Pardus 23, Ubuntu 22.04+, PipeWire ve PulseAudio matrisi | Saha test kayıtları | Windows 11 kurulum/görev/paket kontrolleri geçti; yeni kaldırma süreci tekrar testi, diğer platformlar ve ses altyapıları bekliyor |

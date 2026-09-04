@@ -3,6 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from array import array
 from dataclasses import dataclass
+import hashlib
 import io
 import math
 import os
@@ -14,6 +15,7 @@ import subprocess
 import tempfile
 import threading
 import time as time_module
+from typing import Iterable
 import wave
 import ctypes
 from ctypes import wintypes
@@ -78,6 +80,19 @@ def validate_wave(path: Path) -> tuple[bool, str]:
 
 PLAYBACK_TIMEOUT_MARGIN_SECONDS = 15.0
 PLAYBACK_TIMEOUT_CAP_SECONDS = 600.0
+# Ölçeklenmiş ses kopyaları bu süreden sonra önbellekten temizlenir.
+VOLUME_CACHE_MAX_AGE_DAYS = 30
+
+
+def scale_pcm16(samples: array, factor: float) -> array:
+    """PCM16 örnekleri sabit çarpanla ölçekler (arama tablosu ile).
+
+    Saf Python döngüsünden birkaç kat hızlıdır; asıl kazanç yine de sonucun
+    dosya/mtime/yüzde anahtarıyla önbelleğe alınmasından gelir (D5).
+    """
+    factor = max(0.0, min(1.0, float(factor)))
+    table = [max(-32768, min(32767, int(value * factor))) for value in range(-32768, 32768)]
+    return array("h", [table[value + 32768] for value in samples])
 
 
 def playback_timeout_seconds(path: Path) -> float:
@@ -444,12 +459,20 @@ class PlaybackResult:
 
 
 class PlaybackManager:
-    """Tek kilit altında ses çalar; normal ses başarısızsa yedek bip dener."""
+    """Tek kilit altında ses çalar; normal ses başarısızsa yedek bip dener.
 
-    def __init__(self, backend: AudioBackend) -> None:
+    Ses düzeyi %100 değilse ölçeklenmiş PCM16 kopya, kaynak dosyanın yolu,
+    değişiklik zamanı, boyutu ve yüzde anahtarıyla ``cache_dir`` altında bir
+    kez üretilir ve sonraki çalmalarda yeniden kullanılır; ``prewarm_volume_cache``
+    açılışta bu kopyaları arka planda hazırlar (D5).
+    """
+
+    def __init__(self, backend: AudioBackend, cache_dir: Path | None = None) -> None:
         self.backend = backend
+        self.cache_dir = cache_dir or Path(tempfile.gettempdir()) / "okul-zili-seviye"
         self._lock = threading.Lock()
         self._stop_requested = threading.Event()
+        self._cache_lock = threading.Lock()
 
     @property
     def busy(self) -> bool:
@@ -463,28 +486,70 @@ class PlaybackManager:
         self.backend.stop_playback()
         return True
 
-    @staticmethod
-    def _volume_adjusted_copy(path: Path, volume_percent: int) -> Path:
-        with wave.open(str(path), "rb") as source:
-            if source.getcomptype() != "NONE" or source.getsampwidth() != 2:
-                raise AudioError("Ses düzeyi ayarı yalnızca PCM16 WAV dosyalarında kullanılabilir.")
-            parameters = source.getparams()
-            samples = array("h")
-            samples.frombytes(source.readframes(source.getnframes()))
-        factor = max(0, min(100, int(volume_percent))) / 100.0
-        for index, value in enumerate(samples):
-            samples[index] = max(-32768, min(32767, int(value * factor)))
-        handle, filename = tempfile.mkstemp(prefix="okul-zili-seviye-", suffix=".wav")
-        os.close(handle)
-        destination = Path(filename)
+    def _volume_cache_path(self, path: Path, volume: int) -> Path:
+        stat = path.stat()
+        key = hashlib.sha256(
+            f"{path.resolve()}|{stat.st_mtime_ns}|{stat.st_size}|{volume}".encode("utf-8")
+        ).hexdigest()[:16]
+        return self.cache_dir / f"{path.stem}-yuzde-{volume}-{key}.wav"
+
+    def _volume_adjusted_copy(self, path: Path, volume_percent: int) -> Path:
+        volume = max(0, min(100, int(volume_percent)))
+        cached = self._volume_cache_path(path, volume)
+        with self._cache_lock:
+            if cached.is_file() and validate_wave(cached)[0]:
+                return cached
+            with wave.open(str(path), "rb") as source:
+                if source.getcomptype() != "NONE" or source.getsampwidth() != 2:
+                    raise AudioError("Ses düzeyi ayarı yalnızca PCM16 WAV dosyalarında kullanılabilir.")
+                parameters = source.getparams()
+                samples = array("h")
+                samples.frombytes(source.readframes(source.getnframes()))
+            scaled = scale_pcm16(samples, volume / 100.0)
+            self.cache_dir.mkdir(parents=True, exist_ok=True)
+            temporary = cached.with_name(f".{cached.name}.yeni")
+            try:
+                with wave.open(str(temporary), "wb") as target:
+                    target.setparams(parameters)
+                    target.writeframes(scaled.tobytes())
+                temporary.replace(cached)
+            except Exception:
+                temporary.unlink(missing_ok=True)
+                raise
+            return cached
+
+    def prewarm_volume_cache(self, paths: Iterable[Path], volume_percent: int) -> int:
+        """Ölçeklenmiş kopyaları önceden üretir; hazırlanan dosya sayısını döndürür.
+
+        Hatalar yutulur: eksik/bozuk dosya çalma anında zaten yedek bip
+        yoluna düşer. Eski önbellek girdileri bu vesileyle temizlenir.
+        """
+        if int(volume_percent) == 100:
+            return 0
+        prepared = 0
+        for path in paths:
+            try:
+                if validate_wave(path)[0]:
+                    self._volume_adjusted_copy(path, volume_percent)
+                    prepared += 1
+            except (OSError, AudioError, wave.Error, EOFError):
+                continue
+        self.prune_volume_cache()
+        return prepared
+
+    def prune_volume_cache(self, max_age_days: int = VOLUME_CACHE_MAX_AGE_DAYS) -> None:
         try:
-            with wave.open(str(destination), "wb") as target:
-                target.setparams(parameters)
-                target.writeframes(samples.tobytes())
-        except Exception:
-            destination.unlink(missing_ok=True)
-            raise
-        return destination
+            if not self.cache_dir.is_dir():
+                return
+            cutoff = time_module.time() - max_age_days * 86_400
+            for item in self.cache_dir.glob("*.wav"):
+                try:
+                    if item.stat().st_mtime < cutoff:
+                        item.unlink()
+                except OSError:
+                    continue
+        except OSError:
+            return
 
     def play(self, path: Path, device_id: str, volume_percent: int = 100) -> PlaybackResult:
         if not self._lock.acquire(blocking=False):
@@ -517,15 +582,14 @@ class PlaybackManager:
                     False,
                     "Seçili ses cihazı erişilebilir değil ve yedek bip için kullanılabilir çıkış yok.",
                 )
-            adjusted_path: Path | None = None
             try:
                 valid, message = validate_wave(path)
                 if not valid:
                     raise AudioError(message)
                 playback_path = path
                 if int(volume_percent) != 100:
-                    adjusted_path = self._volume_adjusted_copy(path, volume_percent)
-                    playback_path = adjusted_path
+                    # Önbellekli kopya: ilk çalmada üretilir, sonra yeniden kullanılır.
+                    playback_path = self._volume_adjusted_copy(path, volume_percent)
                 self.backend.play_file(playback_path, device_id)
                 if self._stop_requested.is_set():
                     return PlaybackResult(True, False, "Ses kullanıcı tarafından durduruldu.", True)
@@ -566,8 +630,5 @@ class PlaybackManager:
                 return PlaybackResult(
                     True, True, f"Normal ses başarısız; yedek bip çalındı: {normal_error}"
                 )
-            finally:
-                if adjusted_path is not None:
-                    adjusted_path.unlink(missing_ok=True)
         finally:
             self._lock.release()

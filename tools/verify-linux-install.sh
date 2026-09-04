@@ -15,11 +15,13 @@ if ! dpkg-query -W -f='${Status}\n' okul-zili 2>/dev/null | grep -q "install ok 
 fi
 
 check_file /usr/bin/okul-zili
+check_file /usr/lib/okul-zili/vendor/customtkinter/__init__.py
 check_file /usr/lib/systemd/user/okul-zili.service
 check_file /usr/share/applications/okul-zili.desktop
 check_file /etc/xdg/autostart/okul-zili.desktop
 
-if ! /usr/bin/python3 -c "import okul_zili, tkinter, PIL, pystray, six, customtkinter, darkdetect, packaging"; then
+# Gömülü kütüphaneler başlatıcının verdiği PYTHONPATH ile bulunur (D10).
+if ! PYTHONPATH=/usr/lib/okul-zili/vendor /usr/bin/python3 -c "import okul_zili, tkinter, PIL, pystray, six, customtkinter, darkdetect, packaging, zoneinfo; zoneinfo.ZoneInfo('Europe/Istanbul')"; then
     echo "BAŞARISIZ: Python çalışma zamanı bağımlılıklarından biri yüklenemedi."
     FAILED=1
 fi

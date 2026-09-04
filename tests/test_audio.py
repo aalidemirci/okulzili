@@ -16,6 +16,7 @@ from okul_zili.audio import (
     playback_timeout_seconds,
     validate_wave,
 )
+from okul_zili.audio import fallback_wave_bytes
 from tests.helpers import MockAudioBackend, write_wave
 
 
@@ -41,6 +42,44 @@ class AudioTests(unittest.TestCase):
             PlaybackManager(half).play(path, "varsayilan", 50)
             self.assertLessEqual(half.peak, full.peak * 0.51)
             self.assertEqual(original, path.read_bytes())
+
+    def test_volume_scaled_copy_is_cached_and_reused(self) -> None:
+        # D5: ölçeklenmiş kopya bir kez üretilir, sonraki çalmalar onu kullanır.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / "zil.wav"
+            write_wave(path)
+            backend = MockAudioBackend()
+            manager = PlaybackManager(backend, cache_dir=root / "onbellek")
+            self.assertTrue(manager.play(path, "varsayilan", 50).success)
+            cached = list((root / "onbellek").glob("*.wav"))
+            self.assertEqual(1, len(cached))
+            first_stamp = cached[0].stat().st_mtime_ns
+            self.assertTrue(manager.play(path, "varsayilan", 50).success)
+            self.assertEqual(first_stamp, cached[0].stat().st_mtime_ns)
+            self.assertEqual(1, len(list((root / "onbellek").glob("*.wav"))))
+            files = [value for kind, value in backend.calls if kind == "file"]
+            self.assertTrue(all("yuzde-50" in name for name in files), files)
+            # Kaynak değişince (boyut/mtime) yeni kopya üretilir.
+            path.write_bytes(fallback_wave_bytes(140, 660))
+            self.assertTrue(manager.play(path, "varsayilan", 50).success)
+            self.assertEqual(2, len(list((root / "onbellek").glob("*.wav"))))
+
+    def test_prewarm_prepares_volume_copies_before_first_bell(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            good = root / "iyi.wav"
+            write_wave(good)
+            missing = root / "yok.wav"
+            backend = MockAudioBackend()
+            manager = PlaybackManager(backend, cache_dir=root / "onbellek")
+            self.assertEqual(1, manager.prewarm_volume_cache([good, missing], 70))
+            self.assertEqual(0, manager.prewarm_volume_cache([good], 100))
+            cached = list((root / "onbellek").glob("*.wav"))
+            self.assertEqual(1, len(cached))
+            stamp = cached[0].stat().st_mtime_ns
+            manager.play(good, "varsayilan", 70)
+            self.assertEqual(stamp, cached[0].stat().st_mtime_ns)
 
     def test_windows_device_name_resolves_to_real_waveout_index(self) -> None:
         devices = ("Dahili Hoparlör", "USB Ses Kartı")

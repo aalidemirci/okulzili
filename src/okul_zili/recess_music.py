@@ -6,7 +6,7 @@ from pathlib import Path
 import threading
 import wave
 
-from .audio import PlatformAudioBackend, validate_wave
+from .audio import PlatformAudioBackend, scale_pcm16, validate_wave
 
 
 def scaled_wave(source: Path, destination: Path, volume_percent: int) -> Path:
@@ -18,8 +18,7 @@ def scaled_wave(source: Path, destination: Path, volume_percent: int) -> Path:
         parameters = input_wave.getparams()
         samples = array("h")
         samples.frombytes(input_wave.readframes(input_wave.getnframes()))
-    for index, value in enumerate(samples):
-        samples[index] = max(-32768, min(32767, int(value * volume)))
+    samples = scale_pcm16(samples, volume)
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = destination.with_name(f".{destination.name}.yeni")
     try:
@@ -55,16 +54,16 @@ class RecessMusicManager:
         volume_percent: int,
         stop_at: datetime,
     ) -> bool:
+        """Müziği arka planda başlatır; ``True`` başlatma isteğinin kabul edildiğini söyler.
+
+        Ölçekleme (uzun bir parçada saniyeler sürebilir) çağıran iş parçacığında
+        değil işçide yapılır; Tk ana döngüsü donmaz (D5).
+        """
         valid, _ = validate_wave(source)
         if not valid or stop_at <= datetime.now():
             return False
         cache_name = f"{source.stem}-yuzde-{max(0, min(40, volume_percent))}.wav"
         cached = self.cache_dir / cache_name
-        try:
-            if not cached.exists() or cached.stat().st_mtime < source.stat().st_mtime:
-                scaled_wave(source, cached, volume_percent)
-        except (OSError, ValueError, wave.Error):
-            return False
         self.stop()
         with self._lock:
             self._generation += 1
@@ -75,6 +74,8 @@ class RecessMusicManager:
 
         def worker() -> None:
             try:
+                if not cached.exists() or cached.stat().st_mtime < source.stat().st_mtime:
+                    scaled_wave(source, cached, volume_percent)
                 while datetime.now() < stop_at:
                     if cancel.is_set():
                         break

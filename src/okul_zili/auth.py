@@ -7,7 +7,9 @@ import json
 import math
 import os
 from pathlib import Path
+import shutil
 import time
+from datetime import datetime
 
 
 ITERATIONS = 310_000
@@ -44,25 +46,53 @@ class AuthRepository:
     def __init__(self, path: Path) -> None:
         self.path = path
         self.profiles = {role: Profile(role, "", "") for role in ROLES}
+        self.recovery_note: str | None = None
         self.load()
 
     def load(self) -> None:
+        """Profil dosyasını okur; okunamıyorsa silmez, karantinaya alıp not düşer.
+
+        Eskiden okunamayan/eski sürümlü dosya sessizce boş profil sayılıyor ve
+        ilk PIN kaydında üzerine yazılıyordu; nöbetçi/görüntüleme PIN'leri fark
+        edilmeden kayboluyordu (D7). Şimdi eski dosya ``.bozuk-<tarih>`` adıyla
+        korunur ve ``recovery_note`` arayüzde kritik uyarı olarak gösterilir.
+        """
+        self.recovery_note = None
         if not self.path.exists():
             return
         try:
             raw = json.loads(self.path.read_text(encoding="utf-8"))
+            if not isinstance(raw, dict):
+                raise ValueError("kök nesne değil")
             if int(raw.get("schema_version", 0)) != 1:
-                return
-            for role, item in raw.get("profiles", {}).items():
+                raise ValueError(f"desteklenmeyen profil dosyası sürümü: {raw.get('schema_version')}")
+            loaded = {role: Profile(role, "", "") for role in ROLES}
+            for role, item in dict(raw.get("profiles", {})).items():
                 if role in ROLES:
-                    self.profiles[role] = Profile(
+                    loaded[role] = Profile(
                         role,
                         str(item.get("salt", "")),
                         str(item.get("pin_hash", "")),
                         int(item.get("iterations", ITERATIONS)),
                     )
-        except (OSError, ValueError, TypeError):
-            return
+            self.profiles = loaded
+        except (OSError, ValueError, TypeError, AttributeError) as exc:
+            quarantined = self._quarantine()
+            saved_as = f" Eski dosya '{quarantined}' adıyla saklandı." if quarantined else ""
+            self.recovery_note = (
+                f"Profil (PIN) dosyası okunamadı: {exc}. Yeni yönetici PIN'i istenecek; "
+                f"nöbetçi ve görüntüleme PIN'leri yeniden tanımlanmalıdır.{saved_as}"
+            )
+
+    def _quarantine(self) -> str | None:
+        try:
+            target = self.path.with_name(
+                f"{self.path.name}.bozuk-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+            )
+            shutil.copy2(self.path, target)
+            return target.name
+        except OSError:
+            return None
 
     def has_admin_pin(self) -> bool:
         return self.profiles["yonetici"].configured

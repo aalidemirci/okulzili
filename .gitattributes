@@ -7,6 +7,7 @@
 *.desktop text eol=lf
 *.service text eol=lf
 packaging/linux/okul-zili text eol=lf
+packaging/linux/control text eol=lf
 packaging/linux/postinst text eol=lf
 packaging/linux/prerm text eol=lf
 

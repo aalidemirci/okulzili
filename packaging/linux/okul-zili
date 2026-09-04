@@ -1,3 +1,10 @@
 #!/bin/sh
+# Pakete gömülü arayüz kütüphaneleri (customtkinter, darkdetect, packaging)
+# sistemin dist-packages dizinine değil uygulamanın kendi dizinine kurulur;
+# böylece Debian'ın python3-packaging paketiyle dosya çakışması olmaz (D10).
+OKUL_ZILI_VENDOR=/usr/lib/okul-zili/vendor
+if [ -d "$OKUL_ZILI_VENDOR" ]; then
+    PYTHONPATH="$OKUL_ZILI_VENDOR${PYTHONPATH:+:$PYTHONPATH}"
+    export PYTHONPATH
+fi
 exec /usr/bin/python3 -m okul_zili "$@"
-

@@ -17,6 +17,7 @@ from tkinter import filedialog, messagebox, ttk
 from typing import Callable
 
 from . import __version__
+from .alerts import READY_TEXT, AlertLedger
 from .auth import AuthRepository, LoginThrottle, ROLE_LABELS, is_action_allowed
 from .academic_defaults import academic_calendar_template
 from .audio import PlatformAudioBackend, PlaybackManager
@@ -122,6 +123,9 @@ from .dialogs import (
     _secondary_button,
 )
 
+# Ön kontrol arka planda bu aralıkla yenilenir (7.5).
+PREFLIGHT_REFRESH_MS = 5 * 60 * 1000
+
 DEVELOPER_NAME = "Ahmet Ali DEMİRCİ"
 DEVELOPER_EMAIL = "aalidemirci@gmail.com"
 LICENSE_NAME = "PolyForm Noncommercial License 1.0.0"
@@ -166,16 +170,22 @@ class OkulZiliApp:
 
             self.config = default_config()
         self.backend = PlatformAudioBackend()
-        self.playback = PlaybackManager(self.backend)
+        self.playback = PlaybackManager(self.backend, cache_dir=self.data_dir / "onbellek" / "zil-seviye")
         self.recess_music = RecessMusicManager(self.data_dir / "onbellek" / "teneffus-muzigi")
         self.engine = CalendarEngine(self.config)
         self.notice_queue: queue.Queue[SchedulerNotice] = queue.Queue(maxsize=500)
         self._dropped_notice_count = 0
-        self._recent_criticals: deque[str] = deque(maxlen=5)
+        self.alerts = AlertLedger()
         self._last_alerts: list[CheckResult] = []
+        self._last_ui_error_at: datetime | None = None
+        self._preflight_after_id: str | None = None
+        self._preflight_refresh_running = False
         if self.repo.recovery_note:
             log_event(self.logger, "yapilandirma_kurtarildi", level="kritik", mesaj=self.repo.recovery_note)
             self._enqueue_notice(SchedulerNotice("kritik", self.repo.recovery_note))
+        if self.auth.recovery_note:
+            log_event(self.logger, "profil_dosyasi_kurtarildi", level="kritik", mesaj=self.auth.recovery_note)
+            self._enqueue_notice(SchedulerNotice("kritik", self.auth.recovery_note))
         if generated_sound_error:
             log_event(self.logger, "ses_uretim_hatasi", level="kritik", mesaj=generated_sound_error)
             self._enqueue_notice(
@@ -216,7 +226,7 @@ class OkulZiliApp:
         self.tray = TrayController(
             on_show=lambda: self.root.after(0, self._show_window),
             on_lesson_bell=lambda: self.root.after(0, lambda: self._manual_play("ogretmen")),
-            on_stop_audio=self._stop_audio,
+            on_stop_audio=lambda: self.root.after(0, self._stop_audio),
             on_defer=lambda: self.root.after(0, self._defer_next),
             on_toggle_scheduler=lambda: self.root.after(0, self._toggle_scheduler),
             on_toggle_mute=lambda: self.root.after(0, self._toggle_mute_today),
@@ -226,9 +236,11 @@ class OkulZiliApp:
         log_event(self.logger, "sistem_tepsisi", etkin=tray_started)
         self._start_scheduler_worker()
         self._start_time_check_worker()
+        self._prewarm_volume_cache()
         self._refresh_all()
         self.root.after(100, self._drain_notices)
         self.root.after(350, self._open_first_run_sound_test)
+        self._preflight_after_id = self.root.after(PREFLIGHT_REFRESH_MS, self._refresh_preflight_in_background)
         log_event(self.logger, "uygulama_acildi", surum=__version__)
 
     def _build_ui(self) -> None:
@@ -289,6 +301,10 @@ class OkulZiliApp:
         # çalışırken PIN ile yetki yükseltmenin tek yoludur.
         self.login_button = ctk.CTkButton(top, text="Giriş", width=84, height=40, corner_radius=10, fg_color=SURFACE, hover_color=HOVER, text_color=INK_SUBTLE, border_width=1, border_color=BORDER, command=self._open_login, font=ctk.CTkFont("Segoe UI Variable Text", 12, "bold"))
         self.login_button.pack(side="right", padx=(8, 0))
+        # Yetkili oturumu kiosk bilgisayarda açık bırakmamak için tek tıkla
+        # salt görüntülemeye dönüş (7.4).
+        self.lock_button = ctk.CTkButton(top, text="Kilitle", width=84, height=40, corner_radius=10, fg_color=SURFACE, hover_color=HOVER, text_color=INK_SUBTLE, border_width=1, border_color=BORDER, command=self._lock_session, font=ctk.CTkFont("Segoe UI Variable Text", 12, "bold"))
+        self.lock_button.pack(side="right", padx=(8, 0))
         self.backup_button = self.management_button
         self.settings_button = self.management_button
 
@@ -425,6 +441,8 @@ class OkulZiliApp:
         log_event(self.logger, "arayuz_temasi", tema=self.appearance)
 
     def _open_management_center(self) -> None:
+        if not self._require_permission("yapilandir"):
+            return
         existing = getattr(self, "_management_window", None)
         if existing is not None and existing.winfo_exists():
             existing.lift()
@@ -446,7 +464,7 @@ class OkulZiliApp:
 
         for title, detail, action in (
             ("Okul ve cihaz ayarları", "Okul adı, ses cihazı ve çalışma toleransları", self._open_settings),
-            ("Yetki profilleri", "Yönetici, operatör ve görüntüleme PIN'leri", lambda: ProfileManager(self.root, self.auth)),
+            ("Yetki profilleri", "Yönetici, operatör ve görüntüleme PIN'leri", self._open_profile_manager),
             ("Yedekleme ve geri yükleme", "Ayarları güvenli bir arşive alın veya geri yükleyin", self._backup_menu),
         ):
             row = ctk.CTkButton(
@@ -958,9 +976,13 @@ class OkulZiliApp:
         ceremony = ctk.CTkFrame(scenarios, fg_color=SURFACE, corner_radius=14, border_width=1, border_color=BORDER)
         ceremony.pack(side="left", fill="both", expand=True, padx=(0, 6))
         ctk.CTkLabel(ceremony, text="Tören provası", text_color=INK_SUBTLE, font=ctk.CTkFont("Segoe UI Variable Display", 13, "bold")).pack(side="left", padx=(14, 8), pady=12)
-        self._action_button(ceremony, "Sözlü marş", lambda: self._confirm_ceremony_sound("istiklal_sozlu", "Sözlü İstiklâl Marşı"), width=100).pack(side="left", padx=4, pady=10)
-        self._action_button(ceremony, "Bando", lambda: self._confirm_ceremony_sound("istiklal_sozsuz", "Bando İstiklâl Marşı"), width=84).pack(side="left", padx=4, pady=10)
-        self._action_button(ceremony, "10 Kasım akışı", self._confirm_november_sequence, width=124).pack(side="left", padx=4, pady=10)
+        self.sound_ceremony_buttons = [
+            self._action_button(ceremony, "Sözlü marş", lambda: self._confirm_ceremony_sound("istiklal_sozlu", "Sözlü İstiklâl Marşı"), width=100),
+            self._action_button(ceremony, "Bando", lambda: self._confirm_ceremony_sound("istiklal_sozsuz", "Bando İstiklâl Marşı"), width=84),
+            self._action_button(ceremony, "10 Kasım akışı", self._confirm_november_sequence, width=124),
+        ]
+        for button in self.sound_ceremony_buttons:
+            button.pack(side="left", padx=4, pady=10)
         drills = ctk.CTkFrame(scenarios, fg_color=SURFACE, corner_radius=14, border_width=1, border_color=BORDER)
         drills.pack(side="left", fill="both", expand=True, padx=(6, 0))
         ctk.CTkLabel(drills, text="Tatbikat", text_color=INK_SUBTLE, font=ctk.CTkFont("Segoe UI Variable Display", 13, "bold")).pack(side="left", padx=(14, 8), pady=12)
@@ -1164,9 +1186,11 @@ class OkulZiliApp:
             self.defer_button,
             self.mute_button,
             *self.drill_buttons,
+            *self.sound_ceremony_buttons,
             *self.dashboard_operational_buttons,
         ):
             button.configure(state=operator_state)
+        self.lock_button.configure(state=operator_state)
 
     def set_role(self, role: str) -> None:
         """Çalışan uygulamada yetkiyi değiştirir (gözetimsiz açılış sonrası giriş)."""
@@ -1177,6 +1201,25 @@ class OkulZiliApp:
         self._apply_permissions()
         log_event(self.logger, "profil_degisti", profil=role)
         self.root.after(350, self._open_first_run_sound_test)
+
+    def _lock_session(self) -> None:
+        """Yetkili oturumu salt görüntülemeye indirir; ziller etkilenmez (7.4)."""
+        if self.role == "goruntuleme":
+            return
+        previous = self.role
+        self.set_role("goruntuleme")
+        log_event(self.logger, "oturum_kilitlendi", onceki_profil=previous)
+        self._enqueue_notice(
+            SchedulerNotice(
+                "bilgi",
+                "Oturum kilitlendi; ziller çalmaya devam ediyor. Yönetim için Giriş düğmesiyle PIN girin.",
+            )
+        )
+
+    def _open_profile_manager(self) -> None:
+        if not self._require_permission("yapilandir"):
+            return
+        ProfileManager(self.root, self.auth)
 
     def focus_schedule_page(self) -> None:
         """İlk kurulumdan hemen sonra kullanıcıyı ders zilleri sayfasına alır."""
@@ -1278,9 +1321,11 @@ class OkulZiliApp:
                 self.next_label.configure(text="Planlanmış zil yok")
                 self.next_detail.configure(text="Önümüzdeki yedi gün içinde etkin olay bulunamadı.")
                 tray_title = "Okul Zili — Planlanmış zil yok"
+            if not self.scheduler_running:
+                tray_title = "Okul Zili — Ziller duraklatıldı · " + tray_title.removeprefix("Okul Zili — ")
             self.tray.update_status(
                 tray_title,
-                critical=self._has_critical_alert,
+                critical=self.alerts.has_critical,
                 paused=not self.scheduler_running,
                 muted=self.scheduler.state.is_muted(now),
             )
@@ -1742,9 +1787,49 @@ class OkulZiliApp:
         if selected and self.sound_tree.exists(selected[0]):
             self.sound_tree.selection_set(selected[0])
 
-    def _refresh_preflight(self) -> None:
+    def _run_preflight_checks(self) -> list[CheckResult]:
+        """Ön kontrol sonuçlarını hesaplar; Tk'ye dokunmadığı için işçide de çağrılabilir."""
         service = PreflightService(self.config, self.engine, self.backend, self.data_dir, self.data_dir)
-        results = [*service.run(), self._runtime_health_check()]
+        return [*service.run(), self._runtime_health_check()]
+
+    def _refresh_preflight(self) -> None:
+        self._render_preflight(self._run_preflight_checks())
+
+    def _refresh_preflight_in_background(self) -> None:
+        """Beş dakikada bir ön kontrolü işçi iş parçacığında yeniler (7.5).
+
+        Linux'ta cihaz denetimi alt süreç çalıştırdığından hesaplama arayüz
+        iş parçacığında yapılmaz; sonuç after() ile panele taşınır. Böylece
+        USB ses kartı çekildiğinde panel dakikalar içinde kritik uyarıya geçer.
+        """
+        try:
+            if not self._preflight_refresh_running:
+                self._preflight_refresh_running = True
+
+                def worker() -> None:
+                    results: list[CheckResult] | None = None
+                    try:
+                        results = self._run_preflight_checks()
+                    except Exception as exc:
+                        log_event(self.logger, "on_kontrol_hatasi", level="uyarı", hata=repr(exc))
+                    finally:
+                        self._preflight_refresh_running = False
+                    if results is not None:
+                        try:
+                            self.root.after(0, lambda: self._render_preflight(results))
+                        except (tk.TclError, RuntimeError):
+                            pass
+
+                threading.Thread(target=worker, name="on-kontrol", daemon=True).start()
+        finally:
+            try:
+                self._preflight_after_id = self.root.after(PREFLIGHT_REFRESH_MS, self._refresh_preflight_in_background)
+            except tk.TclError:
+                self._preflight_after_id = None
+
+    def _render_preflight(self, results: list[CheckResult]) -> None:
+        if not self.preflight_tree.winfo_exists():
+            return
         for item in self.preflight_tree.get_children():
             self.preflight_tree.delete(item)
         critical: list[CheckResult] = []
@@ -1793,24 +1878,17 @@ class OkulZiliApp:
             )
 
     def _show_alerts(self, alerts: list[CheckResult]) -> None:
-        self._has_critical_alert = (
-            any(item.level == "kritik" for item in alerts) or bool(self._recent_criticals)
-        )
-        if self._has_critical_alert:
-            self.health_status_label.configure(text="●  Müdahale gerekli", text_color=CRITICAL)
-        elif alerts:
-            self.health_status_label.configure(text="●  Uyarı var", text_color=WARNING)
-        else:
-            self.health_status_label.configure(text="●  Sistem hazır", text_color=SUCCESS)
+        label, level = self.alerts.status(alerts)
+        color = {"kritik": CRITICAL, "uyarı": WARNING}.get(level, SUCCESS)
+        self.health_status_label.configure(text=label, text_color=color)
         self.alert_text.configure(state="normal")
         self.alert_text.delete("1.0", "end")
-        for entry in reversed(self._recent_criticals):
-            self.alert_text.insert("end", f"• {entry}\n")
-        if not alerts and not self._recent_criticals:
-            self.alert_text.insert("end", "Tüm kontroller uygun. Sistem zil çalmaya hazır.")
+        lines = self.alerts.lines(alerts)
+        if lines == [READY_TEXT]:
+            self.alert_text.insert("end", READY_TEXT)
         else:
-            for item in alerts:
-                self.alert_text.insert("end", f"• {item.title}: {item.detail}\n")
+            for line in lines:
+                self.alert_text.insert("end", f"• {line}\n")
         self.alert_text.configure(state="disabled")
 
     def _refresh_logs(self) -> None:
@@ -1825,7 +1903,9 @@ class OkulZiliApp:
         for line in lines:
             try:
                 item = json.loads(line)
-                rendered.append(f"{item.get('zaman', '')}  [{item.get('seviye', '').upper()}]  {item.get('olay', '')}")
+                detail = item.get("mesaj") or item.get("olay_adi") or item.get("hata") or ""
+                line_text = f"{item.get('zaman', '')}  [{item.get('seviye', '').upper()}]  {item.get('olay', '')}"
+                rendered.append(f"{line_text}  ·  {detail}" if detail else line_text)
             except ValueError:
                 rendered.append(line)
         self.log_text.configure(state="normal")
@@ -1841,12 +1921,22 @@ class OkulZiliApp:
             if show_error:
                 messagebox.showerror("Kaydetme hatası", str(exc), parent=self.root)
             return False
+        self._adopt_config(new_config)
+        log_event(self.logger, "yapilandirma_kaydedildi")
+        return True
+
+    def _adopt_config(self, new_config: SchoolConfig) -> None:
+        """Diske yazılmış yapılandırmayı belleğe, motora ve arayüze uygular."""
+        previous = self.config
         self.config = new_config
         self.engine = CalendarEngine(new_config)
         self.scheduler.update_config(new_config, self.engine)
-        log_event(self.logger, "yapilandirma_kaydedildi")
+        if previous.school_name != new_config.school_name:
+            self.root.title(f"Okul Zili — {new_config.school_name}")
+            self.school_label.configure(text=new_config.school_name)
+        if previous.bell_volume != new_config.bell_volume or previous.sounds != new_config.sounds:
+            self._prewarm_volume_cache()
         self._refresh_all()
-        return True
 
     def _open_settings(self) -> None:
         if not self._require_permission("yapilandir"):
@@ -1929,16 +2019,14 @@ class OkulZiliApp:
         ):
             return
         try:
-            restored = import_bundle(Path(source), self.data_dir)
-            self.repo.save(restored)
+            # Ses dosyaları ve ayar tek işlemde: kayıt düşerse önceki dosyalar
+            # geri alınır (8.8).
+            restored = import_bundle(Path(source), self.data_dir, commit=self.repo.save)
         except (BackupError, ConfigError, OSError) as exc:
             messagebox.showerror("Geri yükleme hatası", str(exc), parent=self.root)
             return
-        self.config = restored
-        self.engine = CalendarEngine(self.config)
-        self.scheduler.update_config(self.config, self.engine)
+        self._adopt_config(restored)
         log_event(self.logger, "yedek_geri_yuklendi")
-        self._refresh_all()
         messagebox.showinfo("Geri yükleme tamamlandı", "Program ve ses dosyaları bozulmaya karşı denetlenerek geri yüklendi. Yedeği yalnızca güvendiğiniz bir kaynaktan alın.", parent=self.root)
 
     def _add_event(self) -> None:
@@ -2026,11 +2114,18 @@ class OkulZiliApp:
         )
         def worker() -> None:
             result = self.playback.play(path, device, self.config.bell_volume)
+            if result.busy:
+                # Zamanlayıcıyla aynı sözleşme: çift çalma engeli kritik arıza
+                # değil uyarıdır ve çalma sonucu taşımaz.
+                self._enqueue_notice(SchedulerNotice("uyarı", result.message))
+                return
             notice = SchedulerNotice("bilgi" if result.success and not result.used_fallback else "kritik", result.message, result=result)
             self._enqueue_notice(notice)
         threading.Thread(target=worker, name="manuel-zil", daemon=True).start()
 
     def _stop_audio(self) -> None:
+        if not self._require_permission("gunluk_eylem"):
+            return
         stopped_bell = self.playback.stop()
         stopped_music = self.recess_music.stop()
         if stopped_bell or stopped_music:
@@ -2059,7 +2154,7 @@ class OkulZiliApp:
         log_event(self.logger, "zamanlayici_durumu", etkin=self.scheduler_running)
         self.tray.update_status(
             "Okul Zili — Ziller duraklatıldı" if not self.scheduler_running else "Okul Zili — Ziller etkin",
-            critical=self._has_critical_alert,
+            critical=self.alerts.has_critical,
             paused=not self.scheduler_running,
             muted=self.scheduler.state.is_muted(datetime.now()),
         )
@@ -2107,12 +2202,35 @@ class OkulZiliApp:
         )
         self._scheduler_thread.start()
 
+    def _prewarm_volume_cache(self) -> None:
+        """Ses düzeyi %100 değilse ölçeklenmiş kopyaları arka planda hazırlar (D5).
+
+        İlk zil, saniyeler süren örnek örnek ölçeklemeyi beklemez; kopyalar
+        önbellekte hazır durur ve sonraki çalmalarda yeniden kullanılır.
+        """
+        if int(self.config.bell_volume) == 100:
+            return
+        paths = [self.data_dir / relative for relative in sorted(set(self.config.sounds.values()))]
+        volume = self.config.bell_volume
+
+        def worker() -> None:
+            try:
+                prepared = self.playback.prewarm_volume_cache(paths, volume)
+                log_event(self.logger, "ses_duzeyi_onbellegi", hazirlanan=prepared, ses_yuzde=volume)
+            except Exception as exc:  # önbellek konfor katmanıdır; çalma yolunu etkilemez
+                log_event(self.logger, "ses_duzeyi_onbellegi", level="uyarı", hata=repr(exc))
+
+        threading.Thread(target=worker, name="ses-duzeyi-onbellek", daemon=True).start()
+
     def _scheduler_loop(self) -> None:
         while not self._shutdown_event.is_set():
             wait_seconds = 1.0
-            if self.scheduler_running:
+            if not self._shutdown_event.is_set():
                 try:
-                    self.scheduler.tick()
+                    # Duraklatılmışken de tur döner: vadesi gelen olaylar
+                    # "duraklatma nedeniyle çalınmadı" olarak işaretlenir,
+                    # saat/uyku denetimi sürer (6.5).
+                    self.scheduler.tick(paused=not self.scheduler_running)
                     if self._scheduler_failure_count:
                         log_event(
                             self.logger,
@@ -2227,6 +2345,12 @@ class OkulZiliApp:
             self.tray.notify("Arayüz işleminde hata oluştu; zil motoru çalışmaya devam ediyor.", "Okul Zili")
         except AttributeError:
             pass
+        # Kendini yeniden planlayan bir döngüde kalıcı hata her saniye yeni
+        # pencere açmasın: modal en çok 30 saniyede bir gösterilir.
+        now = datetime.now()
+        if self._last_ui_error_at is not None and (now - self._last_ui_error_at).total_seconds() < 30:
+            return
+        self._last_ui_error_at = now
         messagebox.showerror(
             "Beklenmeyen arayüz hatası",
             "İşlem tamamlanamadı. Zil zamanlayıcısı arka planda çalışmaya devam ediyor. "
@@ -2263,13 +2387,14 @@ class OkulZiliApp:
                     yedek_bip=(notice.result.used_fallback if notice.result else None),
                 )
                 if notice.level == "kritik":
-                    self._has_critical_alert = True
-                    last = self._recent_criticals[-1] if self._recent_criticals else ""
-                    if last.split(" — ", 1)[-1] != notice.message:
-                        self._recent_criticals.append(
-                            f"{datetime.now().strftime('%d.%m %H:%M')} — {notice.message}"
-                        )
+                    self.alerts.add("kritik", notice.message)
                     self.tray.notify(notice.message, "Kritik zil uyarısı")
+                    self._render_critical_banner()
+                elif notice.level == "uyarı":
+                    # Kaçırılan/bekletilen/sessize alınan zil, uyku ve durum
+                    # eşitleme uyarıları da panelde görünür (D6).
+                    if self.alerts.add("uyarı", notice.message):
+                        self.tray.notify(notice.message, "Zil uyarısı")
                     self._render_critical_banner()
                 elif (
                     notice.event is not None
@@ -2300,15 +2425,15 @@ class OkulZiliApp:
         """Kritik uyarı geçmişini onaylayıp paneli güncel duruma döndürür."""
         if not self._require_permission("gunluk_eylem"):
             return
-        if not self._recent_criticals:
+        if not (self.alerts.has_critical or self.alerts.has_warning):
             return
+        count = self.alerts.clear()
         log_event(
             self.logger,
             "kritik_uyarilar_onaylandi",
             rol=self.role,
-            adet=len(self._recent_criticals),
+            adet=count,
         )
-        self._recent_criticals.clear()
         self._show_alerts(self._last_alerts)
 
     def _stop_recess_music_silently(self) -> None:
@@ -2389,7 +2514,13 @@ class OkulZiliApp:
         # çalışmaya devam eder. Kapatma yalnız tepsi menüsünden yapılır.
         self._remember_window_state()
         if self.tray.available:
-            self.root.withdraw()
+            if sys.platform == "win32":
+                self.root.withdraw()
+            else:
+                # Linux masaüstlerinde AppIndicator simgesi görünmeyebilir (tepsi
+                # "kullanılabilir" görünse de); pencere yok edilmez, görev
+                # çubuğu girdisi kalır (7.7).
+                self.root.iconify()
             self.tray.notify("Uygulama sistem tepsisinde çalışmaya devam ediyor.")
             log_event(self.logger, "pencere_tepsiye_alindi")
             return
@@ -2764,19 +2895,26 @@ def main() -> int:
         return 0
     root = ctk.CTk()
     startup = _prepare_startup_root(root)
+    app: OkulZiliApp | None = None
 
     def poll_activation() -> None:
         if instance_lock.consume_activation_request():
-            root.deiconify()
-            root.state("normal")
-            root.lift()
-            root.focus_force()
+            if app is not None:
+                # Tepsiden geri çağırmayla aynı yol: büyütülmüş durum korunur.
+                app._show_window()
+            else:
+                root.deiconify()
+                root.state("normal")
+                root.lift()
+                root.focus_force()
         root.after(350, poll_activation)
 
     instance_lock.consume_activation_request()
     root.after(350, poll_activation)
     try:
         auth = AuthRepository(data_dir / "profiller.json")
+        if auth.recovery_note:
+            messagebox.showwarning("Profil dosyası", auth.recovery_note, parent=root)
         if not auth.has_admin_pin() and not _create_admin_pin(root, auth):
             root.destroy()
             return 0
@@ -2818,6 +2956,11 @@ def main() -> int:
         root.mainloop()
     except Exception as exc:
         try:
+            if app is not None:
+                # pystray iş parçacığı daemon değildir; durdurulmazsa süreç
+                # asılı kalır ve kilit bırakıldığı için ikinci örnek açılabilir.
+                app._shutdown_event.set()
+                app.tray.stop()
             root.deiconify()
             root.lift()
             messagebox.showerror("Beklenmeyen hata", str(exc), parent=root)

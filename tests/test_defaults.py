@@ -32,6 +32,14 @@ class DefaultScheduleTests(unittest.TestCase):
         self.assertEqual(18, len(config.weekly_schedule[0]))
         self.assertEqual(set(range(5)), set(config.weekly_schedule))
 
+    def test_seconds_in_first_lesson_time_are_accepted(self) -> None:
+        # 6.7: domain doğrulaması "08:20:00" biçimini kabul eder; üretim de etmeli.
+        from okul_zili.domain import SessionSchedule
+        from okul_zili.defaults import generate_session
+
+        events = generate_session(SessionSchedule(first_lesson="08:20:00", student_bell_enabled=False))
+        self.assertEqual(time(8, 20), events[0].at)
+
     def test_default_day_has_eight_starts_and_ends(self) -> None:
         events = generate_day()
         self.assertEqual(24, len(events))
@@ -106,6 +114,41 @@ class DefaultScheduleTests(unittest.TestCase):
         self.assertEqual([], updated.validate())
         self.assertEqual("Yeni Ad", updated.school_name)
         self.assertEqual(70, updated.bell_volume)
+
+    def test_general_settings_save_keeps_per_session_student_bell_flags(self) -> None:
+        # D8: ikili eğitimde sabah açık / öğle kapalı düzeni, alakasız bir
+        # ayar kaydında (ör. ses düzeyi) sessizce ezilmemeli.
+        from okul_zili.domain import SessionSchedule
+
+        morning = SessionSchedule(session_id="sabah", name="Sabah", first_lesson="08:00", lesson_count=2, lunch_after=0, student_bell_enabled=True)
+        afternoon = SessionSchedule(session_id="ogle", name="Öğleden sonra", first_lesson="13:00", lesson_count=2, lunch_after=0, student_bell_enabled=False)
+        day = DaySchedule(sessions=(morning, afternoon))
+        config = replace(default_config(), day_schedules={0: day}, preparation_enabled=True)
+        unchanged = apply_general_settings(
+            config,
+            school_name=config.school_name,
+            preparation_enabled=True,
+            selected_device=config.selected_device,
+            announcement_device=None,
+            grace_seconds=config.grace_seconds,
+            bell_volume=55,
+            time_check_enabled=False,
+        )
+        flags = [item.student_bell_enabled for item in unchanged.day_schedules[0].sessions]
+        self.assertEqual([True, False], flags)
+        self.assertEqual(55, unchanged.bell_volume)
+        # Anahtar gerçekten değişince tüm oturumlara yazılır (kullanıcının açık isteği).
+        toggled = apply_general_settings(
+            config,
+            school_name=config.school_name,
+            preparation_enabled=False,
+            selected_device=config.selected_device,
+            announcement_device=None,
+            grace_seconds=config.grace_seconds,
+            bell_volume=100,
+            time_check_enabled=False,
+        )
+        self.assertEqual([False, False], [item.student_bell_enabled for item in toggled.day_schedules[0].sessions])
 
     def test_weekly_schedule_rejects_non_lesson_flow_events(self) -> None:
         # v7 değişmezi: anons/tören haftalık iskelete değil extra_events'e girer.

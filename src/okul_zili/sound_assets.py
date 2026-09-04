@@ -255,6 +255,17 @@ def restore_generated_sound(sound_id: str, destination: Path) -> bool:
     return True
 
 
+def _write_atomic(destination: Path, data: bytes) -> None:
+    """Yarım dosya bırakmaz: disk dolu ya da kapanma anında hedef ya eski
+    hâliyle kalır ya da bütün olarak yazılmış olur (D14)."""
+    temporary = destination.with_name(f".{destination.name}.yeni")
+    try:
+        temporary.write_bytes(data)
+        temporary.replace(destination)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
 def ensure_generated_sounds(base_dir: Path) -> None:
     sound_dir = base_dir / "sesler"
     sound_dir.mkdir(parents=True, exist_ok=True)
@@ -265,17 +276,17 @@ def ensure_generated_sounds(base_dir: Path) -> None:
     for filename, sequence in TONES.items():
         destination = sound_dir / filename
         if not destination.exists():
-            destination.write_bytes(_tone_wave(sequence))
+            _write_atomic(destination, _tone_wave(sequence))
     for filename, parameters in SIRENS.items():
         destination = sound_dir / filename
         if not destination.exists():
-            destination.write_bytes(_siren_wave(*parameters))
+            _write_atomic(destination, _siren_wave(*parameters))
     for filename, kind in AFAD_ALERTS.items():
         destination = sound_dir / filename
         if not destination.exists():
-            destination.write_bytes(_afad_alert_wave(kind))
+            _write_atomic(destination, _afad_alert_wave(kind))
     for filename, notes in MUSIC_MELODIES.items():
         destination = sound_dir / filename
         if not destination.exists():
-            destination.write_bytes(_music_wave(notes))
+            _write_atomic(destination, _music_wave(notes))
 

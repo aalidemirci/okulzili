@@ -1,9 +1,9 @@
 Package: okul-zili
-Version: 0.7.1
+Version: 0.8.0
 Section: education
 Priority: optional
 Architecture: all
-Depends: python3 (>= 3.10), python3-tk, python3-pil, python3-six, python3-xlib, python3-gi, gir1.2-ayatanaappindicator3-0.1, ffmpeg, pipewire-bin | pulseaudio-utils | alsa-utils
+Depends: python3 (>= 3.10), python3-tk, python3-pil, python3-six, python3-xlib, python3-gi, gir1.2-ayatanaappindicator3-0.1, tzdata, ffmpeg, pipewire-bin | pulseaudio-utils | alsa-utils
 Maintainer: Okul Zili Projesi
 Description: Çevrimdışı Türkçe okul zili sistemi
  Haftalık program, tatil ve telafi günlerini yönetir; ses hatalarında

@@ -107,6 +107,22 @@ class ConfigTests(unittest.TestCase):
         )
         self.assertIn(loaded.extra_events[0][0], loaded.combined_weekly(0))
 
+    def test_corrupt_v6_event_list_is_quarantined_not_crashing(self) -> None:
+        # 6.7: elle bozulmuş v6 dosyası (olay listesinde nesne olmayan öğe)
+        # açılışta AttributeError ile çökmek yerine karantina zincirine düşer.
+        raw = default_config().to_dict()
+        raw["schema_version"] = 6
+        del raw["extra_events"]
+        raw["weekly_schedule"]["0"] = ["bozuk"]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "ayarlar.json"
+            path.write_text(json.dumps(raw), encoding="utf-8")
+            repo = ConfigRepository(path)
+            recovered = repo.load()
+            self.assertEqual(CURRENT_SCHEMA_VERSION, recovered.schema_version)
+            self.assertIsNotNone(repo.recovery_note)
+            self.assertTrue(any("bozuk-" in item.name for item in path.parent.iterdir()))
+
     def test_old_schema_file_is_quarantined_and_replaced_with_defaults(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "ayarlar.json"

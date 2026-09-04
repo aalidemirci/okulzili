@@ -589,6 +589,7 @@ class InitialSetupDialog(SafeModalToplevel):
                     form,
                     variable=self.device_var,
                     values=list(("varsayilan", *devices)),
+                    state="readonly",
                     height=42,
                     corner_radius=10,
                     fg_color=INPUT,
@@ -902,7 +903,12 @@ class SoundTestDialog(SafeModalToplevel):
         self.protocol("WM_DELETE_WINDOW", self._complete)
 
     def _complete(self) -> None:
-        self.on_complete()
+        try:
+            self.on_complete()
+        except OSError as exc:
+            # İşaret dosyası yazılamasa da pencere kapanır; aksi hâlde her
+            # yönetici girişinde yeniden açılırdı (7.8).
+            messagebox.showwarning("Ses testi", f"Test kaydı yazılamadı: {exc}", parent=self)
         self.destroy()
 
 
@@ -931,8 +937,11 @@ class SettingsDialog(SafeModalToplevel):
         form.grid_columnconfigure(1, weight=1)
         fields = (
             ("Okul adı", ctk.CTkEntry(form, textvariable=self.school_var, height=40, corner_radius=10, fg_color=SURFACE, border_color=BORDER)),
-            ("Zil ses çıkışı", ctk.CTkComboBox(form, variable=self.device_var, values=list(("varsayilan", *devices)), height=40, corner_radius=10, fg_color=SURFACE, border_color=BORDER, button_color=TEAL)),
-            ("Anons ses çıkışı", ctk.CTkComboBox(form, variable=self.announcement_device_var, values=list(("zil ile aynı", "varsayilan", *devices)), height=40, corner_radius=10, fg_color=SURFACE, border_color=BORDER, button_color=TEAL)),
+            # Cihaz adları yalnız listeden seçilir: yazım hatası tüm zilleri
+            # yedek bipe düşürürdü (7.5). Kayıtlı ad artık listede yoksa yine
+            # de görüntülenir; kullanıcı yeni bir cihaz seçebilir.
+            ("Zil ses çıkışı", ctk.CTkComboBox(form, variable=self.device_var, values=list(dict.fromkeys(("varsayilan", *devices, config.selected_device))), state="readonly", height=40, corner_radius=10, fg_color=SURFACE, border_color=BORDER, button_color=TEAL)),
+            ("Anons ses çıkışı", ctk.CTkComboBox(form, variable=self.announcement_device_var, values=list(dict.fromkeys(("zil ile aynı", "varsayilan", *devices, *((config.announcement_device,) if config.announcement_device else ())))), state="readonly", height=40, corner_radius=10, fg_color=SURFACE, border_color=BORDER, button_color=TEAL)),
             ("Kaçırılan zil toleransı", ctk.CTkEntry(form, textvariable=self.grace_var, height=40, corner_radius=10, fg_color=SURFACE, border_color=BORDER)),
         )
         for row, (label, widget) in enumerate(fields):
@@ -1187,7 +1196,7 @@ class CeremonyDialog(SafeModalToplevel):
         self.resizable(True, True)
         self.configure(fg_color=CANVAS)
         self.on_save = on_save
-        self.date_var = tk.StringVar(value=date.today().isoformat())
+        self.date_var = tk.StringVar(value=date.today().strftime("%d.%m.%Y"))
         self.time_var = tk.StringVar(value="09:00")
         self.scenario_labels = {label: key for key, label in CEREMONY_SCENARIOS.items()}
         self.scenario_var = tk.StringVar(value=next(iter(self.scenario_labels)))
@@ -1198,7 +1207,7 @@ class CeremonyDialog(SafeModalToplevel):
         form.pack(fill="x", padx=26)
         form.grid_columnconfigure(1, weight=1)
         fields = (
-            ("Tarih", ctk.CTkEntry(form, textvariable=self.date_var, height=40, corner_radius=10, fg_color=SURFACE, border_color=BORDER)),
+            ("Tarih (gg.aa.yyyy)", ctk.CTkEntry(form, textvariable=self.date_var, height=40, corner_radius=10, fg_color=SURFACE, border_color=BORDER)),
             ("Başlangıç saati", ctk.CTkEntry(form, textvariable=self.time_var, height=40, corner_radius=10, fg_color=SURFACE, border_color=BORDER)),
             ("Senaryo", ctk.CTkComboBox(form, variable=self.scenario_var, values=list(self.scenario_labels), state="readonly", height=40, corner_radius=10, fg_color=SURFACE, border_color=BORDER, button_color=TEAL)),
         )
@@ -1215,7 +1224,7 @@ class CeremonyDialog(SafeModalToplevel):
 
     def _save(self) -> None:
         try:
-            day = date.fromisoformat(self.date_var.get().strip())
+            day = _parse_turkish_date(self.date_var.get())
             at = time.fromisoformat(self.time_var.get().strip())
             scenario = self.scenario_labels[self.scenario_var.get()]
             events = ceremony_events(scenario, at)

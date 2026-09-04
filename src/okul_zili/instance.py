@@ -68,6 +68,9 @@ class SingleInstanceLock:
     def release(self) -> None:
         if self._handle is not None:
             kernel32 = ctypes.WinDLL("kernel32")
+            # HANDLE 64 bit'tir; argtypes verilmezse ctypes int'i c_int'e daraltır.
+            kernel32.CloseHandle.argtypes = (ctypes.c_void_p,)
+            kernel32.CloseHandle.restype = ctypes.c_bool
             kernel32.CloseHandle(self._handle)
             self._handle = None
         if self._file is not None:

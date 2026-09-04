@@ -383,6 +383,127 @@ uçtan uca kurulum testi yapılmadan Linux paketi dağıtılmamalı.**
   yüklendi" biçimine getirildi ve yedeğin güvenilir kaynaktan alınması
   gerektiği eklendi.
 
+### İkinci denetim (04.09.2026, sürüm 0.7.1) — bulgular
+
+0.7.1 (`f52210a`) üzerinde üç alanlı (zamanlayıcı/alan mantığı, arayüz/yaşam
+döngüsü, ses/paketleme) ikinci bir denetim yapıldı. Bulgular kod üzerinde,
+bir kısmı gerçek motorla küçük betiklerle çalıştırılarak doğrulandı. Hiçbiri
+"yanlış saatte zil" değil; hepsi sessiz arıza, çift/kayıp zil ya da örtük
+ortam bağımlılığı sınıfından. Aşağıdaki Faz 6–8 bu bulguların planıdır.
+
+| # | Bulgu | Dosya |
+|---|-------|-------|
+| D1 | **Olay kimliğine kaynak kural adı giriyor.** Tören günü korunan tüm haftalık olaylar kural adıyla üretildiğinden bugüne tören eklemek/adını düzeltmek günün tüm kimliklerini değiştirir → tolerans içindeki zil ikinci kez çalar, erteleme düşer (deneysel). | `domain.py:385`, `calendar_engine.py:46` |
+| D2 | **Günde yalnız tek kural kazanıyor.** İkili eğitimde sabah+öğle iki tören kuralının ikincisi sessizce bastırılır; tören+kısaltılmış gün → tam gün zil; tören+elle tatil kuralı → tatilde tüm ziller; tören+telafi → telafi dersleri kaybolur (`day.weekday()`); tören↔sınav eşitliğinde kazananı ad belirler. | `calendar_engine.py:34,57` |
+| D3 | **Durum dosyası yazımı korumasız.** Disk dolu / antivirüs kilidi → `tick` yarıda kesilir, ziller 60 sn geri çekilmeyle teker teker işlenir, çoğu tolerans dışı düşer; `completed` sözlük sırasıyla kırpılır (ikili eğitimde ~8 günde rastgele kayıt düşer); okunamayan dosya sessizce sıfırlanır; aynı kimlikli iki olay aynı turda iki kez çalar. | `scheduler.py:87,113,118` |
+| D4 | **Çalma zamanlayıcıyı bloklıyor.** 3 dakikalık AFAD/10 Kasım kaydı ya da elle yayın sırasında vadesi gelen zil toleransı aşıp "kaçırıldı" olur. | `scheduler.py:288` |
+| D5 | **Ses düzeyi ölçekleme her zilde, önbelleksiz** (eski O9 açık kalmış); teneffüs müziği ölçeklemesi Tk iş parçacığında. | `audio.py:467`, `recess_music.py:58` |
+| D6 | **Kaçırılan ziller kullanıcıya görünmüyor.** "uyarı" seviyesi yalnız günlüğe gider, panel "Sistem hazır" der; günlük sayfası mesaj alanını göstermez. | `app.py:2266,1825` |
+| D7 | `_stop_audio` yetkisiz (salt görüntüleme İstiklâl Marşı'nı kesebilir); PIN sıfırlama yolu belgesiz; yönetici oturumu kilitlenmiyor; yönetim merkezi/profil yöneticisi `_require_permission` çağırmıyor. | `app.py:2033,427,449` |
+| D8 | Cihaz kutuları serbest metin; ön kontrol kendini yenilemiyor (USB çekilince "Sistem hazır"); `preparation_enabled` iki efendili; Pardus'ta AppIndicator yoksa tepsi "kullanılabilir" sanılıp çarpı pencereyi kaybediyor. | `dialogs.py:588,934`, `defaults.py:262`, `app.py:2391` |
+| D9 | `OkulZiliApp` hiçbir unittest'te örneklenmiyor; kurulum doğrulama betiği zaman aşımına düşen öz-testi başarılı sayıyor. | `tools/verify-windows-install.ps1:26` |
+| D10 | **deb dosya çakışması:** `vendor/packaging` sistemin `dist-packages/packaging/` yoluna yazılıyor; Debian `python3-packaging` ile dpkg çatışır (Conflicts/Replaces yok). | `tools/build_deb.py:64`, `control:6` |
+| D11 | **tzdata örtük bağımlılık:** pyproject/CI/vendor'da yok; Windows paketi yalnız derleme makinesindeki 3.12'de tesadüfen kurulu olduğu için çalışıyor; temiz makinede ön kontrol "Saat dilimi verisi bulunamadı" kritik verir. | `preflight.py:47` |
+| D12 | **Derleme ortamı örtük:** `build.ps1` PATH'teki python'a bağlı (bu makinede 3.11 çıplak, .venv 3.13 PyInstaller'sız); CI yalnız 3.12; vendor/pip customtkinter sürümü sabitlenmemiş. | `packaging/windows/build.ps1:7` |
+| D13 | **Inno görev kaydı yükseltilmiş hesapta:** `runasoriginaluser` yok → UAC'ye kimlik giren hesaba yazılır, öğretmen oturumunda otomatik başlatma çalışmaz; yerinde yükseltmede çalışan uygulama durdurulmuyor. | `okul-zili.iss:54`, `install-task.ps1:7` |
+| D14 | Yedek geri yükleme atomik değil (sesler tek tek değişir, ayar en son); sentez ses dosyaları atomik yazılmıyor; ağ importu denetimi yalnız `import` düğümlerine bakıyor. | `backup.py:107`, `sound_assets.py:268`, `test_packaging.py:120` |
+| D15 | Belge bayatlığı: README ilk kurulum satırı 0.7.1 ile çelişiyor; KURULUM/BAGIMLILIKLAR var olmayan `vendor-windows`/.whl anlatıyor; uv.lock 0.6.0; PLAN.md 2.2 "telifli müzik paketlenmeyecek" 0.6.0 kararıyla çelişiyor; `src/zilsesleri` ham kayıtlar NOTICE/SES-KAYNAKLARI'nda yok; cffi/tzdata/Roboto lisansı eksik; iki WAV (`meb-ogretmen.wav`, `meb-ogrenci-teneffus.wav`, 8 MB) kodda kullanılmadan pakete giriyor. | çeşitli |
+
+> **Durum (04.09.2026):** Faz 6–8 `claude/faz6-saglik-duzeltmeleri` dalında
+> uygulandı; 219 test + altı arayüz öz-testi + gerçek uygulama duman testi
+> geçiyor. Saha adımları (Pardus VM kapısı, standart kullanıcı + ayrı yönetici
+> hesabıyla Windows kurulumu, USB kart çekme) hâlâ açık.
+
+### Faz 6 — Zil motoru bütünlüğü (D1–D5)
+- [x] **6.1 Olay kimliği kural adından bağımsız.** `BellEvent.create` kimliği
+  yalnız tarih/saat/tür/ses/oturum/sıra ile türetir. `RunState` kimlik
+  sürümü taşır; eski sürümle yazılmış durum dosyası ilk turda sessizce
+  eşitlenir (geçmiş olaylar bir kez tamamlandı sayılır, tek bilgi kaydı) —
+  yükseltme sonrası sahte "kaçırıldı" yağmuru olmaz.
+- [x] **6.2 Kural çözümü: temel kural + tören katmanı.** Temel program
+  tarihe özel > sınav > telafi > kısaltılmış > tatil > haftalık sırasıyla
+  seçilir; **tüm** eşleşen tören kuralları bu programın üzerine bindirilir
+  (aynı saat/sıra anahtarındaki olayı değiştirir). Böylece aynı gün iki tören
+  çalar, tatilde yalnız tören çalar, kısaltılmış gün + tören kısaltılmış
+  kalır, telafi + tören telafi programını korur. Öğretim yılı kâhini ve
+  öncelik testleri yeni semantiğe göre güncellenir.
+- [x] **6.3 RunState dayanıklılığı.** Yazma hatası `tick`'i kesmez (bellek
+  sürer, tek kritik uyarı, sonraki yazımda yeniden dener); `completed`
+  zaman damgalı sözlük olur ve 7 günden eski kayıtlar düşer (sözlüksel
+  kırpma kalkar); yazım fsync'li; okunamayan dosya karantinaya alınıp
+  uyarılır; aynı tur içinde aynı kimlik ikinci kez çalmaz.
+- [x] **6.4 Meşgul penceresi.** Zamanlayıcı ya da elle yayın çalarken vadesi
+  gelen olayın gecikmesi çalma bitişinden ölçülür; uzun tören/AFAD kaydı
+  sonrası tolerans içinde çalar, kaçırılmaz.
+- [x] **6.5 Duraklatma semantiği.** Duraklatılmışken vadesi gelen ziller
+  "duraklatma nedeniyle çalınmadı" olarak işaretlenir; sürdürünce sahte
+  uyku uyarısı ve yığılma olmaz.
+- [x] **6.6 Ses düzeyi önbelleği.** Ölçeklenmiş kopya dosya/mtime/yüzde
+  anahtarıyla bir kez üretilir, açılışta arka planda ısıtılır; teneffüs
+  müziği ölçeklemesi işçi iş parçacığına taşınır.
+- [x] **6.7 Küçükler.** Oturum çakışması öğrenci zili payını hesaba katar;
+  `HH:MM:SS` kabul edilir; v6→v7 ayrıştırmasında `AttributeError`
+  karantinaya düşer; sentez ses dosyaları atomik yazılır.
+
+### Faz 7 — Görünürlük, yetki ve arayüz (D6–D9)
+- [x] **7.1** Kaçırılan/bekletilen/sessize alınan zil ve uyku uyarıları
+  panelde "UYARI" satırı + tepsi bildirimi; sistem durumu "Uyarı var";
+  "Uyarıları onayla" ikisini de temizler.
+- [x] **7.2** Olay günlüğü sayfası mesaj ve olay adını gösterir.
+- [x] **7.3** Sesi durdurma `gunluk_eylem` yetkisi ister (tepsi dahil, ana
+  iş parçacığına aktarılır).
+- [x] **7.4** Üst çubukta **Kilitle** düğmesi (yetkili rol → salt görüntüleme);
+  "PIN unutuldu" yolu SORUN-GIDERME'de belgelenir.
+- [x] **7.5** Cihaz kutuları salt seçim; ön kontrol beş dakikada bir arka
+  planda yenilenir (cihaz kaybı panelde görünür).
+- [x] **7.6** `preparation_enabled` tek efendi: genel ayar kaydı oturum
+  bayraklarını yalnız anahtar değiştiyse yazar.
+- [x] **7.7** Linux'ta çarpı pencereyi görev çubuğuna küçültür (AppIndicator
+  güvenilmez); SORUN-GIDERME "pencere kayboldu" maddesi.
+- [x] **7.8** Yetki boşlukları: yönetim merkezi ve profil yöneticisi
+  `_require_permission`; Sesler sayfası tören düğmeleri `_apply_permissions`
+  kapsamında; elle çalmada "meşgul" sonucu uyarı seviyesi; ses testi işaret
+  dosyası yazılamazsa pencere yine kapanır; bozuk `profiller.json` üzerine
+  yazılmaz (karantina + kritik uyarı).
+- [x] **7.9** Tepsi ve yaşam döngüsü: ikinci başlatma `_show_window` kullanır;
+  duraklatma tepsi başlığında kalır; `main()` istisna yolunda tepsi durur;
+  yedek geri yükleme `_apply_config` ile ve başlık güncellenir;
+  `CloseHandle` argtypes.
+- [x] **7.10** Kurulum doğrulama betiği zaman aşımını başarısızlık sayar;
+  `--tepsi-kontrol` bekçisi sıfır dışı kodla çıkar.
+
+### Faz 8 — Paketleme, derleme ve belge (D10–D15)
+- [x] **8.1** deb: gömülü kütüphaneler `/usr/lib/okul-zili/vendor` altına,
+  başlatıcı `PYTHONPATH` verir; `python3-packaging` çakışması kalkar;
+  `md5sums` + `Installed-Size`; `build-deb.sh` aynı düzen.
+- [x] **8.2** `tzdata` açık bağımlılık (pyproject, CI, deb Depends, spec
+  `collect_data_files("tzdata")`) + paketleme testi.
+- [x] **8.3** `build.ps1` Python 3.12'yi zorunlu kılar ve bağımlılıkları
+  önden denetler; EXE/kurucuya sürüm bilgisi; `customtkinter==5.2.2`
+  sabitlemesi + vendor sürüm eşitliği testi.
+- [x] **8.4** Inno: görev kaydı `runasoriginaluser`; `install-task.ps1`
+  `USERDOMAIN\USERNAME`; yükseltme öncesi çalışan uygulama
+  `PrepareToInstall` ile durdurulur.
+- [x] **8.5** CI matrisi Ubuntu 3.10/3.11/3.12 + Windows 3.12.
+- [x] **8.6** Ağ denetimi metin taraması (curl/wget/Invoke-WebRequest/ftplib/
+  smtplib/xmlrpc/`importlib`+urllib); `webbrowser` MIMARI'de belgelenir.
+- [x] **8.7** Lisanslar: tzdata, cffi, Roboto; BAGIMLILIKLAR tablosu.
+- [x] **8.8** Yedek geri yükleme atomik (önceki dosyalar anlık kopyada; kayıt
+  düşerse geri alınır); arşiv boyut sınırı.
+- [x] **8.9** Belgeler: README, KURULUM, BAGIMLILIKLAR, MIMARI, GEREKSINIM,
+  KULLANIM, SORUN-GIDERME, SES-KAYNAKLARI/NOTICE (`src/zilsesleri`),
+  PLAN.md 2.2 notu, CLAUDE.md derleme notu, `.gitignore`, SURUM-NOTLARI
+  "yayımlanmamış" bölümü, `uv.lock` yeniden üretimi.
+
+**Karar bekleyenler (uygulanmadı, proje sahibine ait):** kodda kullanılmayan
+iki WAV'ın (`meb-ogretmen.wav`, `meb-ogrenci-teneffus.wav`; paket başına
+8 MB) paketten ve depodan çıkarılması — 11.08 "ses dosyaları silinmez"
+kararıyla çeliştiği için dokunulmadı; `src/zilsesleri` ham MEB/CB/AFAD
+kayıtlarının herkese açık depodan çıkarılması (telif notu 8.9'da eklendi,
+dosyalar duruyor); MEB indirme yolunun (`official_url` taşıyan ses yok,
+fiilen ölü kod) kaldırılması; yönetici oturumu için otomatik kilit süresi;
+çok günlük sınav/tarihe özel kuralın hafta sonunda da çalması.
+
 ---
 
 ## 5. Öncelik özeti

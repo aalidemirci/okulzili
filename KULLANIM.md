@@ -19,6 +19,10 @@
 - Yaklaşan tek bir olay gecikecekse **Sonraki zili 5 dk ertele** komutunu kullanın. Yeni saat ekranda ve tepside görünür; erteleme uygulama yeniden başlasa da korunur.
 - Günün kalanında hiç zil çalmaması gerekiyorsa **Bugün zil çalma** komutunu kullanın. Bu durumda zamanı gelen olaylar “sessize alma nedeniyle çalınmadı” olarak günlüğe kaydedilir. Aynı komutla sessize alma kaldırılabilir.
 - Kırmızı uyarı açılırsa metni not alın; ses dosyası bozuksa sistem yedek bip çalmış olabilir.
+- Genel durum panelindeki **Uyarılar ve öneriler** kutusu "UYARI" satırı gösteriyorsa bir zil kaçırılmış, bekletilmiş, sessize alınmış ya da duraklatma sırasında atlanmış demektir; satırdaki saat ve zil adını günlük ders çizelgesiyle karşılaştırın. Durumu gördükten sonra **Uyarıları onayla** ile kutuyu temizleyin.
+- Zilleri duraklattığınız sürede vadesi gelen ziller çalmaz ve sürdürünce topluca çalmaz; her biri "duraklatıldığı için çalınmadı" notuyla panelde ve günlükte görünür.
+- Uzun bir yayın (AFAD ikazı, 10 Kasım akışı, elle başlatılan tören) sürerken saati gelen zil yayın bitince çalar; kaçırılmış sayılmaz.
+- Bilgisayarın başından ayrılırken üst çubuktaki **Kilitle** düğmesine basın: ziller çalmaya devam eder, yönetim işlevleri yeniden PIN ister. Geri dönünce **Giriş** ile açın.
 
 ## Tatil veya telafi günü ekleme
 
@@ -61,6 +65,8 @@ Varsayılan ya da eski zil saatlerini tek tek düzeltmek yerine tümüyle silip 
 Üst çubuktaki **Yönetim** düğmesinden **Okul ve cihaz ayarları** bölümünü açın. **Zil ses düzeyi** çubuğu öğrenci, öğretmen, teneffüs, tören ve tatbikat yayınlarının ortak seviyesini %0–100 arasında ayarlar. Teneffüs müziğinin ayrı ve düşük güvenlik sınırı değişmez. Ses düzeyini değiştirdikten sonra gerçek yayından önce **Sesler ve sirenler** sayfasında kısa bir deneme yapın.
 
 ## Tören, sınav veya kısaltılmış gün
+
+Tören kuralları diğer kuralların **üzerine** biner: aynı güne birden çok tören ekleyebilirsiniz (ikili eğitimde sabah ve öğle İstiklâl Marşı gibi); tören, o günün geçerli programını (normal, kısaltılmış, sınav ya da telafi) silmez, yalnız aynı saatteki zilin yerine geçer. Tatil kuralı olan günde yalnız tören çalar. Gün içinde eklenen ya da adı değiştirilen kural, o gün çoktan çalmış zilleri yeniden çaldırmaz.
 
 1. **Tatil ve istisnalar → Tatil / istisna ekle** yolunu açın.
 2. Türü ve tarihi seçin.

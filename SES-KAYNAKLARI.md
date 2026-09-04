@@ -67,6 +67,15 @@ uygulamadaki ses tablosundan açılabilir:
 - İki dakikalık siren ve İstiklâl Marşı kaydı: [Fethiye İlçe Millî Eğitim Müdürlüğü — 10 Kasım kayıtları](https://fethiye.meb.gov.tr/www/10-kasim-ataturku-anma-gununde-calinacak-ataturkun-sevdigi-sarkilar/icerik/8811)
 - AFAD işaret tarifleri: [AFAD — İkaz ve Alarm İşaretleri](https://www.afad.gov.tr/ikaz-alarm-isaretleri)
 
+### Depodaki ham kaynak kayıtlar
+
+Kaynak deposunun `src/zilsesleri/` dizininde, paketteki WAV dosyalarının
+türetildiği ham MEB, Cumhurbaşkanlığı ve AFAD kayıtları (MP3/WMA/M4A) durur;
+`tools/prepare_bundled_sounds.py` bunları PCM WAV'a dönüştürüp
+`src/okul_zili/assets/sounds/` altına yazar. Bu ham dosyalar kurulum
+paketlerine girmez; yalnız yeniden üretim için depoda tutulur ve yukarıdaki
+kayıtlarla aynı izin/sorumluluk koşullarına tabidir (bkz. `NOTICE`).
+
 ### Sorumluluk ve lisans sınırı
 
 Paketteki kayıtların yeniden dağıtımına ilişkin izin teyidi ve sorumluluk,

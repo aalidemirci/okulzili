@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "okul-zili"
-version = "0.7.1"
+version = "0.8.0"
 description = "Tamamen çevrimdışı çalışan Türkçe okul zili sistemi"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -14,7 +14,12 @@ dependencies = [
   "Pillow>=10,<13",
   "six>=1.16,<2",
   "miniaudio>=1.71,<2",
-  "customtkinter>=5.2.2,<6",
+  # vendor/customtkinter ile birebir aynı sürüm: uygulama CTk iç bayraklarına
+  # dayanır, Windows (pip) ve Linux (vendor) paketleri ayrışmamalı (8.3).
+  "customtkinter==5.2.2",
+  # Windows'ta zoneinfo saat dilimi verisini bu paketten alır; olmadan ön
+  # kontrol "Saat dilimi verisi bulunamadı" kritik uyarısı verir (D11).
+  "tzdata>=2024.1",
 ]
 
 [project.scripts]
