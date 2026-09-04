@@ -4,7 +4,7 @@ Bu kılavuz teknik olmayan okul personeli için hazırlanmıştır. Kuruluma ba�
 
 ## Windows 10 ve Windows 11
 
-1. Size verilen `OkulZili-Kurulum-0.7.1.exe` dosyasını USB bellekten bilgisayara kopyalayın. Kurulumu, zil bilgisayarında **günlük kullanılan hesapta** oturum açmışken başlatın; UAC penceresine başka bir yönetici hesabının bilgileri girilse de otomatik başlatma görevi kurulumu başlatan hesaba yazılır.
+1. Size verilen `OkulZili-Kurulum-0.8.0.exe` dosyasını USB bellekten bilgisayara kopyalayın. Kurulumu, zil bilgisayarında **günlük kullanılan hesapta** oturum açmışken başlatın; UAC penceresine başka bir yönetici hesabının bilgileri girilse de otomatik başlatma görevi kurulumu başlatan hesaba yazılır.
 2. Dosyaya çift tıklayın. Windows koruma uyarısı gösterirse dosyanın okul yönetiminin teslim ettiği kopya olduğunu ve yanında verilen `SHA256SUMS.txt` değeriyle eşleştiğini doğrulayın. Sonra **Ek bilgi → Yine de çalıştır** yolunu kullanın. Paket kod imzalı değildir; bu nedenle SmartScreen uyarısı beklenir.
 3. Kurulum dilinde Türkçeyi seçin ve **İleri** düğmelerini izleyin.
 4. “Oturum açıldığında Okul Zili'ni başlat” görevinin seçili olduğundan emin olun.
@@ -32,11 +32,11 @@ Kaldırıcı, yalnızca kendi kurulum dizinindeki çalışan `OkulZili.exe` sür
 
 ## Pardus 23 / Ubuntu 22.04 ve üzeri
 
-1. Size verilen `okul-zili_0.7.1_all.deb` dosyasını bilgisayara kopyalayın.
+1. Size verilen `okul-zili_0.8.0_all.deb` dosyasını bilgisayara kopyalayın.
 2. Dosya yöneticisinden paket yükleyiciyle açın veya terminalde aşağıdaki komutu çalıştırın:
 
    ```bash
-   sudo apt install ./okul-zili_0.7.1_all.deb
+   sudo apt install ./okul-zili_0.8.0_all.deb
    ```
 
 3. Uygulama menüsünde **Okul Zili** öğesini açın.
@@ -72,13 +72,13 @@ Dağıtıma özgü eksiksiz bağımlılık belleği, internete bağlı ve hedefl
 
 ```bash
 sudo ./tools/prepare-linux-offline-bundle.sh \
-  ./dist/okul-zili_0.7.1_all.deb \
+  ./dist/okul-zili_0.8.0_all.deb \
   ./dist/vendor-linux
 ```
 
 Üretilen dizindeki tüm `.deb` dosyaları ve `SHA256SUMS.txt` USB belleğe birlikte kopyalanır. Araç kurulu paketleri yeniden indirmek için `--reinstall` kullanır; yine de ağsız kabul testi mutlaka ayrı temiz makinede yapılmalıdır.
 
-Windows için yalnız kurulum programı (`OkulZili-Kurulum-0.7.1.exe`) ve taşınabilir zip dağıtılır; ikisi de Python çalışma zamanını, arayüz kütüphanelerini ve saat dilimi verisini içinde taşır, ek kurulum gerektirmez. Kaynak koddan çalıştırmak isteyen teknik personel için gereken paketler `pyproject.toml` içinde listelenir.
+Windows için yalnız kurulum programı (`OkulZili-Kurulum-0.8.0.exe`) ve taşınabilir zip dağıtılır; ikisi de Python çalışma zamanını, arayüz kütüphanelerini ve saat dilimi verisini içinde taşır, ek kurulum gerektirmez. Kaynak koddan çalıştırmak isteyen teknik personel için gereken paketler `pyproject.toml` içinde listelenir.
 
 ### Güncelleme
 

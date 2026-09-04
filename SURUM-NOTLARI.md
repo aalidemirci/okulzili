@@ -1,8 +1,8 @@
 # Sürüm Notları
 
-## Yayımlanmamış (0.7.2 adayı) — İkinci denetim düzeltmeleri
+## 0.8.0 — İkinci denetim düzeltmeleri: zil motoru, görünürlük, paketleme
 
-04.09.2026 sağlık denetiminin (DEGERLENDIRME-VE-PLAN.md, D1–D15) Faz 6–8 uygulaması.
+04.09.2026 sağlık denetiminin (DEGERLENDIRME-VE-PLAN.md, D1–D15) Faz 6–8 uygulaması. Davranış ve dosya biçimi değişiklikleri içerdiği için küçük sürüm numarası yükseltildi.
 
 - **Zil motoru:** olay kimliği kaynak kural adından bağımsız (gün içinde tören eklemek tolerans içindeki zili ikinci kez çaldırmaz, ertelemeyi düşürmez); kural çözümü iki katmanlı (temel kural + üzerine bindirilen tüm törenler: aynı gün iki tören, tatilde yalnız tören, kısaltılmış/telafi günü korunur); durum dosyası yazılamasa da ziller çalar ve durum bir kez uyarılır, kayıtlar zaman damgalı ve yedi gün saklanır, bozuk dosya karantinaya alınır; uzun tören/ikaz yayını ya da elle yayın sırasında vadesi gelen zil yayın bitince çalar; duraklatma sessize almayla aynı sözleşmede; ses düzeyi ölçekleme önbelleği ve açılışta ısıtma.
 - **Görünürlük ve yetki:** kaçırılan/bekletilen/sessize alınan/duraklatılmış zil ve uyku uyarıları panelde "UYARI" satırı ve tepsi bildirimi olarak görünür, panel "Uyarı var" der; günlük sayfası mesajı gösterir; **Kilitle** düğmesi; sesi durdurma, yönetim merkezi ve profil yöneticisi yetki denetler; cihaz kutuları salt seçim; ön kontrol beş dakikada bir arka planda yenilenir; Linux'ta çarpı görev çubuğuna küçültür; bozuk profil dosyası karantinaya alınır; yedek geri yükleme atomik.
