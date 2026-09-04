@@ -11,7 +11,7 @@ Bu kılavuz teknik olmayan okul personeli için hazırlanmıştır. Kuruluma ba�
 5. **Kur** düğmesine basın. Kurulum internet bağlantısı istemez.
 6. Kurulum sonundaki **Okul Zili'ni çalıştır** seçeneğini işaretli bırakın.
 7. İlk açılışta yönetici PIN'ini oluşturun ve bu PIN'i okulun güvenli kayıt yöntemine göre saklayın.
-8. **İlk kurulum** ekranında okul adını, ilk ders saatini, ders sayısını, ders/teneffüs sürelerini, öğle arasını ve ses çıkışını girin. Yanıt vermeden ilerlemek için plandaki 08:20 ve 8 ders varsayımlarını seçebilirsiniz.
+8. **İlk kurulum** ekranında yalnız okul adını ve zil ses çıkışını girin. Zil saatleri burada sorulmaz: uygulama başlangıç için 08:20'de başlayan 8 derslik hafta içi programıyla açılır ve sizi doğrudan **Ders zilleri** sayfasına alır. Okulunuzun düzenini oradan **tam gün** ya da **ikili eğitim** seçerek kurun; varsayılan saatleri tümüyle silmek için **Sıfırla ve yeniden oluştur** düğmesini kullanın (bkz. KULLANIM.md).
 9. Otomatik açılan **Ses testi** ekranında her zil türünü ayrı ayrı deneyin. Amplifikatör seviyesini düşükten başlayarak ayarlayın.
 10. Anons için ayrı bir ses kartı kullanılacaksa **Ayarlar → Anons ses çıkışı** alanından seçin.
 11. **Ön kontrol** sekmesinde kırmızı “KRİTİK” satır kalmadığını kontrol edin.

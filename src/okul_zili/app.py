@@ -13,7 +13,7 @@ import tkinter as tk
 import traceback
 import webbrowser
 import customtkinter as ctk
-from tkinter import filedialog, messagebox, simpledialog, ttk
+from tkinter import filedialog, messagebox, ttk
 from typing import Callable
 
 from . import __version__
@@ -25,7 +25,15 @@ from .branding import apply_process_identity, apply_window_icon, load_brand_imag
 from .calendar_engine import CalendarEngine
 from .ceremonies import CEREMONY_SCENARIOS, ceremony_events
 from .config import ConfigError, ConfigRepository
-from .defaults import apply_general_settings, build_school_config, copy_schedule_to_days, generate_from_day_schedule
+from .defaults import (
+    apply_general_settings,
+    build_dual_sessions,
+    build_school_config,
+    copy_schedule_to_days,
+    generate_from_day_schedule,
+    repair_session_overlap,
+    reset_weekly_schedule,
+)
 from .domain import AcademicCalendar, DateRange, DateRule, DaySchedule, EventSpec, EventType, ExceptionKind, SchoolConfig, SessionSchedule, sort_specs
 from .event_log import configure_logging, log_event
 from .instance import SingleInstanceLock
@@ -74,12 +82,20 @@ from .ui_theme import (
 
 
 from .dialogs import (
+    DUAL_SESSION_NAMES,
+    EDUCATION_MODES,
     EVENT_LABELS,
     EVENT_TYPES_BY_LABEL,
+    MODE_DUAL,
+    MODE_FULL_DAY,
     MONTHS,
     RULE_LABELS,
     RULES_BY_LABEL,
+    SESSION_ID_BY_NAME,
     SESSION_LABELS,
+    SESSION_NAME_AFTERNOON,
+    SESSION_NAME_FULL_DAY,
+    SESSION_NAME_MORNING,
     SESSIONS_BY_LABEL,
     TEAL,
     TEAL_HOVER,
@@ -92,9 +108,11 @@ from .dialogs import (
     InitialSetupDialog,
     LessonTimesDialog,
     LoginDialog,
+    PinDialog,
     ProfileManager,
     RuleEditor,
     SafeModalToplevel,
+    ScheduleResetDialog,
     SettingsDialog,
     SoundTestDialog,
     _dialog_card,
@@ -188,6 +206,7 @@ class OkulZiliApp:
         self._scheduler_last_success_at: datetime | None = None
         self._dashboard_after_id: str | None = None
         self._dashboard_layout_after_id: str | None = None
+        self._window_restore_state = "normal"
         self.appearance_path = self.data_dir / "arayuz.json"
         self.appearance = load_appearance(self.appearance_path)
         ctk.set_appearance_mode(self.appearance)
@@ -458,6 +477,7 @@ class OkulZiliApp:
     def _maximize_window(self) -> None:
         if self.root.winfo_exists() and not bool(self.root.attributes("-fullscreen")):
             self.root.state("zoomed")
+            self._window_restore_state = "zoomed"
 
     def _leave_fullscreen(self, event: object | None = None) -> str:
         if bool(self.root.attributes("-fullscreen")):
@@ -676,6 +696,23 @@ class OkulZiliApp:
 
     def _build_schedule(self) -> None:
         self._page_heading(self.schedule_page, "Ders zilleri", "Ders akışını otomatik hesaplayın, gün bazında düzeltin ve diğer günlere uygulayın")
+        # İlk kurulum yalnız okul bilgisini sorar; zil düzeni burada kurulur.
+        guide = ctk.CTkFrame(self.schedule_page, fg_color=INFO_BG, corner_radius=12)
+        guide.pack(fill="x", pady=(0, 12))
+        ctk.CTkLabel(
+            guide,
+            text=(
+                "ⓘ  Eğitim modelini tam gün ya da ikili eğitim olarak seçip "
+                "“Oturumu hesapla ve kaydet” ile seçili günün zillerini oluşturun. "
+                "Varsayılan veya eski saatleri tümüyle silmek için “Sıfırla ve "
+                "yeniden oluştur” düğmesini kullanın."
+            ),
+            text_color=INFO_TEXT,
+            justify="left",
+            anchor="w",
+            wraplength=980,
+            font=ctk.CTkFont("Segoe UI Variable Text", 12),
+        ).pack(fill="x", padx=16, pady=11)
         toolbar = ctk.CTkFrame(self.schedule_page, fg_color="transparent")
         toolbar.pack(fill="x", pady=(0, 12))
         ctk.CTkLabel(toolbar, text="Gün", text_color=INK_SUBTLE, font=ctk.CTkFont("Segoe UI Variable Text", 12, "bold")).pack(side="left", padx=(0, 8))
@@ -685,8 +722,12 @@ class OkulZiliApp:
         self.copy_schedule_button = self._action_button(toolbar, "Günlere uygula", self._copy_schedule, width=124)
         self.copy_schedule_button.pack(side="left", padx=(10, 4))
         self.advanced_add_button = self._action_button(toolbar, "Ek olaylar", self._add_event, width=110)
-        self.advanced_add_button.pack(side="left", padx=(4, 0))
-        self.schedule_admin_buttons = [self.copy_schedule_button, self.advanced_add_button, self.calculate_button] if hasattr(self, "calculate_button") else [self.copy_schedule_button, self.advanced_add_button]
+        self.advanced_add_button.pack(side="left", padx=(4, 4))
+        # Varsayılan ya da elde kalmış zil saatlerini tümüyle silip yeniden
+        # kurmanın tek yeri; ikili eğitime geçen okulların ihtiyacı.
+        self.reset_schedule_button = self._action_button(toolbar, "Sıfırla ve yeniden oluştur", self._reset_schedule, danger=True, width=196)
+        self.reset_schedule_button.pack(side="left", padx=(4, 0))
+        self.schedule_admin_buttons = [self.copy_schedule_button, self.advanced_add_button, self.reset_schedule_button]
 
         workspace = ctk.CTkFrame(self.schedule_page, fg_color="transparent")
         workspace.pack(fill="x", expand=True)
@@ -718,18 +759,23 @@ class OkulZiliApp:
         mode_row = ctk.CTkFrame(form, fg_color="transparent")
         mode_row.pack(fill="x", padx=18, pady=(0, 6))
         mode_row.columnconfigure((0, 1), weight=1)
-        self.education_mode_var = tk.StringVar(value="Tekli eğitim")
-        self.session_var = tk.StringVar(value="Normal")
+        self.education_mode_var = tk.StringVar(value=MODE_FULL_DAY)
+        self.session_var = tk.StringVar(value=SESSION_NAME_FULL_DAY)
+        # Formda düzenlenen oturumlar, kaydedilene kadar burada tutulur; böylece
+        # sabah oturumunda yapılan değişiklik öğleden sonra oturumuna geçildiğinde
+        # kaybolmaz ve öğleden sonra başlangıcı güncel sabah bitişine göre önerilir.
+        self._draft_sessions: list[SessionSchedule] = []
+        self._editing_session_name: str | None = None
         ctk.CTkLabel(mode_row, text="Eğitim modeli", text_color=MUTED, font=ctk.CTkFont("Segoe UI Variable Text", 12, "bold"), anchor="w").grid(row=0, column=0, sticky="ew", padx=(0, 5))
         ctk.CTkLabel(mode_row, text="Düzenlenen oturum", text_color=MUTED, font=ctk.CTkFont("Segoe UI Variable Text", 12, "bold"), anchor="w").grid(row=0, column=1, sticky="ew", padx=(5, 0))
         self.education_mode_box = ctk.CTkComboBox(
-            mode_row, variable=self.education_mode_var, values=["Tekli eğitim", "İkili eğitim"],
+            mode_row, variable=self.education_mode_var, values=list(EDUCATION_MODES),
             state="readonly", height=40, fg_color=INPUT, border_color=BORDER,
             button_color=ACCENT_STRONG, command=self._on_education_mode_changed,
         )
         self.education_mode_box.grid(row=1, column=0, sticky="ew", padx=(0, 5), pady=(3, 0))
         self.session_box = ctk.CTkComboBox(
-            mode_row, variable=self.session_var, values=["Normal"], state="disabled",
+            mode_row, variable=self.session_var, values=[SESSION_NAME_FULL_DAY], state="disabled",
             height=40, fg_color=INPUT, border_color=BORDER, button_color=ACCENT_STRONG,
             command=self._on_session_changed,
         )
@@ -1132,6 +1178,10 @@ class OkulZiliApp:
         log_event(self.logger, "profil_degisti", profil=role)
         self.root.after(350, self._open_first_run_sound_test)
 
+    def focus_schedule_page(self) -> None:
+        """İlk kurulumdan hemen sonra kullanıcıyı ders zilleri sayfasına alır."""
+        self._show_page("program")
+
     def _open_login(self) -> None:
         dialog = LoginDialog(
             self.root, self.auth, LoginThrottle(self.data_dir / "giris-denemeleri.json")
@@ -1315,78 +1365,102 @@ class OkulZiliApp:
             )
 
     def _on_day_changed(self) -> None:
-        self.session_var.set("Normal")
-        self._load_day_form(reset_mode=True)
+        self._load_day_form()
         self._refresh_schedule()
 
     def _on_education_mode_changed(self, selected: str) -> None:
-        if selected == "İkili eğitim":
-            self.session_box.configure(values=["Sabah", "Öğleden sonra"], state="readonly")
-            self.session_var.set("Sabah")
+        if not self._capture_session_from_form():
+            # Geçersiz değerlerle mod değiştirmek taslağı bozar; kullanıcı
+            # düzeltene kadar önceki modda kalınır.
+            self.education_mode_var.set(
+                MODE_DUAL if len(self._draft_sessions) > 1 else MODE_FULL_DAY
+            )
+            return
+        if selected == MODE_DUAL:
+            if len(self._draft_sessions) < 2:
+                # Öğleden sonra oturumu, formdaki güncel sabah değerlerinden
+                # türetilir; böylece varsayılan saatlerle çakışma oluşmaz.
+                self._draft_sessions = list(
+                    build_dual_sessions(self._selected_draft_session())
+                )
+            self.session_box.configure(values=list(DUAL_SESSION_NAMES), state="readonly")
+            self.session_var.set(SESSION_NAME_MORNING)
         else:
-            self.session_box.configure(values=["Normal"], state="disabled")
-            self.session_var.set("Normal")
-        self._load_day_form(reset_mode=False)
+            base = self._selected_draft_session()
+            self._draft_sessions = [
+                replace(base, session_id="normal", name=SESSION_NAME_FULL_DAY)
+            ]
+            self.session_box.configure(values=[SESSION_NAME_FULL_DAY], state="disabled")
+            self.session_var.set(SESSION_NAME_FULL_DAY)
+        self._show_draft_session()
 
     def _on_session_changed(self, _selected: str) -> None:
-        self._load_day_form(reset_mode=False)
-
-    @staticmethod
-    def _suggest_afternoon_start(session: SessionSchedule) -> str:
-        cursor = datetime.strptime(session.first_lesson, "%H:%M")
-        completed = 0
-        for index, size in enumerate(session.effective_blocks):
-            cursor += timedelta(minutes=size * session.lesson_minutes)
-            completed += size
-            if index < len(session.effective_blocks) - 1:
-                cursor += timedelta(
-                    minutes=session.lunch_minutes
-                    if completed == session.lunch_after
-                    else session.break_minutes
-                )
-        cursor += timedelta(minutes=20)
-        minute = ((cursor.minute + 4) // 5) * 5
-        if minute == 60:
-            cursor = cursor.replace(minute=0) + timedelta(hours=1)
-        else:
-            cursor = cursor.replace(minute=minute)
-        return cursor.strftime("%H:%M")
-
-    def _sessions_for_mode(self, schedule: DaySchedule, mode: str) -> tuple[SessionSchedule, ...]:
-        current = schedule.effective_sessions
-        if mode == "Tekli eğitim":
-            source = current[0]
-            return (replace(source, session_id="normal", name="Normal"),)
-        if len(current) > 1:
-            return current
-        morning = replace(current[0], session_id="sabah", name="Sabah")
-        afternoon = replace(
-            current[0],
-            session_id="ogle",
-            name="Öğleden sonra",
-            first_lesson=self._suggest_afternoon_start(morning),
-            lunch_after=0,
-            lunch_minutes=current[0].break_minutes,
-        )
-        return morning, afternoon
-
-    def _load_day_form(self, *, reset_mode: bool = True) -> None:
-        if not hasattr(self, "day_form_vars"):
+        if not self._capture_session_from_form():
+            if self._editing_session_name is not None:
+                self.session_var.set(self._editing_session_name)
             return
-        weekday = WEEKDAYS.index(self.day_var.get())
-        schedule = self.config.day_schedules.get(weekday) or DaySchedule(student_bell_enabled=False)
-        if reset_mode:
-            mode = "İkili eğitim" if schedule.is_dual else "Tekli eğitim"
-            self.education_mode_var.set(mode)
-            self.session_box.configure(
-                values=["Sabah", "Öğleden sonra"] if schedule.is_dual else ["Normal"],
-                state="readonly" if schedule.is_dual else "disabled",
+        self._show_draft_session()
+
+    def _selected_draft_session(self) -> SessionSchedule:
+        name = self.session_var.get()
+        for item in self._draft_sessions:
+            if item.name == name:
+                return item
+        return self._draft_sessions[0]
+
+    def _session_from_form(self, name: str) -> SessionSchedule:
+        """Formdaki değerlerden tek bir oturum üretir; geçersizse hata yükseltir."""
+        value = lambda key: self.day_form_vars[key].get().strip()
+        block_text = value("block_sizes").replace(",", "+").replace(" ", "")
+        try:
+            block_sizes = (
+                tuple(int(item) for item in block_text.split("+") if item)
+                if block_text
+                else ()
             )
-            self.session_var.set("Sabah" if schedule.is_dual else "Normal")
-        mode = self.education_mode_var.get()
-        sessions = self._sessions_for_mode(schedule, mode)
-        selected_name = self.session_var.get()
-        session = next((item for item in sessions if item.name == selected_name), sessions[0])
+            session = SessionSchedule(
+                session_id=SESSION_ID_BY_NAME.get(name, "normal"),
+                name=name,
+                first_lesson=value("first_lesson"),
+                lesson_count=int(value("lesson_count")),
+                lesson_minutes=int(value("lesson_minutes")),
+                break_minutes=int(value("break_minutes")),
+                lunch_after=int(value("lunch_after")),
+                lunch_minutes=int(value("lunch_minutes")),
+                student_bell_enabled=self.student_bell_var.get(),
+                student_bell_minutes=int(value("student_bell_minutes") or "2"),
+                block_sizes=block_sizes,
+                block_transition_bell_enabled=self.block_transition_bell_var.get(),
+            )
+        except ValueError as exc:
+            raise ValueError(
+                "Sayısal alanlara yalnız tam sayı girin; blok düzeni 2+2+1 biçimindedir."
+            ) from exc
+        errors = session.validate(f"{name}: ")
+        if errors:
+            raise ValueError("\n".join(errors))
+        return session
+
+    def _capture_session_from_form(self, *, warn: bool = True) -> bool:
+        """Formdaki değerleri düzenlenen oturuma yazar; geçersizse False döner."""
+        if not self._draft_sessions or self._editing_session_name is None:
+            return True
+        try:
+            session = self._session_from_form(self._editing_session_name)
+        except ValueError as exc:
+            if warn:
+                messagebox.showerror("Geçersiz ders akışı", str(exc), parent=self.root)
+            return False
+        for index, item in enumerate(self._draft_sessions):
+            if item.name == self._editing_session_name:
+                self._draft_sessions[index] = session
+                return True
+        self._draft_sessions[0] = session
+        return True
+
+    def _show_draft_session(self) -> None:
+        session = self._selected_draft_session()
+        self._editing_session_name = session.name
         for key in ("first_lesson", "lesson_count", "lesson_minutes", "break_minutes", "lunch_after", "lunch_minutes", "student_bell_minutes"):
             self.day_form_vars[key].set(str(getattr(session, key)))
         self.day_form_vars["block_sizes"].set(
@@ -1396,78 +1470,90 @@ class OkulZiliApp:
         self.block_transition_bell_var.set(session.block_transition_bell_enabled)
         self._toggle_student_offset()
 
+    def _load_day_form(self) -> None:
+        """Seçili günün kayıtlı ders akışını forma ve taslağa yükler."""
+        if not hasattr(self, "day_form_vars"):
+            return
+        weekday = WEEKDAYS.index(self.day_var.get())
+        schedule = self.config.day_schedules.get(weekday) or DaySchedule(student_bell_enabled=False)
+        sessions = list(schedule.effective_sessions)
+        dual = len(sessions) > 1
+        if dual:
+            sessions = [
+                replace(sessions[0], session_id="sabah", name=SESSION_NAME_MORNING),
+                replace(sessions[1], session_id="ogle", name=SESSION_NAME_AFTERNOON),
+                *sessions[2:],
+            ]
+        else:
+            sessions = [
+                replace(sessions[0], session_id="normal", name=SESSION_NAME_FULL_DAY)
+            ]
+        self._draft_sessions = sessions
+        self._editing_session_name = None
+        self.education_mode_var.set(MODE_DUAL if dual else MODE_FULL_DAY)
+        self.session_box.configure(
+            values=list(DUAL_SESSION_NAMES) if dual else [SESSION_NAME_FULL_DAY],
+            state="readonly" if dual else "disabled",
+        )
+        self.session_var.set(SESSION_NAME_MORNING if dual else SESSION_NAME_FULL_DAY)
+        self._show_draft_session()
+
     def _toggle_student_offset(self) -> None:
         state = "normal" if self.student_bell_var.get() else "disabled"
         self.student_offset_entry.configure(state=state)
         self.student_offset_label.configure(text_color=MUTED if state == "normal" else BORDER)
 
-    def _day_schedule_from_form(self) -> DaySchedule:
-        value = lambda key: self.day_form_vars[key].get().strip()
-        block_text = value("block_sizes").replace(",", "+").replace(" ", "")
-        try:
-            block_sizes = tuple(int(item) for item in block_text.split("+") if item) if block_text else ()
-        except ValueError as exc:
-            raise ValueError("Blok düzeni 2+2+1 gibi pozitif sayılardan oluşmalıdır.") from exc
-        selected_name = self.session_var.get()
-        selected_id = {"Sabah": "sabah", "Öğleden sonra": "ogle"}.get(selected_name, "normal")
-        selected_session = SessionSchedule(
-            session_id=selected_id, name=selected_name,
-            first_lesson=value("first_lesson"), lesson_count=int(value("lesson_count")),
-            lesson_minutes=int(value("lesson_minutes")), break_minutes=int(value("break_minutes")),
-            lunch_after=int(value("lunch_after")), lunch_minutes=int(value("lunch_minutes")),
-            student_bell_enabled=self.student_bell_var.get(), student_bell_minutes=int(value("student_bell_minutes") or "2"),
-            block_sizes=block_sizes,
-            block_transition_bell_enabled=self.block_transition_bell_var.get(),
+    def _draft_day_schedule(self) -> DaySchedule:
+        sessions = tuple(self._draft_sessions)
+        base = sessions[0]
+        return DaySchedule(
+            first_lesson=base.first_lesson,
+            lesson_count=base.lesson_count,
+            lesson_minutes=base.lesson_minutes,
+            break_minutes=base.break_minutes,
+            lunch_after=base.lunch_after,
+            lunch_minutes=base.lunch_minutes,
+            student_bell_enabled=base.student_bell_enabled,
+            student_bell_minutes=base.student_bell_minutes,
+            sessions=sessions if len(sessions) > 1 or base.block_sizes else (),
         )
-        weekday = WEEKDAYS.index(self.day_var.get())
-        existing = self.config.day_schedules.get(weekday) or DaySchedule()
-        if self.education_mode_var.get() == "İkili eğitim":
-            sessions = list(self._sessions_for_mode(existing, "İkili eğitim"))
-            selected_index = next(
-                (index for index, item in enumerate(sessions) if item.session_id == selected_id), 0
-            )
-            sessions[selected_index] = selected_session
-            first = sessions[0]
-            schedule = DaySchedule(
-                first_lesson=first.first_lesson, lesson_count=first.lesson_count,
-                lesson_minutes=first.lesson_minutes, break_minutes=first.break_minutes,
-                lunch_after=first.lunch_after, lunch_minutes=first.lunch_minutes,
-                student_bell_enabled=first.student_bell_enabled,
-                student_bell_minutes=first.student_bell_minutes,
-                sessions=tuple(sessions),
-            )
-        else:
-            schedule = DaySchedule(
-                first_lesson=selected_session.first_lesson,
-                lesson_count=selected_session.lesson_count,
-                lesson_minutes=selected_session.lesson_minutes,
-                break_minutes=selected_session.break_minutes,
-                lunch_after=selected_session.lunch_after,
-                lunch_minutes=selected_session.lunch_minutes,
-                student_bell_enabled=selected_session.student_bell_enabled,
-                student_bell_minutes=selected_session.student_bell_minutes,
-                sessions=(selected_session,) if selected_session.block_sizes else (),
-            )
-        errors = schedule.validate()
-        if errors:
-            raise ValueError("\n".join(errors))
-        return schedule
 
     def _regenerate_schedule(self) -> None:
         if not self._require_permission("yapilandir"):
             return
-        try:
-            settings = self._day_schedule_from_form()
-        except ValueError as exc:
-            messagebox.showerror("Geçersiz ders akışı", str(exc), parent=self.root)
+        if not self._capture_session_from_form():
             return
+        schedule = self._draft_day_schedule()
+        errors = schedule.validate()
+        if errors:
+            repaired = (
+                repair_session_overlap(schedule)
+                if self.education_mode_var.get() == MODE_DUAL
+                else None
+            )
+            if repaired is None:
+                messagebox.showerror("Geçersiz ders akışı", "\n".join(errors), parent=self.root)
+                return
+            # Tipik ikili eğitim hatası: sabah oturumu uzatılınca öğleden sonra
+            # oturumu onun içine giriyor. Kullanıcıya hazır çözüm sunulur.
+            suggested = repaired.effective_sessions[1].first_lesson
+            if not messagebox.askyesno(
+                "Oturumlar çakışıyor",
+                "Sabah oturumu, öğleden sonra oturumuyla çakışıyor.\n\n"
+                f"Öğleden sonra oturumu {suggested} saatinde başlatılsın mı?",
+                parent=self.root,
+            ):
+                return
+            schedule = repaired
+            self._draft_sessions = list(repaired.effective_sessions)
+            self._show_draft_session()
         weekday = WEEKDAYS.index(self.day_var.get())
         schedules = dict(self.config.day_schedules)
-        schedules[weekday] = settings
+        schedules[weekday] = schedule
         weekly = dict(self.config.weekly_schedule)
         # İskelet ayarlardan türetilir; elle eklenen olaylar extra_events'te
         # ayrı durduğundan burada koruma filtresi gerekmez.
-        weekly[weekday] = generate_from_day_schedule(settings)
+        weekly[weekday] = generate_from_day_schedule(schedule)
         self._apply_config(
             replace(
                 self.config,
@@ -1478,6 +1564,52 @@ class OkulZiliApp:
                     for item in schedules.values()
                     for session in item.effective_sessions
                 ),
+            )
+        )
+        self._load_day_form()
+
+    def _reset_schedule(self) -> None:
+        """Zil saatlerini ve periyotları sıfırlayıp yeniden oluşturur."""
+        if not self._require_permission("yapilandir"):
+            return
+        weekday = WEEKDAYS.index(self.day_var.get())
+        ScheduleResetDialog(
+            self.root,
+            weekday,
+            self.config.day_schedules.get(weekday),
+            self._apply_schedule_reset,
+        )
+
+    def _apply_schedule_reset(
+        self,
+        clear_days: tuple[int, ...],
+        build_days: tuple[int, ...],
+        schedule: DaySchedule,
+        clear_extra_events: bool,
+    ) -> None:
+        try:
+            updated = reset_weekly_schedule(
+                self.config,
+                schedule=schedule,
+                build_days=build_days,
+                clear_days=clear_days,
+                clear_extra_events=clear_extra_events,
+            )
+        except ValueError as exc:
+            messagebox.showerror("Zil programı sıfırlanamadı", str(exc), parent=self.root)
+            return
+        if not self._apply_config(updated):
+            return
+        log_event(
+            self.logger,
+            "zil_programi_sifirlandi",
+            gunler=list(build_days),
+            ek_olaylar_silindi=clear_extra_events,
+        )
+        self._load_day_form()
+        self._enqueue_notice(
+            SchedulerNotice(
+                "bilgi", "Zil programı sıfırlandı ve seçilen günler yeniden oluşturuldu."
             )
         )
 
@@ -2244,10 +2376,22 @@ class OkulZiliApp:
         else:
             messagebox.showwarning("Pilot günlük sonucu", detail, parent=self.root)
 
+    def _remember_window_state(self) -> None:
+        try:
+            state = self.root.state()
+        except tk.TclError:
+            return
+        if state in ("normal", "zoomed"):
+            self._window_restore_state = state
+
     def _hide_to_taskbar(self) -> None:
+        # Çarpı düğmesi uygulamayı kapatmaz: zil sistemi sistem tepsisinde
+        # çalışmaya devam eder. Kapatma yalnız tepsi menüsünden yapılır.
+        self._remember_window_state()
         if self.tray.available:
             self.root.withdraw()
             self.tray.notify("Uygulama sistem tepsisinde çalışmaya devam ediyor.")
+            log_event(self.logger, "pencere_tepsiye_alindi")
             return
         if messagebox.askyesno(
             "Uygulamayı gizle",
@@ -2263,7 +2407,15 @@ class OkulZiliApp:
             self._exit_application()
 
     def _show_window(self) -> None:
+        if not self.root.winfo_exists():
+            return
         self.root.deiconify()
+        # Tepsiden geri çağrılan pencere, gizlenmeden önceki boyutunda açılır.
+        if self._window_restore_state == "zoomed" and not bool(self.root.attributes("-fullscreen")):
+            try:
+                self.root.state("zoomed")
+            except tk.TclError:
+                pass
         self.root.lift()
         self.root.focus_force()
 
@@ -2323,6 +2475,49 @@ def _prepare_startup_root(root: tk.Tk) -> ttk.Frame:
     root.deiconify()
     root.lift()
     return startup
+
+
+def _reveal_main_window(root: tk.Tk) -> None:
+    """Ana pencereyi görünür kılar ve CTk'nin açılış gizlemesini devre dışı bırakır.
+
+    CustomTkinter, Windows'ta başlık çubuğu rengini ilk ``mainloop()`` çağrısında
+    uygular; bunun için pencereyi gizler ve daha önce ``withdraw()`` çağrılmışsa
+    geri açmaz. Giriş penceresi kapandığı anda ana pencerenin sistem tepsisine
+    düşmüş gibi kaybolmasının nedeni buydu. Pencere burada gösterilip CTk'ye
+    "pencere zaten açık" bildirilerek o döngü atlanır.
+    """
+    for flag in ("_withdraw_called_before_window_exists", "_iconify_called_before_window_exists"):
+        if getattr(root, flag, False):
+            setattr(root, flag, False)
+    root.deiconify()
+    root.lift()
+    try:
+        # CTk.update() pencereyi "var" olarak işaretler; mainloop artık
+        # gizle/göster döngüsüne girmez.
+        root.update()
+    except tk.TclError:
+        return
+    titlebar = getattr(root, "_windows_set_titlebar_color", None)
+    if callable(titlebar):
+        try:
+            titlebar(ctk.get_appearance_mode())
+        except Exception:
+            # Başlık çubuğu rengi kozmetiktir; uygulanamazsa açılış sürer.
+            pass
+
+
+def _create_admin_pin(root: tk.Tk, auth: AuthRepository) -> bool:
+    """İlk açılışta yönetici PIN'ini modern pencerede oluşturur."""
+    while not auth.has_admin_pin():
+        dialog = PinDialog(root, "yonetici", first_run=True)
+        root.wait_window(dialog)
+        if dialog.result is None:
+            return False
+        try:
+            auth.set_pin("yonetici", dialog.result)
+        except ValueError as exc:
+            messagebox.showerror("Geçersiz PIN", str(exc), parent=root)
+    return True
 
 
 def main() -> int:
@@ -2582,27 +2777,12 @@ def main() -> int:
     root.after(350, poll_activation)
     try:
         auth = AuthRepository(data_dir / "profiller.json")
-        if not auth.has_admin_pin():
-            messagebox.showinfo(
-                "İlk kurulum",
-                "İlk kullanım için yönetici PIN'i oluşturun. PIN yalnızca bu bilgisayarda saklanır.",
-                parent=root,
-            )
-            while not auth.has_admin_pin():
-                first = simpledialog.askstring("Yönetici PIN'i", "6–12 rakamlı yönetici PIN'i:", show="●", parent=root)
-                if first is None:
-                    root.destroy()
-                    return 0
-                second = simpledialog.askstring("PIN doğrula", "Yönetici PIN'ini yeniden girin:", show="●", parent=root)
-                if first != second:
-                    messagebox.showerror("PIN uyuşmuyor", "Girilen PIN değerleri aynı değil.", parent=root)
-                    continue
-                try:
-                    auth.set_pin("yonetici", first)
-                except ValueError as exc:
-                    messagebox.showerror("Geçersiz PIN", str(exc), parent=root)
+        if not auth.has_admin_pin() and not _create_admin_pin(root, auth):
+            root.destroy()
+            return 0
         config_path = data_dir / "ayarlar.json"
-        if not config_path.exists():
+        first_run = not config_path.exists()
+        if first_run:
             setup = InitialSetupDialog(root, PlatformAudioBackend().list_devices())
             root.wait_window(setup)
             if setup.result is None:
@@ -2623,11 +2803,18 @@ def main() -> int:
         # penceresi yalnız yetki yükseltir; kapatılırsa ziller çalmaya
         # devam eder ve yönetim işlevleri PIN'e kadar kilitli kalır.
         app = OkulZiliApp(root, data_dir, "goruntuleme", auth)
-        root.deiconify()
+        _reveal_main_window(root)
         dialog = LoginDialog(root, auth, LoginThrottle(data_dir / "giris-denemeleri.json"))
         root.wait_window(dialog)
         if dialog.result is not None:
             app.set_role(dialog.result)
+        if first_run:
+            # Zil saatleri kurulumda sorulmaz; kullanıcı doğrudan ders zilleri
+            # sayfasında karşılanır.
+            app.focus_schedule_page()
+        # Giriş sonrası pencere açık kalır; sistem tepsisine yalnız kullanıcı
+        # çarpı düğmesine bastığında iner.
+        app._show_window()
         root.mainloop()
     except Exception as exc:
         try:

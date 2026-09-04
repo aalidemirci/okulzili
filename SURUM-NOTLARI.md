@@ -1,5 +1,13 @@
 # Sürüm Notları
 
+## Yayımlanmamış — İlk kurulum, ikili eğitim ve pencere düzeltmeleri
+
+- **Giriş sonrası pencere açık kalıyor.** PIN girildikten sonra ana pencere kendiliğinden sistem tepsisine düşüyordu; CustomTkinter, Windows'ta başlık çubuğu rengini ilk `mainloop()` içinde uygularken pencereyi gizleyip geri açmıyordu. Pencere artık giriş penceresi kapanmadan önce görünür duruma alınıp CTk'ye tanıtılıyor. Çarpı düğmesi eskisi gibi uygulamayı kapatmıyor: zil sistemi sistem tepsisinde çalışmaya devam ediyor, tepsiden geri çağrılan pencere gizlenmeden önceki boyutunda açılıyor.
+- **İlk kurulum yalnız okul bilgisini soruyor.** Okul adı ve zil ses çıkışı dışındaki alanlar kaldırıldı; uygulama kurulumdan sonra doğrudan "Ders zilleri" sayfasında açılıyor ve zil düzeni orada tam gün ya da ikili eğitim seçilerek kuruluyor.
+- **Ders zilleri sayfasına "Sıfırla ve yeniden oluştur" eklendi.** Seçili günün ya da tüm haftanın zil saatleri ve periyotları tümüyle silinip girilen düzenle sıfırdan oluşturulabiliyor. Elle eklenen anons/tören olaylarının silinmesi isteğe bağlı; tatil ve tören kuralları korunuyor. Varsayılan saatlerin temizlenememesi sorunu böylece giderildi.
+- **İkili eğitimde oturum çakışması giderildi.** Öğleden sonra oturumu artık kayıtlı eski değerlerden değil formdaki güncel sabah oturumundan türetiliyor; oturumlar arasında geçerken yapılan düzenlemeler korunuyor. Kaydetme sırasında yine de çakışma oluşursa uygulama, öğleden sonrayı sabahın bitişinden sonraya taşıyan hazır bir düzeltme öneriyor.
+- **PIN oluşturma penceresi yenilendi.** İlk kurulumdaki ve yetki profillerindeki eski Tk giriş kutuları, uygulamanın kart tasarımını, satır içi doğrulamayı ve iki alanlı tek pencereyi kullanan `PinDialog` ile değiştirildi.
+
 ## 0.7.0 — Gözetimsiz çalışma, Pardus paketi ve tek doğruluk kaynağı
 
 - Uygulama artık giriş beklemeden salt görüntüleme yetkisiyle açılır: elektrik kesintisi sonrası ziller PIN girilmeden çalar, giriş yalnız yetki yükseltir. Başlığa çalışırken giriş yapmayı sağlayan **Giriş** düğmesi eklendi.

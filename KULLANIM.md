@@ -31,15 +31,26 @@
 ## Program zili düzenleme
 
 1. **Haftalık program** sekmesinde günü seçin.
-2. **Eğitim modeli** alanından tekli veya ikili eğitimi seçin. İkili eğitimde önce **Sabah**, sonra **Öğleden sonra** oturumunu düzenleyin.
+2. **Eğitim modeli** alanından **Tam gün** veya **İkili eğitim**'i seçin. İkili eğitime geçtiğinizde öğleden sonra oturumunun başlangıç saati, o an formda duran sabah oturumunun bitişine göre önerilir. Önce **Sabah**, sonra **Öğleden sonra** oturumunu düzenleyin; oturumlar arasında geçerken girdikleriniz korunur.
 3. Her oturum için ilk ders, ders sayısı, ders/teneffüs süreleri ve öğrenci zili farkını girin. İkili eğitimde uzun teneffüs her oturum için ayrı ayarlanır: **Uzun ara kaçıncı dersten sonra?** alanına blok sınırındaki ders numarasını, yanındaki alana süreyi yazın; uzun ara yoksa konumu `0` yapın.
 4. Normal dersler için **Blok düzeni** alanını boş bırakın. Blok dersler için `2+2+1+1` gibi, toplamı ders sayısına eşit bir desen yazın.
 5. Blok içindeki ders sınırlarında öğretmen değişimini bildirmek için **Blok içi sınıf değişim zili** seçeneğini açık bırakın. Bu zil teneffüs oluşturmaz ve beş saniye çalar.
-6. **Oturumu hesapla ve kaydet** düğmesine basın. Oturum çakışmaları ve blok içine düşen uzun aralar kaydedilmez; uzun arayı `2+2+2` düzeninde yalnızca 2. veya 4. ders sonu gibi bir blok sınırına taşıyın.
+6. **Oturumu hesapla ve kaydet** düğmesine basın. Blok içine düşen uzun aralar kaydedilmez; uzun arayı `2+2+2` düzeninde yalnızca 2. veya 4. ders sonu gibi bir blok sınırına taşıyın. Sabah ve öğleden sonra oturumları çakışıyorsa uygulama öğleden sonrayı sabahın bitişinden sonraya taşımayı önerir; **Evet** derseniz yeni saatle kaydeder.
 7. Tablodaki bir satıra çift tıklayarak yalnızca o blok veya dersin üretilmiş zil saatlerini elle düzeltebilirsiniz.
-8. **Günlere uygula** ile aynı tekli/ikili ve blok düzenini seçtiğiniz diğer günlere kopyalayabilirsiniz.
+8. **Günlere uygula** ile aynı tam gün/ikili ve blok düzenini seçtiğiniz diğer günlere kopyalayabilirsiniz.
 
 Blok ders sırasında iç ders sınırlarında isteğe bağlı beş saniyelik sınıf değişim zili çalar. Öğrenci zili blok başlamadan belirlenen dakika kadar önce, öğretmen zili blok başlangıcında ve normal teneffüs zili blok bitiminde çalar.
+
+### Zil programını sıfırlama
+
+Varsayılan ya da eski zil saatlerini tek tek düzeltmek yerine tümüyle silip yeniden kurmak için **Sıfırla ve yeniden oluştur** düğmesini kullanın. Açılan pencerede:
+
+1. Eğitim modelini (**Tam gün** veya **İkili eğitim**) ve sıfırlama kapsamını (hafta içi, tüm hafta ya da yalnız seçili gün) belirleyin.
+2. Ders akışı değerlerini girin. İkili eğitimde **Sabaha göre hesapla** düğmesi öğleden sonra oturumunun başlangıcını sabah oturumunun bitişinden türetir.
+3. Elle eklediğiniz anons ve tören olaylarının da silinmesini istiyorsanız ilgili anahtarı açın; kapalı bırakırsanız bu olaylar korunur.
+4. **Sıfırla ve oluştur** düğmesine basın. Kapsamdaki günlerin bütün zil saatleri ve periyotları silinip yeniden üretilir. Tatil, telafi ve tören kuralları bu işlemden etkilenmez.
+
+> Sıfırlama geri alınamaz. İşlemden önce **Yönetim → Yedekleme ve geri yükleme** ile bir yedek almanız önerilir.
 
 ## Teneffüs müziği
 
