@@ -25,6 +25,7 @@ if (-not (Test-Path -LiteralPath $executable)) {
         $process = Start-Process -FilePath $executable -ArgumentList $argument -PassThru -WindowStyle Hidden
         if (-not $process.WaitForExit(10000)) {
             Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            $failures.Add("$argument kontrolü 10 saniyede tamamlanmadı (zaman aşımı).")
             continue
         }
         if ($process.ExitCode -ne 0) {

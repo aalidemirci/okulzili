@@ -270,17 +270,23 @@ def apply_general_settings(
     zilleri eklenerek/çıkarılarak dönüştürülür; elle eklenen anons/tören
     olayları ve düzeltilmiş ders saatleri korunur.
     """
-    day_schedules = {
-        day: replace(
-            item,
-            student_bell_enabled=preparation_enabled,
-            sessions=tuple(
-                replace(session, student_bell_enabled=preparation_enabled)
-                for session in item.sessions
-            ),
-        )
-        for day, item in config.day_schedules.items()
-    }
+    # Genel anahtar oturum bayraklarının tek efendisi değildir: yalnız anahtar
+    # DEĞİŞTİYSE oturumlara yazılır. Aksi hâlde ikili eğitimde sabah açık/öğle
+    # kapalı düzeni, alakasız bir ayar kaydında sessizce bozuluyordu (D8).
+    if preparation_enabled != config.preparation_enabled:
+        day_schedules = {
+            day: replace(
+                item,
+                student_bell_enabled=preparation_enabled,
+                sessions=tuple(
+                    replace(session, student_bell_enabled=preparation_enabled)
+                    for session in item.sessions
+                ),
+            )
+            for day, item in config.day_schedules.items()
+        }
+    else:
+        day_schedules = dict(config.day_schedules)
     weekly = config.weekly_schedule
     if preparation_enabled != config.preparation_enabled:
         weekly = {}

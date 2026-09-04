@@ -65,6 +65,10 @@ class PackagingDefinitionTests(unittest.TestCase):
         )
         self.assertIn("DisallowStartIfOnBatteries", verifier)
         self.assertIn("--ses-cihazi-kontrol", verifier)
+        # 7.10: zaman aşımına düşen öz-test başarılı sayılmaz.
+        self.assertIn("zaman aşımı", verifier)
+        entrypoint = (ROOT / "packaging" / "windows" / "entrypoint.py").read_text(encoding="utf-8")
+        self.assertIn("os._exit(3)", entrypoint)
 
         stop_script = (
             ROOT / "packaging" / "windows" / "uninstall-stop.ps1"

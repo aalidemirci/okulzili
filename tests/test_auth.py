@@ -68,6 +68,32 @@ class AuthTests(unittest.TestCase):
             path.write_text(json.dumps({"schema_version": 1, "profiles": {"yonetici": {"salt": "zz", "pin_hash": "aa"}}}), encoding="utf-8")
             self.assertFalse(AuthRepository(path).verify("yonetici", "1234"))
 
+    def test_unreadable_profile_file_is_quarantined_not_overwritten(self) -> None:
+        # D7: bozuk/eski sürümlü profil dosyası sessizce boş sayılıp ilk PIN
+        # kaydında ezilmez; kopyası korunur ve kurtarma notu düşülür.
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "profiller.json"
+            path.write_text("{bozuk", encoding="utf-8")
+            auth = AuthRepository(path)
+            self.assertFalse(auth.has_admin_pin())
+            self.assertIsNotNone(auth.recovery_note)
+            self.assertIn("okunamadı", auth.recovery_note or "")
+            quarantined = [item for item in path.parent.iterdir() if "bozuk-" in item.name]
+            self.assertEqual(1, len(quarantined))
+            self.assertEqual("{bozuk", quarantined[0].read_text(encoding="utf-8"))
+            # Yeni PIN kaydı yeni dosya yazar; karantina kopyası yerinde kalır.
+            auth.set_pin("yonetici", "482613")
+            self.assertTrue(AuthRepository(path).verify("yonetici", "482613"))
+            self.assertTrue(quarantined[0].exists())
+
+    def test_unsupported_profile_schema_is_quarantined(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "profiller.json"
+            path.write_text(json.dumps({"schema_version": 9, "profiles": {}}), encoding="utf-8")
+            auth = AuthRepository(path)
+            self.assertIn("sürüm", auth.recovery_note or "")
+            self.assertTrue(any("bozuk-" in item.name for item in path.parent.iterdir()))
+
     def test_roles_follow_least_privilege_for_tray_actions(self) -> None:
         self.assertTrue(is_action_allowed("yonetici", "yapilandir"))
         self.assertTrue(is_action_allowed("yonetici", "kapat"))
