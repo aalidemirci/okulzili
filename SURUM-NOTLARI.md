@@ -1,6 +1,6 @@
 # Sürüm Notları
 
-## Yayımlanmamış — İlk kurulum, ikili eğitim ve pencere düzeltmeleri
+## 0.7.1 — İlk kurulum, ikili eğitim ve pencere düzeltmeleri
 
 - **Giriş sonrası pencere açık kalıyor.** PIN girildikten sonra ana pencere kendiliğinden sistem tepsisine düşüyordu; CustomTkinter, Windows'ta başlık çubuğu rengini ilk `mainloop()` içinde uygularken pencereyi gizleyip geri açmıyordu. Pencere artık giriş penceresi kapanmadan önce görünür duruma alınıp CTk'ye tanıtılıyor. Çarpı düğmesi eskisi gibi uygulamayı kapatmıyor: zil sistemi sistem tepsisinde çalışmaya devam ediyor, tepsiden geri çağrılan pencere gizlenmeden önceki boyutunda açılıyor.
 - **İlk kurulum yalnız okul bilgisini soruyor.** Okul adı ve zil ses çıkışı dışındaki alanlar kaldırıldı; uygulama kurulumdan sonra doğrudan "Ders zilleri" sayfasında açılıyor ve zil düzeni orada tam gün ya da ikili eğitim seçilerek kuruluyor.
