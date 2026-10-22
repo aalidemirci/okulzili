@@ -3107,9 +3107,16 @@ def main() -> int:
             and saved_event.event_type is EventType.CEREMONY
             and saved_event.session == "ortak"
         )
+        # Akademik takvim penceresi de gg.aa.yyyy gösterip aynı takvimi geri okumalı.
+        calendar_template = academic_calendar_template(2026)
+        calendar_dialog = AcademicCalendarDialog(root, calendar_template, lambda item: captured.__setitem__("calendar", item))
+        calendar_dialog.withdraw()
+        calendar_ok = calendar_dialog.variables["teaching_start"].get() == calendar_template.teaching_start.strftime("%d.%m.%Y")
+        calendar_dialog._save()
+        calendar_ok = calendar_ok and captured.get("calendar") == calendar_template
         root.update_idletasks()
         root.destroy()
-        return 0 if rule_ok and event_ok else 13
+        return 0 if rule_ok and event_ok and calendar_ok else 13
     if "--sinav-kontrol" in sys.argv:
         # Sınav planı kabulü: pencere girdiyi plana, plan üç anonsa dönüşüyor
         # mu; motor sınav penceresindeki ders zillerini susturuyor mu?

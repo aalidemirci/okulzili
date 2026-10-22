@@ -1129,27 +1129,29 @@ class AcademicCalendarDialog(SafeModalToplevel):
             year = date.today().year if date.today().month >= 7 else date.today().year - 1
             calendar = academic_calendar_template(year)
         break_map = {item.name: item for item in calendar.breaks}
+        # Diğer pencerelerle aynı biçim: gg.aa.yyyy (okurken ISO da kabul edilir).
+        shown = lambda value: value.strftime("%d.%m.%Y") if value else ""  # noqa: E731
         values = {
             "label": calendar.label,
-            "teaching_start": calendar.teaching_start.isoformat(), "teaching_end": calendar.teaching_end.isoformat(),
-            "term1_start": calendar.term1_start.isoformat(), "term1_end": calendar.term1_end.isoformat(),
-            "term2_start": calendar.term2_start.isoformat(), "term2_end": calendar.term2_end.isoformat(),
-            "break1_start": break_map.get("1. ara tatil").start.isoformat() if break_map.get("1. ara tatil") else "",
-            "break1_end": break_map.get("1. ara tatil").end.isoformat() if break_map.get("1. ara tatil") else "",
-            "semester_start": break_map.get("Yarıyıl tatili").start.isoformat() if break_map.get("Yarıyıl tatili") else "",
-            "semester_end": break_map.get("Yarıyıl tatili").end.isoformat() if break_map.get("Yarıyıl tatili") else "",
-            "break2_start": break_map.get("2. ara tatil").start.isoformat() if break_map.get("2. ara tatil") else "",
-            "break2_end": break_map.get("2. ara tatil").end.isoformat() if break_map.get("2. ara tatil") else "",
-            "ramadan_start": calendar.ramadan_start.isoformat() if calendar.ramadan_start else "",
-            "ramadan_end": calendar.ramadan_end.isoformat() if calendar.ramadan_end else "",
-            "sacrifice_start": calendar.sacrifice_start.isoformat() if calendar.sacrifice_start else "",
-            "sacrifice_end": calendar.sacrifice_end.isoformat() if calendar.sacrifice_end else "",
+            "teaching_start": shown(calendar.teaching_start), "teaching_end": shown(calendar.teaching_end),
+            "term1_start": shown(calendar.term1_start), "term1_end": shown(calendar.term1_end),
+            "term2_start": shown(calendar.term2_start), "term2_end": shown(calendar.term2_end),
+            "break1_start": shown(break_map["1. ara tatil"].start) if "1. ara tatil" in break_map else "",
+            "break1_end": shown(break_map["1. ara tatil"].end) if "1. ara tatil" in break_map else "",
+            "semester_start": shown(break_map["Yarıyıl tatili"].start) if "Yarıyıl tatili" in break_map else "",
+            "semester_end": shown(break_map["Yarıyıl tatili"].end) if "Yarıyıl tatili" in break_map else "",
+            "break2_start": shown(break_map["2. ara tatil"].start) if "2. ara tatil" in break_map else "",
+            "break2_end": shown(break_map["2. ara tatil"].end) if "2. ara tatil" in break_map else "",
+            "ramadan_start": shown(calendar.ramadan_start),
+            "ramadan_end": shown(calendar.ramadan_end),
+            "sacrifice_start": shown(calendar.sacrifice_start),
+            "sacrifice_end": shown(calendar.sacrifice_end),
         }
         self.variables = {key: tk.StringVar(value=values[key]) for key, _ in self.FIELD_LABELS}
         self.official_var = tk.BooleanVar(value=calendar.official_holidays_enabled)
         card = ctk.CTkFrame(self, fg_color=SURFACE, corner_radius=18, border_width=1, border_color=BORDER)
         card.pack(fill="both", expand=True, padx=24, pady=24)
-        _dialog_title(card, "Akademik takvim", "Tarihler YYYY-AA-GG biçimindedir. Ramazan ve Kurban arifeleri ilk günden önceki gün saat 13.00'ten itibaren otomatik uygulanır.")
+        _dialog_title(card, "Akademik takvim", "Tarihleri gg.aa.yyyy biçiminde yazın (ör. 14.09.2026). Ramazan ve Kurban arifeleri ilk günden önceki gün saat 13.00'ten itibaren otomatik uygulanır.")
         form = ctk.CTkScrollableFrame(card, fg_color="transparent")
         form.pack(fill="both", expand=True, padx=20)
         form.grid_columnconfigure(1, weight=1)
@@ -1168,21 +1170,30 @@ class AcademicCalendarDialog(SafeModalToplevel):
             return None
         if not start_text or not end_text:
             raise ValueError(f"{name} için başlangıç ve bitiş birlikte girilmelidir.")
-        return DateRange(name, date.fromisoformat(start_text), date.fromisoformat(end_text))
+        return DateRange(name, AcademicCalendarDialog._parse(name, start_text), AcademicCalendarDialog._parse(name, end_text))
+
+    @staticmethod
+    def _parse(label: str, text: str) -> date:
+        try:
+            return _parse_turkish_date(text)
+        except ValueError:
+            raise ValueError(f"{label}: tarihi gg.aa.yyyy biçiminde yazın (ör. 14.09.2026).") from None
 
     def _save(self) -> None:
         try:
             value = lambda key: self.variables[key].get().strip()
+            labels = dict(self.FIELD_LABELS)
+            required = lambda key: self._parse(labels[key], value(key))
             breaks = tuple(item for item in (
                 self._optional_range("1. ara tatil", value("break1_start"), value("break1_end")),
                 self._optional_range("Yarıyıl tatili", value("semester_start"), value("semester_end")),
                 self._optional_range("2. ara tatil", value("break2_start"), value("break2_end")),
             ) if item is not None)
-            optional_date = lambda key: date.fromisoformat(value(key)) if value(key) else None
+            optional_date = lambda key: self._parse(labels[key], value(key)) if value(key) else None
             calendar = AcademicCalendar(
-                value("label"), date.fromisoformat(value("teaching_start")), date.fromisoformat(value("teaching_end")),
-                date.fromisoformat(value("term1_start")), date.fromisoformat(value("term1_end")),
-                date.fromisoformat(value("term2_start")), date.fromisoformat(value("term2_end")), breaks,
+                value("label"), required("teaching_start"), required("teaching_end"),
+                required("term1_start"), required("term1_end"),
+                required("term2_start"), required("term2_end"), breaks,
                 optional_date("ramadan_start"), optional_date("ramadan_end"),
                 optional_date("sacrifice_start"), optional_date("sacrifice_end"), self.official_var.get(),
             )

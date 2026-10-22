@@ -5,6 +5,7 @@
 - Sınav anonslarının konuşması yenilendi: hazırlık, başladı ve süre bitti anonsları artık ElevenLabs'in doğal Türkçe sesiyle ("Ayça"); çan melodisi ve metinler değişmedi. **Ses: ElevenLabs (elevenlabs.io)** — ücretsiz planla üretildi, ticari olmayan kullanım (SES-KAYNAKLARI.md, NOTICE, Hakkında sayfası). Ham kayıtlar `src/zilsesleri/sinav-anonslari/` altında; paketteki dosyalar `tools/build_exam_announcements.py --konusma-dizini` ile bunlardan yeniden üretilir.
 - 0.9.0'dan yükseltilen kurulumlarda veri dizinindeki sınav anonsları, 0.9.0 paketindeki kaydın birebir kopyasıysa açılışta yeni sesle değiştirilir; **Dosya seç** ile atanmış kendi kayıtlarınıza dokunulmaz.
 - **Görev çubuğu simgesi düzeltildi (Windows).** Görev çubuğunda ve başlık çubuğunda Okul Zili simgesi yerine CustomTkinter kütüphanesinin mavi kare simgesi görünüyordu: kütüphane, `iconbitmap` çağrılmamış pencereye 200 ms sonra kendi simgesini basıyor. Pencere simgesi artık pakete gömülü `.ico` dosyasından `iconbitmap` ile verilir; diyaloglar da aynı simgeyi alır.
+- **Akademik takvim penceresi** tarihleri artık diğer pencereler gibi `gg.aa.yyyy` biçiminde gösterir ve okur (önceden `YYYY-AA-GG` istiyordu; eski biçim de kabul edilir).
 - Belgelerdeki eski ekran adları güncel arayüzle eşitlendi (Sistem kontrolü, Ders zilleri, Yönetim menüsü); site için ekran görüntüsü aracı (`tools/site_ekranlari.py`).
 - Bu sürüm, 0.9.0'daki güncelleme denetiminin ilk gerçek sınamasıdır: kurulu 0.9.0 yeni sürümü kenar çubuğunda bildirir.
 
