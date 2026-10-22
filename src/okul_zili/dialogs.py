@@ -8,7 +8,7 @@ burada yaşar. Bu modül app.py'yi import etmez.
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 import tkinter as tk
 from tkinter import messagebox, ttk
 from typing import Callable
@@ -28,11 +28,15 @@ from .domain import (
     DaySchedule,
     EventSpec,
     EventType,
+    ExamPlan,
+    ExamSlot,
     ExceptionKind,
     SchoolConfig,
     SessionSchedule,
+    shift_time,
     sort_specs,
 )
+from .exams import exam_events
 from .sound_catalog import SOUND_BY_ID, SOUND_DEFINITIONS
 from .ui_theme import (
     ACCENT,
@@ -913,16 +917,17 @@ class SoundTestDialog(SafeModalToplevel):
 
 
 class SettingsDialog(SafeModalToplevel):
-    def __init__(self, parent: tk.Misc, config: SchoolConfig, devices: tuple[str, ...], on_save: Callable[[str, bool, str, str | None, int, int, bool], None]) -> None:
+    def __init__(self, parent: tk.Misc, config: SchoolConfig, devices: tuple[str, ...], on_save: Callable[[str, bool, str, str | None, int, int, bool, bool], None]) -> None:
         super().__init__(parent)
         self.title("Temel ayarlar")
-        self.geometry("690x730")
+        self.geometry("690x780")
         self.resizable(True, True)
         self.configure(fg_color=CANVAS)
         self.on_save = on_save
         self.school_var = tk.StringVar(value=config.school_name)
         self.preparation_var = tk.BooleanVar(value=config.preparation_enabled)
         self.time_check_var = tk.BooleanVar(value=config.time_check_enabled)
+        self.update_check_var = tk.BooleanVar(value=config.update_check_enabled)
         self.device_var = tk.StringVar(value=config.selected_device)
         self.announcement_device_var = tk.StringVar(
             value=config.announcement_device or "zil ile aynı"
@@ -965,9 +970,11 @@ class SettingsDialog(SafeModalToplevel):
             button_hover_color=ACCENT_HOVER,
         ).grid(row=0, column=1, sticky="ew", pady=12)
         ctk.CTkSwitch(form, text="Öğrenci ve öğretmen zili ayrı çalsın", variable=self.preparation_var, progress_color=TEAL, button_hover_color=TEAL_HOVER, text_color=INK).grid(row=5, column=0, columnspan=2, sticky="w", pady=(12, 4))
-        ctk.CTkSwitch(form, text="İnternet varsa sistem saatini zaman sunucusuyla karşılaştır (yalnız uyarır)", variable=self.time_check_var, progress_color=TEAL, button_hover_color=TEAL_HOVER, text_color=INK).grid(row=6, column=0, columnspan=2, sticky="w", pady=(4, 8))
+        ctk.CTkSwitch(form, text="İnternet varsa sistem saatini zaman sunucusuyla karşılaştır (yalnız uyarır)", variable=self.time_check_var, progress_color=TEAL, button_hover_color=TEAL_HOVER, text_color=INK).grid(row=6, column=0, columnspan=2, sticky="w", pady=(4, 4))
+        # Yalnız sürüm numarası okunur; okul/kişi bilgisi gönderilmez (update_check.py).
+        ctk.CTkSwitch(form, text="Haftada bir okulapp.org'dan yeni sürüm olup olmadığını denetle", variable=self.update_check_var, progress_color=TEAL, button_hover_color=TEAL_HOVER, text_color=INK).grid(row=7, column=0, columnspan=2, sticky="w", pady=(4, 8))
         info = ctk.CTkFrame(form, fg_color=SUCCESS_BG, corner_radius=10)
-        info.grid(row=7, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        info.grid(row=8, column=0, columnspan=2, sticky="ew", pady=(8, 0))
         ctk.CTkLabel(info, text="ⓘ  USB ses kartını adına göre seçerseniz, çıkarıldığında sistem kontrolü kritik uyarı verir.", text_color=SUCCESS, justify="left", wraplength=550).pack(fill="x", padx=14, pady=12)
         buttons = ctk.CTkFrame(card, fg_color="transparent")
         buttons.pack(fill="x", padx=26, pady=(18, 24))
@@ -998,6 +1005,7 @@ class SettingsDialog(SafeModalToplevel):
             grace,
             int(round(self.bell_volume_var.get())),
             self.time_check_var.get(),
+            self.update_check_var.get(),
         )
         self.destroy()
 
@@ -1237,6 +1245,246 @@ class CeremonyDialog(SafeModalToplevel):
         self.destroy()
 
 
+WEEKDAY_SHORT = ("Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz")
+
+
+class ExamDialog(SafeModalToplevel):
+    """Sınav haftası planı: günler, oturum saatleri ve anonslar.
+
+    Kaydedilen kural ``ExceptionKind.EXAM`` türündedir; olaylar planından
+    ``exam_events`` ile türetilir ve plan yeniden düzenleme için saklanır.
+    """
+
+    MAX_SLOTS = 8
+
+    def __init__(
+        self,
+        parent: tk.Misc,
+        rule: DateRule | None,
+        weekly_lookup: Callable[[int], tuple[EventSpec, ...]],
+        on_save: Callable[[DateRule], None],
+    ) -> None:
+        super().__init__(parent)
+        self.title("Sınavı düzenle" if rule else "Sınav planla")
+        apply_window_icon(self)
+        self.on_save = on_save
+        self.weekly_lookup = weekly_lookup
+        plan = rule.exam_plan if rule and rule.exam_plan else ExamPlan((ExamSlot(time(9, 0), 40),))
+        today = date.today()
+        self.name_var = tk.StringVar(value=rule.name if rule else "Sınav haftası")
+        self.start_var = tk.StringVar(value=(rule.start if rule else today).strftime("%d.%m.%Y"))
+        self.end_var = tk.StringVar(value=(rule.end if rule else today).strftime("%d.%m.%Y"))
+        self.lead_var = tk.StringVar(value=str(plan.lead_minutes))
+        self.keep_var = tk.BooleanVar(value=plan.keep_lesson_bells)
+        self.day_vars = [tk.BooleanVar(value=day in plan.weekdays) for day in range(7)]
+        self.slot_rows: list[tuple[ctk.CTkFrame, tk.StringVar, tk.StringVar]] = []
+        self._preview_after: str | None = None
+
+        card = _dialog_card(self, 760, 860)
+        self._card = card
+        _dialog_title(
+            card,
+            "Sınavı düzenle" if rule else "Sınav planla",
+            "Sınav saatlerinde ders zili yerine anons çalar: hazırlık (yerlerinizi alınız), "
+            "başladı (başarılar) ve süre bitti. Sesler “Sesler ve sirenler” sayfasından değiştirilebilir.",
+        )
+        buttons = ctk.CTkFrame(card, fg_color="transparent")
+        buttons.pack(side="bottom", fill="x", padx=26, pady=(10, 22))
+        _primary_button(buttons, "Kaydet" if rule else "Takvime ekle", self._save, 140).pack(side="right")
+        _secondary_button(buttons, "İptal", self.destroy).pack(side="right", padx=(0, 10))
+
+        # SafeModalToplevel boyutu istenen boydan hesaplar; kaydırılabilir gövde
+        # açık yükseklik istemezse pencere başlık ve düğmelere çöker. Küçük
+        # ekranda pencere kırpılır ve gövde kaydırılır.
+        body = ctk.CTkScrollableFrame(card, fg_color="transparent", height=560)
+        body.pack(fill="both", expand=True, padx=16)
+        form = ctk.CTkFrame(body, fg_color="transparent")
+        form.pack(fill="x", padx=10)
+        form.grid_columnconfigure(1, weight=1)
+        for row, (label, variable) in enumerate((
+            ("Ad", self.name_var),
+            ("İlk sınav günü (gg.aa.yyyy)", self.start_var),
+            ("Son sınav günü (gg.aa.yyyy)", self.end_var),
+        )):
+            ctk.CTkLabel(form, text=label, anchor="w", text_color=INK_SUBTLE, font=ctk.CTkFont("Segoe UI Variable Text", 12, "bold")).grid(row=row, column=0, sticky="w", padx=(0, 18), pady=6)
+            ctk.CTkEntry(form, textvariable=variable, height=38, corner_radius=10, fg_color=SURFACE, border_color=BORDER).grid(row=row, column=1, sticky="ew", pady=6)
+        # Yedi gün kutusu dar form sütununa sığmaz; kendi satırındadır.
+        days = ctk.CTkFrame(body, fg_color="transparent")
+        days.pack(fill="x", padx=10, pady=(6, 0))
+        ctk.CTkLabel(days, text="Sınav günleri", anchor="w", text_color=INK_SUBTLE, font=ctk.CTkFont("Segoe UI Variable Text", 12, "bold")).pack(side="left", padx=(0, 14))
+        for day, variable in enumerate(self.day_vars):
+            ctk.CTkCheckBox(days, text=WEEKDAY_SHORT[day], variable=variable, width=58, checkbox_width=18, checkbox_height=18, corner_radius=5, fg_color=TEAL, hover_color=TEAL_HOVER, text_color=INK, command=self._schedule_preview).pack(side="left", padx=(0, 2))
+
+        slots_card = ctk.CTkFrame(body, fg_color=SURFACE_ALT, corner_radius=12)
+        slots_card.pack(fill="x", padx=10, pady=(12, 0))
+        header = ctk.CTkFrame(slots_card, fg_color="transparent")
+        header.pack(fill="x", padx=14, pady=(12, 4))
+        ctk.CTkLabel(header, text="Sınav oturumları (her gün aynı saatlerde)", text_color=INK_SUBTLE, font=ctk.CTkFont("Segoe UI Variable Text", 12, "bold")).pack(side="left")
+        self.add_slot_button = _secondary_button(header, "Oturum ekle", self._add_slot_from_button, 120)
+        self.add_slot_button.pack(side="right")
+        self.slots_frame = ctk.CTkFrame(slots_card, fg_color="transparent")
+        self.slots_frame.pack(fill="x", padx=14, pady=(0, 12))
+        for slot in plan.ordered_slots:
+            self._add_slot(slot.start.strftime("%H:%M"), str(slot.minutes))
+
+        options = ctk.CTkFrame(body, fg_color="transparent")
+        options.pack(fill="x", padx=10, pady=(12, 0))
+        lead_row = ctk.CTkFrame(options, fg_color="transparent")
+        lead_row.pack(fill="x")
+        ctk.CTkLabel(lead_row, text="Hazırlık anonsu sınavdan kaç dakika önce? (0 = yok)", text_color=INK_SUBTLE, font=ctk.CTkFont("Segoe UI Variable Text", 12, "bold")).pack(side="left")
+        ctk.CTkEntry(lead_row, textvariable=self.lead_var, width=64, height=36, corner_radius=9, fg_color=SURFACE, border_color=BORDER).pack(side="left", padx=10)
+        ctk.CTkSwitch(options, text="Sınav saatleri dışında ders zilleri çalmaya devam etsin", variable=self.keep_var, progress_color=TEAL, button_hover_color=TEAL_HOVER, text_color=INK, command=self._schedule_preview).pack(anchor="w", pady=(10, 0))
+
+        ctk.CTkLabel(body, text="Önizleme", anchor="w", text_color=INK_SUBTLE, font=ctk.CTkFont("Segoe UI Variable Text", 12, "bold")).pack(fill="x", padx=10, pady=(14, 4))
+        self.preview = ctk.CTkTextbox(body, height=190, wrap="word", fg_color=SURFACE_ALT, text_color=INK_SUBTLE, border_width=1, border_color=BORDER, corner_radius=10, font=ctk.CTkFont("Segoe UI Variable Text", 12))
+        self.preview.pack(fill="x", padx=10, pady=(0, 8))
+        for variable in (self.start_var, self.end_var, self.lead_var):
+            variable.trace_add("write", lambda *_: self._schedule_preview())
+        self._render_preview()
+        # CTkScrollableFrame kurulurken update_idletasks çağırır; SafeModalToplevel
+        # etkinleştirmesi o anda, gövde kurulmadan çalışıp pencereyi başlık ve
+        # düğme boyuna sabitler. Kurulum bitince pencere içeriğe göre büyütülür.
+        self.after_idle(self._fit_to_content)
+
+    def _fit_to_content(self) -> None:
+        if not self.winfo_exists():
+            return
+        self.update_idletasks()
+        screen_width, screen_height = self.winfo_screenwidth(), self.winfo_screenheight()
+        # İstenen genişlik CTk ölçeğiyle büyütülür; aksi hâlde yedi gün kutusu kırpılır.
+        preferred = int(720 * ctk.ScalingTracker.get_widget_scaling(self._card))
+        width = min(max(self.winfo_reqwidth(), self.winfo_width(), preferred), max(320, screen_width - 16))
+        height = min(max(self.winfo_reqheight(), self.winfo_height()), max(320, screen_height - 96))
+        x = max(0, min(self.winfo_x(), screen_width - width))
+        y = max(0, min(self.winfo_y(), screen_height - 96 - height))
+        self.geometry(f"{width}x{height}+{x}+{y}")
+
+    def _add_slot_from_button(self) -> None:
+        last = self.slot_rows[-1] if self.slot_rows else None
+        suggestion = "09:00"
+        minutes = "40"
+        if last is not None:
+            try:
+                previous_start = time.fromisoformat(last[1].get().strip())
+                minutes = last[2].get().strip() or "40"
+                following = shift_time(previous_start, int(minutes) + 30)
+                suggestion = following.strftime("%H:%M") if following else suggestion
+            except ValueError:
+                pass
+        self._add_slot(suggestion, minutes)
+        self._schedule_preview()
+
+    def _add_slot(self, start: str, minutes: str) -> None:
+        if len(self.slot_rows) >= self.MAX_SLOTS:
+            messagebox.showinfo("Sınır", f"Bir günde en çok {self.MAX_SLOTS} sınav oturumu tanımlanabilir.", parent=self)
+            return
+        row = ctk.CTkFrame(self.slots_frame, fg_color="transparent")
+        row.pack(fill="x", pady=3)
+        start_var = tk.StringVar(value=start)
+        minutes_var = tk.StringVar(value=minutes)
+        entry = (row, start_var, minutes_var)
+        self.slot_rows.append(entry)
+        ctk.CTkLabel(row, text="Başlangıç (SS:DD)", text_color=MUTED, font=ctk.CTkFont("Segoe UI Variable Text", 11, "bold")).pack(side="left")
+        ctk.CTkEntry(row, textvariable=start_var, width=80, height=34, corner_radius=8, fg_color=SURFACE, border_color=BORDER).pack(side="left", padx=(6, 14))
+        ctk.CTkLabel(row, text="Süre (dk)", text_color=MUTED, font=ctk.CTkFont("Segoe UI Variable Text", 11, "bold")).pack(side="left")
+        ctk.CTkEntry(row, textvariable=minutes_var, width=64, height=34, corner_radius=8, fg_color=SURFACE, border_color=BORDER).pack(side="left", padx=(6, 14))
+        _secondary_button(row, "Kaldır", lambda: self._remove_slot(entry), 80).pack(side="right")
+        for variable in (start_var, minutes_var):
+            variable.trace_add("write", lambda *_: self._schedule_preview())
+
+    def _remove_slot(self, entry: tuple[ctk.CTkFrame, tk.StringVar, tk.StringVar]) -> None:
+        if len(self.slot_rows) <= 1:
+            messagebox.showinfo("En az bir oturum", "Sınav planında en az bir oturum bulunmalıdır.", parent=self)
+            return
+        self.slot_rows.remove(entry)
+        entry[0].destroy()
+        self._schedule_preview()
+
+    def _read_plan(self) -> tuple[str, date, date, ExamPlan]:
+        name = self.name_var.get().strip()
+        if not name:
+            raise ValueError("Sınav planına bir ad verin.")
+        try:
+            start = _parse_turkish_date(self.start_var.get())
+            end = _parse_turkish_date(self.end_var.get())
+        except ValueError:
+            raise ValueError("Tarihleri gg.aa.yyyy biçiminde yazın (ör. 02.11.2026).") from None
+        if end < start:
+            raise ValueError("Son sınav günü ilk sınav gününden önce olamaz.")
+        slots: list[ExamSlot] = []
+        for index, (_frame, start_var, minutes_var) in enumerate(self.slot_rows, start=1):
+            try:
+                slot_start = time.fromisoformat(start_var.get().strip())
+            except ValueError:
+                raise ValueError(f"{index}. oturumun başlangıç saatini SS:DD biçiminde yazın.") from None
+            try:
+                minutes = int(minutes_var.get().strip())
+            except ValueError:
+                raise ValueError(f"{index}. oturumun süresini dakika olarak yazın.") from None
+            slots.append(ExamSlot(slot_start.replace(second=0, microsecond=0), minutes))
+        try:
+            lead = int(self.lead_var.get().strip() or "0")
+        except ValueError:
+            raise ValueError("Hazırlık anonsu süresini dakika olarak yazın.") from None
+        plan = ExamPlan(
+            slots=tuple(slots),
+            weekdays=tuple(day for day, variable in enumerate(self.day_vars) if variable.get()),
+            lead_minutes=lead,
+            keep_lesson_bells=self.keep_var.get(),
+        )
+        errors = plan.validate()
+        if errors:
+            raise ValueError("\n".join(errors))
+        return name, start, end, plan
+
+    def _schedule_preview(self) -> None:
+        if self._preview_after is not None:
+            self.after_cancel(self._preview_after)
+        self._preview_after = self.after(250, self._render_preview)
+
+    def _render_preview(self) -> None:
+        self._preview_after = None
+        try:
+            _name, start, end, plan = self._read_plan()
+            lines = ["Çalacak anonslar (her sınav günü):"]
+            lines.extend(f"  {event.at.strftime('%H:%M')}  {event.label}" for event in exam_events(plan))
+            first_day = next(
+                (start + timedelta(days=offset) for offset in range((end - start).days + 1) if (start + timedelta(days=offset)).weekday() in plan.weekdays),
+                None,
+            )
+            if first_day is None:
+                lines.append("")
+                lines.append("⚠ Seçili tarih aralığında seçili günlerden hiçbiri yok; sınav hiç çalmaz.")
+            else:
+                windows = plan.windows()
+                base = self.weekly_lookup(first_day.weekday())
+                silenced = [
+                    event
+                    for event in base
+                    if not plan.keep_lesson_bells or any(opening <= event.at <= closing for opening, closing in windows)
+                ]
+                lines.append("")
+                lines.append(f"{first_day.strftime('%d.%m.%Y')} {WEEKDAYS[first_day.weekday()]} günü susacak ziller (haftalık programa göre):")
+                if silenced:
+                    lines.extend(f"  {event.at.strftime('%H:%M')}  {event.label}" for event in silenced)
+                else:
+                    lines.append("  Yok — sınav saatlerinde programda zil bulunmuyor.")
+        except ValueError as exc:
+            lines = [f"⚠ {exc}"]
+        self.preview.configure(state="normal")
+        self.preview.delete("1.0", "end")
+        self.preview.insert("1.0", "\n".join(lines))
+        self.preview.configure(state="disabled")
+
+    def _save(self) -> None:
+        try:
+            name, start, end, plan = self._read_plan()
+            rule = DateRule(name, ExceptionKind.EXAM, start, end, exam_events(plan), exam_plan=plan)
+        except ValueError as exc:
+            messagebox.showerror("Geçersiz sınav bilgisi", str(exc), parent=self)
+            return
+        self.on_save(rule)
+        self.destroy()
 
 
 class ScheduleResetDialog(SafeModalToplevel):

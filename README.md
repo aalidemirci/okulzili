@@ -22,6 +22,7 @@ Okul Zili; Windows ve Linux üzerinde çevrimdışı çalışan, Türkçe masaü
 - Ders satırı tablosundan öğrenci, öğretmen ve bitiş saatlerini gün bazında düzeltme
 - Tarih aralığı olarak tatil ve hafta sonuna telafi günü tanımlama
 - Tören, sınav, kısaltılmış gün ve tarihe özel olay listeleri; aynı güne birden çok tören, tören diğer kuralların üzerine biner
+- Sınav haftası planı: sınav saatlerinde ders zili yerine çanla başlayan hazırlık, başlangıç ve süre bitti anonsları; diğer ders zilleri isteğe bağlı sürer
 - Sabah/öğleden sonra oturumları ve kayıtlı anons olayları
 - Zil ve anonslar için aynı ya da ayrı ses çıkışı seçimi
 - Her çalmadan önce cihaz ve WAV dosyası kontrolü
@@ -35,6 +36,8 @@ Okul Zili; Windows ve Linux üzerinde çevrimdışı çalışan, Türkçe masaü
 - PIN korumalı yönetici, nöbetçi ve salt görüntüleme profilleri; tek tıkla oturum kilitleme
 - Karmayla doğrulanan, PIN ve günlük içermeyen paylaşılabilir yedekler
 - Windows 10/11 ile Pardus 23 ve Ubuntu 22.04+ paketleme tanımları
+- Oturum açılışında otomatik başlatma; görev eksik ya da bozuksa Sistem kontrolü uyarır ve tek tıkla onarır
+- Haftalık yeni sürüm bildirimi (yalnız okulapp.org'dan sürüm numarası okunur, kapatılabilir)
 - Bulut, hesap, telemetri ve çevrimiçi etkinleştirme olmadan çalışma
 
 ## Sistem gereksinimleri

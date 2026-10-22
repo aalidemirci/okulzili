@@ -59,6 +59,9 @@ class PermissionGuardTests(unittest.TestCase):
             "_regenerate_schedule": "yapilandir",
             "_reset_schedule": "yapilandir",
             "_delete_rule": "yapilandir",
+            "_add_exam": "yapilandir",
+            "_repair_autostart": "yapilandir",
+            "_load_calendar_template": "yapilandir",
             "_request_exit": "kapat",
         }
         for method_name, action in expectations.items():

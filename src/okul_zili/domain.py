@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from enum import Enum, IntEnum
 import hashlib
 from pathlib import PurePosixPath
@@ -415,6 +415,101 @@ class BellEvent:
         )
 
 
+def shift_time(moment: time, minutes: int) -> time | None:
+    """Saati dakika kadar kaydırır; gün dışına taşarsa None döndürür."""
+    shifted = datetime.combine(date(2000, 1, 2), moment) + timedelta(minutes=minutes)
+    return shifted.time() if shifted.date() == date(2000, 1, 2) else None
+
+
+@dataclass(frozen=True, slots=True)
+class ExamSlot:
+    start: time
+    minutes: int = 40
+
+    @property
+    def end(self) -> time | None:
+        return shift_time(self.start, self.minutes)
+
+    def to_dict(self) -> dict[str, object]:
+        return {"start": self.start.strftime("%H:%M"), "minutes": self.minutes}
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, object]) -> "ExamSlot":
+        return cls(time.fromisoformat(str(raw["start"])), int(raw.get("minutes", 40)))  # type: ignore[arg-type]
+
+
+@dataclass(frozen=True, slots=True)
+class ExamPlan:
+    """Sınav günlerinin oturumları; anons olayları bundan türetilir (exams.py).
+
+    ``DateRule.events`` türetilmiş olayları, ``DateRule.exam_plan`` ise yeniden
+    düzenleme için kaynağı tutar. Sınav penceresi hazırlık anonsundan süre
+    bitimine kadardır; ``keep_lesson_bells`` açıkken yalnız pencere içindeki
+    ders zilleri susar, kapalıyken günün tüm haftalık zilleri susar.
+    """
+
+    slots: tuple[ExamSlot, ...]
+    weekdays: tuple[int, ...] = (0, 1, 2, 3, 4)
+    lead_minutes: int = 5
+    keep_lesson_bells: bool = True
+
+    @property
+    def ordered_slots(self) -> tuple[ExamSlot, ...]:
+        return tuple(sorted(self.slots, key=lambda slot: slot.start))
+
+    def windows(self) -> tuple[tuple[time, time], ...]:
+        result: list[tuple[time, time]] = []
+        for slot in self.ordered_slots:
+            opening = shift_time(slot.start, -self.lead_minutes)
+            if opening is not None and slot.end is not None:
+                result.append((opening, slot.end))
+        return tuple(result)
+
+    def validate(self, prefix: str = "") -> list[str]:
+        errors: list[str] = []
+        if not self.slots:
+            errors.append(f"{prefix}en az bir sınav oturumu girin.")
+        if len(self.slots) > 8:
+            errors.append(f"{prefix}bir günde en çok 8 sınav oturumu tanımlanabilir.")
+        if not self.weekdays or any(day not in range(7) for day in self.weekdays):
+            errors.append(f"{prefix}sınavın yapılacağı en az bir hafta günü seçin.")
+        if not 0 <= self.lead_minutes <= 30:
+            errors.append(f"{prefix}hazırlık anonsu sınavdan 0–30 dakika önce olmalıdır.")
+        previous_end: time | None = None
+        for index, slot in enumerate(self.ordered_slots, start=1):
+            if not 5 <= slot.minutes <= 300:
+                errors.append(f"{prefix}{index}. sınavın süresi 5–300 dakika olmalıdır.")
+                continue
+            opening = shift_time(slot.start, -self.lead_minutes)
+            if opening is None or slot.end is None:
+                errors.append(f"{prefix}{index}. sınav aynı gün içinde başlayıp bitmelidir.")
+                continue
+            if previous_end is not None and opening <= previous_end:
+                errors.append(
+                    f"{prefix}{index}. sınavın hazırlık anonsu ({opening.strftime('%H:%M')}) "
+                    f"önceki sınavın bitişinden ({previous_end.strftime('%H:%M')}) sonra olmalıdır."
+                )
+            previous_end = slot.end
+        return errors
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "slots": [slot.to_dict() for slot in self.ordered_slots],
+            "weekdays": sorted(self.weekdays),
+            "lead_minutes": self.lead_minutes,
+            "keep_lesson_bells": self.keep_lesson_bells,
+        }
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, object]) -> "ExamPlan":
+        return cls(
+            slots=tuple(ExamSlot.from_dict(item) for item in raw.get("slots", [])),  # type: ignore[union-attr]
+            weekdays=tuple(int(day) for day in raw.get("weekdays", [0, 1, 2, 3, 4])),  # type: ignore[union-attr]
+            lead_minutes=int(raw.get("lead_minutes", 5)),  # type: ignore[arg-type]
+            keep_lesson_bells=bool(raw.get("keep_lesson_bells", True)),
+        )
+
+
 @dataclass(frozen=True, slots=True)
 class DateRule:
     name: str
@@ -424,9 +519,16 @@ class DateRule:
     events: tuple[EventSpec, ...] = ()
     target_weekday: int | None = None
     enabled: bool = True
+    # Yalnız "Sınav planla" ile oluşturulan sınav kurallarında dolu. Planlı
+    # sınav temel programı değiştirmez, üzerine bindirilir (calendar_engine).
+    exam_plan: ExamPlan | None = None
 
     def matches(self, day: date) -> bool:
         return self.enabled and self.start <= day <= self.end
+
+    @property
+    def is_planned_exam(self) -> bool:
+        return self.kind is ExceptionKind.EXAM and self.exam_plan is not None
 
     @property
     def priority(self) -> RulePriority:
@@ -441,7 +543,7 @@ class DateRule:
         return RulePriority.HOLIDAY
 
     def to_dict(self) -> dict[str, object]:
-        return {
+        data: dict[str, object] = {
             "name": self.name,
             "kind": self.kind.value,
             "start": self.start.isoformat(),
@@ -450,9 +552,13 @@ class DateRule:
             "target_weekday": self.target_weekday,
             "enabled": self.enabled,
         }
+        if self.exam_plan is not None:
+            data["exam_plan"] = self.exam_plan.to_dict()
+        return data
 
     @classmethod
     def from_dict(cls, raw: dict[str, object]) -> "DateRule":
+        plan_raw = raw.get("exam_plan")
         return cls(
             name=str(raw["name"]),
             kind=ExceptionKind(str(raw["kind"])),
@@ -465,6 +571,7 @@ class DateRule:
                 else None
             ),
             enabled=bool(raw.get("enabled", True)),
+            exam_plan=ExamPlan.from_dict(plan_raw) if isinstance(plan_raw, dict) else None,
         )
 
 
@@ -489,6 +596,8 @@ class SchoolConfig:
     recess_music_track: str = "muzik_bach_prelud"
     bell_volume: int = 100
     time_check_enabled: bool = False
+    # Haftalık yeni sürüm denetimi (update_check.py); varsayılan açık.
+    update_check_enabled: bool = True
 
     def validate(self) -> list[str]:
         errors: list[str] = []
@@ -545,6 +654,10 @@ class SchoolConfig:
                 errors.append(f"{rule.name}: bitiş tarihi başlangıçtan önce.")
             if rule.kind is ExceptionKind.MAKEUP and rule.target_weekday not in range(7):
                 errors.append(f"{rule.name}: telafi günü için hedef hafta günü eksik.")
+            if rule.exam_plan is not None:
+                if rule.kind is not ExceptionKind.EXAM:
+                    errors.append(f"{rule.name}: sınav planı yalnız sınav kuralında bulunabilir.")
+                errors.extend(rule.exam_plan.validate(f"{rule.name}: "))
         return errors
 
     def all_sound_ids(self) -> set[str]:
@@ -605,6 +718,7 @@ class SchoolConfig:
             "recess_music_track": self.recess_music_track,
             "bell_volume": self.bell_volume,
             "time_check_enabled": self.time_check_enabled,
+            "update_check_enabled": self.update_check_enabled,
         }
 
     @classmethod
@@ -651,6 +765,7 @@ class SchoolConfig:
             recess_music_track=str(raw.get("recess_music_track", "muzik_bach_prelud")),
             bell_volume=int(raw.get("bell_volume", 100)),
             time_check_enabled=bool(raw.get("time_check_enabled", False)),
+            update_check_enabled=bool(raw.get("update_check_enabled", True)),
         )
 
 

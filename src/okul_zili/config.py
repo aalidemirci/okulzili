@@ -7,7 +7,7 @@ from pathlib import Path
 import shutil
 from typing import Any
 
-from .defaults import default_config
+from .defaults import default_config, with_default_sounds
 from .domain import CURRENT_SCHEMA_VERSION, SchoolConfig
 
 
@@ -141,7 +141,7 @@ class ConfigRepository:
         return raw
 
     def _read_validated(self, path: Path) -> SchoolConfig:
-        config = SchoolConfig.from_dict(ensure_current_schema(self._decode(path)))
+        config = with_default_sounds(SchoolConfig.from_dict(ensure_current_schema(self._decode(path))))
         errors = config.validate()
         if errors:
             raise ConfigError("; ".join(errors))

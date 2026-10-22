@@ -4,7 +4,7 @@ Bu kılavuz teknik olmayan okul personeli için hazırlanmıştır. Kuruluma ba�
 
 ## Windows 10 ve Windows 11
 
-1. Size verilen `OkulZili-Kurulum-0.8.0.exe` dosyasını USB bellekten bilgisayara kopyalayın. Kurulumu, zil bilgisayarında **günlük kullanılan hesapta** oturum açmışken başlatın; UAC penceresine başka bir yönetici hesabının bilgileri girilse de otomatik başlatma görevi kurulumu başlatan hesaba yazılır.
+1. Size verilen `OkulZili-Kurulum-0.9.0.exe` dosyasını USB bellekten bilgisayara kopyalayın. Kurulumu, zil bilgisayarında **günlük kullanılan hesapta** oturum açmışken başlatın; UAC penceresine başka bir yönetici hesabının bilgileri girilse de otomatik başlatma görevi kurulumu başlatan hesaba yazılır.
 2. Dosyaya çift tıklayın. Windows koruma uyarısı gösterirse dosyanın okul yönetiminin teslim ettiği kopya olduğunu ve yanında verilen `SHA256SUMS.txt` değeriyle eşleştiğini doğrulayın. Sonra **Ek bilgi → Yine de çalıştır** yolunu kullanın. Paket kod imzalı değildir; bu nedenle SmartScreen uyarısı beklenir.
 3. Kurulum dilinde Türkçeyi seçin ve **İleri** düğmelerini izleyin.
 4. “Oturum açıldığında Okul Zili'ni başlat” görevinin seçili olduğundan emin olun.
@@ -22,7 +22,9 @@ Bu kılavuz teknik olmayan okul personeli için hazırlanmıştır. Kuruluma ba�
 
 > Ekran görüntüsü yer tutucusu: Ön kontrol ve ses testi
 
-Kurulum, Görev Zamanlayıcı'da kullanıcı oturum açtığında çalışan bir görev oluşturur. Pil/AC kısıtı kapalıdır; dizüstü bilgisayar bataryada olsa da uygulama başlar.
+Kurulum, Görev Zamanlayıcı'da kurulumu başlatan kullanıcı oturum açtığında çalışan bir görev oluşturur. Pil/AC kısıtı kapalıdır; dizüstü bilgisayar bataryada olsa da uygulama başlar. Görev oluşturulamazsa kurucu uyarı gösterir; uygulamadaki **Sistem kontrolü → Otomatik başlatmayı onar** düğmesi görevi sonradan da yazabilir. 0.8.0 kurulu bilgisayarda bu görev hiç oluşmamış olabilir; 0.9.0'ın üzerine kurulması sorunu giderir.
+
+Uygulama internet varsa haftada en çok bir kez `okulapp.org`'dan yalnız en son sürüm numarasını okur ve yeni sürümü bildirir; okul ya da kişi bilgisi gönderilmez. Bu denetim **Yönetim → Okul ve cihaz ayarları** bölümünden kapatılabilir.
 
 ### Windows'ta kaldırma
 
@@ -32,11 +34,11 @@ Kaldırıcı, yalnızca kendi kurulum dizinindeki çalışan `OkulZili.exe` sür
 
 ## Pardus 23 / Ubuntu 22.04 ve üzeri
 
-1. Size verilen `okul-zili_0.8.0_all.deb` dosyasını bilgisayara kopyalayın.
+1. Size verilen `okul-zili_0.9.0_all.deb` dosyasını bilgisayara kopyalayın.
 2. Dosya yöneticisinden paket yükleyiciyle açın veya terminalde aşağıdaki komutu çalıştırın:
 
    ```bash
-   sudo apt install ./okul-zili_0.8.0_all.deb
+   sudo apt install ./okul-zili_0.9.0_all.deb
    ```
 
 3. Uygulama menüsünde **Okul Zili** öğesini açın.
@@ -72,13 +74,13 @@ Dağıtıma özgü eksiksiz bağımlılık belleği, internete bağlı ve hedefl
 
 ```bash
 sudo ./tools/prepare-linux-offline-bundle.sh \
-  ./dist/okul-zili_0.8.0_all.deb \
+  ./dist/okul-zili_0.9.0_all.deb \
   ./dist/vendor-linux
 ```
 
 Üretilen dizindeki tüm `.deb` dosyaları ve `SHA256SUMS.txt` USB belleğe birlikte kopyalanır. Araç kurulu paketleri yeniden indirmek için `--reinstall` kullanır; yine de ağsız kabul testi mutlaka ayrı temiz makinede yapılmalıdır.
 
-Windows için yalnız kurulum programı (`OkulZili-Kurulum-0.8.0.exe`) ve taşınabilir zip dağıtılır; ikisi de Python çalışma zamanını, arayüz kütüphanelerini ve saat dilimi verisini içinde taşır, ek kurulum gerektirmez. Kaynak koddan çalıştırmak isteyen teknik personel için gereken paketler `pyproject.toml` içinde listelenir.
+Windows için yalnız kurulum programı (`OkulZili-Kurulum-0.9.0.exe`) ve taşınabilir zip dağıtılır; ikisi de Python çalışma zamanını, arayüz kütüphanelerini ve saat dilimi verisini içinde taşır, ek kurulum gerektirmez. Kaynak koddan çalıştırmak isteyen teknik personel için gereken paketler `pyproject.toml` içinde listelenir.
 
 ### Güncelleme
 

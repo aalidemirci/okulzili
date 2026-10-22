@@ -66,9 +66,12 @@ Bu işlem zil programını, sesleri ve günlükleri etkilemez. PIN'in bir güven
 
 ## Kurulumdan sonra otomatik başlamadı (Windows)
 
-1. Görev Zamanlayıcı'da "Okul Zili" görevini açın ve **Genel** sekmesindeki kullanıcı hesabına bakın. Kurulum başka bir hesapta yapıldıysa görev o hesaba kayıtlıdır.
-2. Zil bilgisayarında günlük kullanılan hesapta oturum açıp kurucuyu yeniden çalıştırın; kurucu görevi kurulumu başlatan hesaba yazar.
-3. Kurulum dizinindeki `Araclar\verify-windows-install.ps1` betiği yönetici PowerShell'de çalıştırıldığında görev tetikleyicisini ve öz-testleri doğrular.
+0.8.0 kurucusu bu görevi oluşturamıyordu (yetkisiz bağlamda "Erişim engellendi" hatası sessizce yutuluyordu); 0.9.0'ı kurmak görevi oluşturur.
+
+1. Okul Zili'ni açın, **Sistem kontrolü** sayfasındaki **Otomatik başlatma** satırına bakın. Uyarı varsa yönetici profiliyle **Otomatik başlatmayı onar** düğmesine basın; görev, o an oturum açmış hesap için yönetici yetkisi istemeden yeniden yazılır.
+2. Onarım başarısız olursa zil bilgisayarında günlük kullanılan hesapta oturum açıp kurucuyu yeniden çalıştırın; kurucu görevi kurulumu başlatan hesaba yazar ve yazamazsa uyarı gösterir.
+3. Görev Zamanlayıcı'da "Okul Zili" görevini açıp **Tetikleyiciler** sekmesinde "Oturum açıldığında" satırındaki kullanıcı adını denetleyebilirsiniz.
+4. Kurulum dizinindeki `Araclar\verify-windows-install.ps1` betiği yönetici PowerShell'de çalıştırıldığında görev tetikleyicisini ve öz-testleri doğrular.
 
 ## Tatilde zil çaldı
 

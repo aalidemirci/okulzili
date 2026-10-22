@@ -1,5 +1,5 @@
 #define MyAppName "Okul Zili"
-#define MyAppVersion "0.8.0"
+#define MyAppVersion "0.9.0"
 #define MyAppExeName "OkulZili.exe"
 
 [Setup]
@@ -32,7 +32,6 @@ Name: "desktopicon"; Description: "Masaüstü kısayolu oluştur"; Flags: unchec
 
 [Files]
 Source: "..\..\dist\OkulZili-Windows-x64\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "install-task.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "uninstall-stop.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\..\README.md"; DestDir: "{app}\Belgeler"; Flags: ignoreversion
 Source: "..\..\KURULUM.md"; DestDir: "{app}\Belgeler"; Flags: ignoreversion
@@ -54,10 +53,13 @@ Source: "..\..\THIRD_PARTY_LICENSES\*"; DestDir: "{app}\Belgeler\Lisanslar"; Fla
 Name: "{group}\Okul Zili"; Filename: "{app}\{#MyAppExeName}"
 Name: "{autodesktop}\Okul Zili"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
+[InstallDelete]
+; 0.8.0'ın görev betiği artık kullanılmıyor; görevi uygulama kendisi yazar.
+Type: files; Name: "{app}\install-task.ps1"
+
 [Run]
-; runasoriginaluser: görev, UAC'ye kimlik giren yönetici hesabına değil
-; kurulumu başlatan (günlük kullanılan) hesaba yazılır (D13).
-Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\install-task.ps1"""; Flags: runhidden waituntilterminated runasoriginaluser; Tasks: autostart
+; Otomatik başlatma görevi aşağıdaki CurStepChanged içinde yazılır: sonucu
+; denetlenmeli ve başarısızlık kullanıcıya söylenmelidir (0.8.0'da sessizdi).
 Filename: "{app}\{#MyAppExeName}"; Description: "Okul Zili'ni çalıştır ve ses testini yap"; Flags: nowait postinstall skipifsilent
 
 [Code]
@@ -75,6 +77,26 @@ begin
     Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
       '-NoProfile -ExecutionPolicy Bypass -File "' + StopScript + '"',
       '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+end;
+
+{ Görevi uygulamanın kendisi yazar (autostart.py); kurucu ile uygulama içi
+  "Otomatik başlatmayı onar" düğmesi aynı kodu kullanır. ExecAsOriginalUser:
+  görev, UAC'ye kimlik giren yönetici hesabına değil kurulumu başlatan
+  (günlük kullanılan) hesaba yazılır (D13). Tetikleyici bu hesaba bağlı
+  olduğundan yönetici yetkisi gerekmez. }
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  ResultCode: Integer;
+begin
+  if (CurStep = ssPostInstall) and WizardIsTaskSelected('autostart') then
+  begin
+    if not ExecAsOriginalUser(ExpandConstant('{app}\{#MyAppExeName}'), '--otomatik-baslatmayi-kur',
+      '', SW_HIDE, ewWaitUntilTerminated, ResultCode) or (ResultCode <> 0) then
+      SuppressibleMsgBox('Oturum açılışında otomatik başlatma görevi oluşturulamadı (kod ' +
+        IntToStr(ResultCode) + ').' + #13#10#13#10 +
+        'Kurulum tamamlandı. Okul Zili''ni açıp Sistem kontrolü sayfasındaki ' +
+        '"Otomatik başlatmayı onar" düğmesini kullanın.', mbError, MB_OK, IDOK);
+  end;
 end;
 
 [UninstallRun]

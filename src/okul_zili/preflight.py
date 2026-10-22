@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from .audio import AudioBackend, validate_wave
 from .calendar_engine import CalendarEngine
 from .domain import EventType, SchoolConfig
+from .sound_catalog import SOUND_BY_ID
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,6 +81,7 @@ class PreflightService:
                     else "Seçili anons ses cihazı yok veya açılamıyor.",
                 )
             )
+        results.append(self._academic_calendar_check(current_day))
         today_resolution = self.engine.resolve(current_day)
         decision = f"Kaynak: {today_resolution.source}; {len(today_resolution.events)} olay."
         if today_resolution.suppressed_rules:
@@ -122,12 +124,15 @@ class PreflightService:
             )
         )
         for sound_id in sorted(self.config.all_sound_ids()):
+            # Personel iç kimliği (ogrenci) değil, Sesler sayfasındaki adı görür.
+            definition = SOUND_BY_ID.get(sound_id)
+            title = f"Ses: {definition.label if definition else sound_id}"
             path_text = self.config.sounds.get(sound_id)
             if not path_text:
-                results.append(CheckResult(f"sound:{sound_id}", "kritik", f"Ses: {sound_id}", "Dosya atanmamış."))
+                results.append(CheckResult(f"sound:{sound_id}", "kritik", title, "Dosya atanmamış."))
                 continue
             valid, detail = validate_wave(self.base_dir / path_text)
-            results.append(CheckResult(f"sound:{sound_id}", "iyi" if valid else "kritik", f"Ses: {sound_id}", detail))
+            results.append(CheckResult(f"sound:{sound_id}", "iyi" if valid else "kritik", title, detail))
 
         tomorrow = self.engine.resolve(current_day + timedelta(days=1))
         ceremony_events = [event for event in tomorrow.events if event.event_type is EventType.CEREMONY]
@@ -175,3 +180,28 @@ class PreflightService:
             )
         )
         return results
+
+    def _academic_calendar_check(self, today: date) -> CheckResult:
+        """Takvim yoksa tatillerde de zil çalar; süresi geçmişse yeni ders
+        yılında hiç zil çalmaz. İkisi de sessiz bir hatadır, uyarı verilir."""
+        calendar = self.config.academic_calendar
+        if calendar is None:
+            return CheckResult(
+                "academic_calendar",
+                "uyarı",
+                "Akademik takvim",
+                "Akademik takvim tanımlı değil: resmî tatillerde ve ara tatillerde de ders zilleri çalar. "
+                "Akademik takvim sayfasından MEB şablonunu yükleyin.",
+            )
+        span = f"{calendar.teaching_start.strftime('%d.%m.%Y')} – {calendar.teaching_end.strftime('%d.%m.%Y')}"
+        if today > calendar.teaching_end:
+            return CheckResult(
+                "academic_calendar",
+                "uyarı",
+                "Akademik takvim",
+                f"{calendar.label} ders yılı bitti ({span}). Yeni ders yılının takvimini girin; "
+                "girilmezse yeni dönemde ders zilleri çalmaz.",
+            )
+        if today < calendar.teaching_start:
+            return CheckResult("academic_calendar", "iyi", "Akademik takvim", f"{calendar.label} ders yılı {calendar.teaching_start.strftime('%d.%m.%Y')} tarihinde başlayacak.")
+        return CheckResult("academic_calendar", "iyi", "Akademik takvim", f"{calendar.label} ders yılı: {span}.")

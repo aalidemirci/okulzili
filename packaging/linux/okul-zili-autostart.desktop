@@ -2,7 +2,9 @@
 Type=Application
 Name=Okul Zili Otomatik Başlatma
 Comment=Okul Zili kullanıcı hizmetini başlatır
-Exec=systemctl --user start okul-zili.service
+# systemd kullanıcı yöneticisi grafik oturumun ortamını her masaüstünde
+# devralmaz; ekran değişkenleri aktarılmazsa Tk penceresi açılamaz ve hizmet
+# döngüye girer. Aktarım başarısız olsa da başlatma denenir.
+Exec=sh -c 'systemctl --user import-environment DISPLAY XAUTHORITY WAYLAND_DISPLAY XDG_CURRENT_DESKTOP 2>/dev/null; exec systemctl --user start okul-zili.service'
 Terminal=false
 X-GNOME-Autostart-enabled=true
-

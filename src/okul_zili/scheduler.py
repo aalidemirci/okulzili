@@ -98,6 +98,10 @@ class RunState:
         self.recovery_level = "bilgi"
         self.save_error: str | None = None
         self._save_error_reported = False
+        # Yedi günlük budama zamanlayıcının saatine göre yapılır; BellScheduler
+        # kendi saatini buraya bağlar. Duvar saati kullanılsaydı sahte saatli
+        # testlerde (ve saat sıçramasında) yeni tamamlanan kayıtlar budanırdı.
+        self.now: Callable[[], datetime] = datetime.now
         if path is None:
             return
         if path.exists():
@@ -172,7 +176,7 @@ class RunState:
 
     def mark(self, event_id: str, scheduled_at: datetime | None = None) -> None:
         with self._lock:
-            self.completed[event_id] = scheduled_at or datetime.now()
+            self.completed[event_id] = scheduled_at or self.now()
             self.deferred.pop(event_id, None)
             self._save()
 
@@ -230,7 +234,7 @@ class RunState:
     def _save(self) -> None:
         if not self.path:
             return
-        self._prune(datetime.now())
+        self._prune(self.now())
         payload = json.dumps(
             {
                 "identity_version": STATE_IDENTITY_VERSION,
@@ -294,6 +298,7 @@ class BellScheduler:
         self.base_dir = base_dir
         self.state = state
         self.clock = clock or SystemClock()
+        self.state.now = self.clock.now
         self.notify = notify or (lambda notice: None)
         self.before_play = before_play or (lambda: None)
         self._last_now: datetime | None = None

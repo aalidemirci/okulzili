@@ -11,6 +11,7 @@ from typing import Callable
 import zipfile
 
 from .config import ConfigError, ensure_current_schema
+from .defaults import with_default_sounds
 from .domain import SchoolConfig
 
 
@@ -103,7 +104,7 @@ def import_bundle(
 
     try:
         raw = json.loads(contents["ayarlar.json"].decode("utf-8"))
-        config = SchoolConfig.from_dict(ensure_current_schema(raw))
+        config = with_default_sounds(SchoolConfig.from_dict(ensure_current_schema(raw)))
     except (KeyError, UnicodeError, ValueError, TypeError, ConfigError) as exc:
         raise BackupError(f"Yedekteki yapılandırma geçersiz: {exc}") from exc
     errors = config.validate()
