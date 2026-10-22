@@ -13,7 +13,7 @@
 - Normal durumda uygulama açık ya da küçültülmüş bırakılır.
 - Pencerenin kapatma düğmesi uygulamayı sonlandırmaz; sistem tepsisine gizler. Tepsi simgesine çift tıklayarak pencereyi yeniden açabilirsiniz.
 - Tepsi simgesi mavi ise sistem etkin, gri ise ziller duraklatılmış, kırmızı ise kritik uyarı vardır.
-- Hemen zil gerekirse **Durum → Ders zilini şimdi çal** veya **Teneffüs zilini şimdi çal** düğmesini kullanın.
+- Hemen zil gerekirse **Genel durum → Hızlı eylemler** bölümündeki **Öğrenci zilini çal**, **Öğretmen zilini çal** veya **Teneffüs zilini çal** düğmesini kullanın.
 - Bir zil çalarken ikinci düğmeye basılırsa sistem çift sesi engeller.
 - Program geçici olarak durdurulacaksa **Zilleri duraklat** düğmesine basın. İş bitince **Zilleri sürdür** düğmesini unutmayın.
 - Yaklaşan tek bir olay gecikecekse **Sonraki zili 5 dk ertele** komutunu kullanın. Yeni saat ekranda ve tepside görünür; erteleme uygulama yeniden başlasa da korunur.
@@ -97,11 +97,11 @@ Okul Zili haftada en çok bir kez, internet varsa, `okulapp.org`'dan yalnız en 
 
 ## Yedek alma ve başka bilgisayara taşıma
 
-Yönetici profiliyle üstteki **Yedekle / geri yükle** düğmesini kullanın. `.okulzili` dosyası programı ve kullanılan sesleri içerir; PIN ve günlükleri içermez. Geri yüklemeden önce seçtiğiniz dosyanın doğru okula ait olduğunu doğrulayın.
+Yönetici profiliyle üst çubuktaki **Yönetim → Yedekleme ve geri yükleme** bölümünü kullanın. `.okulzili` dosyası programı ve kullanılan sesleri içerir; PIN ve günlükleri içermez. Geri yüklemeden önce seçtiğiniz dosyanın doğru okula ait olduğunu doğrulayın.
 
 ## Gün sonu
 
-- Ertesi gün için ön kontrolü çalıştırın; özellikle tören uyarısını inceleyin.
+- Ertesi gün için **Sistem kontrolü** sayfasına bakın; özellikle yarınki tören satırını inceleyin.
 - Bilgisayarı kapatmak yerine okul politikasındaki yöntemi izleyin. Elektrik kesintisi sonrası otomatik açılış yapılandırılmış olmalıdır.
 - Uygulamayı tamamen kapatırsanız zil çalmaz. Tam kapatma için tepsi menüsündeki **Uygulamayı kapat** komutunu kullanın ve onaylayın.
 

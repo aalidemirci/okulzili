@@ -1425,7 +1425,7 @@ class OkulZiliApp:
         third_party = ctk.CTkFrame(self.about_page, fg_color=SURFACE, corner_radius=16, border_width=1, border_color=BORDER)
         third_party.pack(fill="x", pady=(0, 20))
         ctk.CTkLabel(third_party, text="Üçüncü taraf bileşenleri", text_color=INK, font=ctk.CTkFont("Segoe UI Variable Display", 17, "bold"), anchor="w").pack(fill="x", padx=22, pady=(18, 6))
-        ctk.CTkLabel(third_party, text="Pillow, CustomTkinter, miniaudio, six ve pystray kendi lisans koşullarıyla dağıtılır. İlgili lisans metinleri kurulum paketindeki Belgeler/Lisanslar klasöründe korunur.", text_color=INK_SUBTLE, font=ctk.CTkFont("Segoe UI Variable Text", 12), anchor="w", justify="left", wraplength=980).pack(fill="x", padx=22, pady=(0, 18))
+        ctk.CTkLabel(third_party, text="Pillow, CustomTkinter, miniaudio, six ve pystray kendi lisans koşullarıyla dağıtılır. İlgili lisans metinleri kurulum paketindeki Belgeler/Lisanslar klasöründe korunur. Sınav anonslarının sesi: ElevenLabs (elevenlabs.io), ticari olmayan kullanım; ayrıntı Belgeler/SES-KAYNAKLARI.md ve NOTICE.", text_color=INK_SUBTLE, font=ctk.CTkFont("Segoe UI Variable Text", 12), anchor="w", justify="left", wraplength=980).pack(fill="x", padx=22, pady=(0, 18))
 
     def _refresh_all(self) -> None:
         self._refresh_schedule()
@@ -1957,7 +1957,7 @@ class OkulZiliApp:
                 "resmi_desene_gore": "Resmî tarife göre yerel üretim",
                 "resmi_kayit_paket": "Paketle gelen resmî kayıt",
                 "kamu_mali_sentez": "Kamu malı beste — yerel sentez",
-                "paket_anons": "Paketle gelen anons (yapay ses)",
+                "paket_anons": "Paketle gelen anons — ses: ElevenLabs",
             }.get(definition.source_kind, "Kaynak belirtilmedi")
             self.sound_tree.insert("", "end", iid=definition.sound_id, values=(definition.category, definition.label, status, source))
         if selected and self.sound_tree.exists(selected[0]):

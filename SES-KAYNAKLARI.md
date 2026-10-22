@@ -89,7 +89,7 @@ kurar. Mevcut kurulumdaki kullanıcı sesleri güncellemede korunur.
 
 ## Sınav anonsları
 
-0.9.0 paketi sınav planı için üç anons içerir (`sinav-hazirlik.wav`,
+Paket sınav planı için üç anons içerir (`sinav-hazirlik.wav`,
 `sinav-basladi.wav`, `sinav-bitti.wav`). Her biri uygulamanın ürettiği kısa
 bir çan melodisi ile Türkçe konuşmadan oluşur:
 
@@ -98,14 +98,20 @@ bir çan melodisi ile Türkçe konuşmadan oluşur:
 - Başlangıç: "Sınavınız başlamıştır. Hepinize başarılar dileriz."
 - Süre bitti: "Sınav süresi sona ermiştir. Lütfen kalemlerinizi bırakınız."
 
-Konuşma, proje sahibinin kararıyla Windows'un çevrimdışı Türkçe sesi
-(OneCore "Microsoft Tolga") ile `tools/build_exam_announcements.py` aracıyla
-üretilmiştir; ağ kullanılmamıştır. Microsoft'un bu sesin çıktısının
-dağıtımını açıkça düzenleyen bir metni bulunamamıştır; dağıtım
-sorumluluğu proje sahibindedir. Aynı araç `--konusma-dizini` seçeneğiyle
-hazır kayıtları (ör. bir öğretmenin sesi ya da hakları açık bir ses
-sentezi hizmetinden dışa aktarılmış WAV/MP3) aynı çanla birleştirip
-paketteki dosyaların yerine koyar. Okullar her anonsu **Sesler ve
+**Ses: ElevenLabs (elevenlabs.io).** 0.9.1'den itibaren konuşma, proje
+sahibinin ElevenLabs ücretsiz planında ses kitaplığındaki "Ayça — Young and
+Energetic" sesiyle ürettiği kayıtlardır (22.10.2026). Ücretsiz plan ticari
+kullanım hakkı vermez; Okul Zili ticari olmayan kullanım lisansıyla
+dağıtıldığı için kayıtlar bu sınırla ve yukarıdaki atıfla pakete konmuştur.
+Uygulamayı ticari amaçla dağıtacak olanlar bu üç kaydı kendi haklarına
+sahip oldukları kayıtlarla değiştirmelidir. Dağıtım sorumluluğu proje
+sahibindedir. Ham MP3 kayıtlar kaynak deposunda
+`src/zilsesleri/sinav-anonslari/` altındadır ve kurulum paketlerine
+girmez; `tools/build_exam_announcements.py --konusma-dizini
+src/zilsesleri/sinav-anonslari` paketteki WAV dosyalarını bunlardan ve
+aynı çandan yeniden üretir. (0.9.0'daki ilk sürümler Windows'un çevrimdışı
+"Microsoft Tolga" sesiyle üretilmişti; araç `--konusma-dizini` verilmezse
+hâlâ bu yolu kullanır.) Okullar her anonsu **Sesler ve
 sirenler** sayfasından kendi kayıtlarıyla da değiştirebilir; **Varsayılana
 döndür** paketteki kaydı geri yükler. Paket kaydı eksikse yerine yalnız
 çan çalar.

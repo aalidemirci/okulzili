@@ -1,10 +1,13 @@
 from pathlib import Path
 from array import array
+import hashlib
 import tempfile
 import unittest
+from unittest import mock
 import wave
 
-from okul_zili.audio import validate_wave
+from okul_zili.audio import fallback_wave_bytes, validate_wave
+from okul_zili import sound_assets
 from okul_zili.sound_assets import (
     BUNDLED_SOUND_ASSETS,
     bundled_sound_path,
@@ -73,6 +76,34 @@ class BundledSoundAssetTests(unittest.TestCase):
             for sound_id in ("muzik_bach_prelud", "muzik_ode_to_joy"):
                 valid, detail = validate_wave(root / "sesler" / f"{sound_id}.wav")
                 self.assertTrue(valid, detail)
+
+    def test_unmodified_superseded_copy_is_upgraded_custom_recording_is_kept(self) -> None:
+        # 0.9.0 -> 0.9.1: eski paket kaydının birebir kopyası yenilenir,
+        # kullanıcının "Dosya seç" ile atadığı kayıt korunur.
+        with tempfile.TemporaryDirectory() as directory:
+            sound_dir = Path(directory) / "sesler"
+            sound_dir.mkdir()
+            old_copy = sound_dir / "sinav_hazirlik.wav"
+            custom = sound_dir / "sinav_bitti.wav"
+            write_wave(old_copy)
+            custom.write_bytes(fallback_wave_bytes(120, 660))
+            custom_bytes = custom.read_bytes()
+            old_digest = hashlib.sha256(old_copy.read_bytes()).hexdigest()
+            with mock.patch.dict(
+                sound_assets.SUPERSEDED_BUNDLED_SHA256,
+                {"sinav_hazirlik": frozenset({old_digest}), "sinav_bitti": frozenset({"0" * 64})},
+            ):
+                ensure_generated_sounds(Path(directory))
+            self.assertEqual(bundled_sound_path("sinav_hazirlik").read_bytes(), old_copy.read_bytes())  # type: ignore[union-attr]
+            self.assertEqual(custom_bytes, custom.read_bytes())
+
+    def test_superseded_hashes_differ_from_current_package(self) -> None:
+        # Güncel paket kaydı "eski" sayılırsa her açılışta yeniden yazılırdı.
+        for sound_id, digests in sound_assets.SUPERSEDED_BUNDLED_SHA256.items():
+            with self.subTest(sound_id=sound_id):
+                current = hashlib.sha256(bundled_sound_path(sound_id).read_bytes()).hexdigest()  # type: ignore[union-attr]
+                self.assertNotIn(current, digests)
+
 
 if __name__ == "__main__":
     unittest.main()

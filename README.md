@@ -31,7 +31,7 @@ Okul Zili; Windows ve Linux üzerinde çevrimdışı çalışan, Türkçe masaü
 - Aynı anda iki sesin başlamasını engelleyen tek oynatma kuyruğu
 - Uyku/uyanma ve kaçırılmış zil toleransı; uzun tören/ikaz yayını sırasında vadesi gelen zil yayın bitince çalar
 - Kaçırılan, bekletilen ve sessize alınan ziller genel durum panelinde ve sistem tepsisinde uyarı olarak görünür
-- Açılış ön kontrol paneli ve yerel JSON satır günlüğü
+- Sistem kontrolü paneli (ses cihazı, dosyalar, takvim, otomatik başlatma) ve yerel JSON satır günlüğü
 - Sonraki zil, kritik durum ve hızlı eylemleri gösteren sistem tepsisi
 - PIN korumalı yönetici, nöbetçi ve salt görüntüleme profilleri; tek tıkla oturum kilitleme
 - Karmayla doğrulanan, PIN ve günlük içermeyen paylaşılabilir yedekler

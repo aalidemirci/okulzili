@@ -66,11 +66,13 @@ def build(source: Path, output_dir: Path, package_assets: Path) -> None:
     for size in sizes:
         resized = canvas.resize((size, size), Image.Resampling.LANCZOS)
         resized.save(output_dir / f"okul-zili-{size}.png", optimize=True)
-    canvas.save(
-        output_dir / "okul-zili.ico",
-        format="ICO",
-        sizes=[(size, size) for size in (16, 24, 32, 48, 64, 128, 256)],
-    )
+    for ico_path in (output_dir / "okul-zili.ico", package_assets / "okul-zili.ico"):
+        # Paket kopyası pencere simgesidir (branding.apply_window_icon).
+        canvas.save(
+            ico_path,
+            format="ICO",
+            sizes=[(size, size) for size in (16, 24, 32, 48, 64, 128, 256)],
+        )
 
 
 def main() -> int:

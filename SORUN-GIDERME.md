@@ -4,7 +4,7 @@
 
 1. Amplifikatörün açık, doğru girişin seçili ve ses seviyesinin uygun olduğunu kontrol edin.
 2. USB ses kartını çıkarıp aynı bağlantı noktasına yeniden takın.
-3. **Ön kontrol → Ses cihazı** satırını inceleyin.
+3. **Sistem kontrolü → Ses cihazı** satırını inceleyin.
 4. Ders zilini elle deneyin. Normal dosya eksik/bozuksa yedek bip duyulmalı ve olay günlüğünde kritik kayıt görünmelidir.
 5. Seçili USB cihazı kaybolursa uygulama erişilebilir varsayılan çıkışta yedek bip dener. Bip bilgisayarın kendi hoparlöründen geliyorsa USB kartı yeniden takıp **Ayarlar** içinden cihazı tekrar seçin.
 6. Hiçbir ses çıkışı yoksa yazılım fiziksel olarak bip üretemez; kalıcı görsel alarm gösterir. Yedek anons yöntemini kullanın.
@@ -14,7 +14,7 @@
 
 1. Windows/Linux tarih, saat ve saat dilimini kontrol edin; saat dilimi `Europe/Istanbul` olmalıdır.
 2. Ağ saati kullanılıyorsa eşitlemenin başarılı olduğunu doğrulayın.
-3. Uygulamayı yeniden açın ve ön kontrolü çalıştırın.
+3. Uygulamayı yeniden açın ve **Sistem kontrolü** sayfasını yenileyin.
 4. Saat ileri/geri büyük sıçrama yaptıysa olay günlüğünde “saat sıçraması” kaydı aranmalıdır.
 5. Saat düzeltilene kadar zilleri duraklatın ve gerekirse elle çalın.
 
@@ -23,7 +23,7 @@
 1. **Zilleri sürdür** düğmesinin görünüp görünmediğine bakın; görünüyorsa zamanlayıcı duraklatılmıştır.
 2. Olay günlüğünde “kaçırılan zil”, “ses cihazı” veya “yedek bip” kaydını arayın.
 3. Bilgisayarın olay saatinde uyuyup uyumadığını kontrol edin. Tolerans süresini aşan eski ziller topluca çalınmaz.
-4. Haftalık programda doğru günün ve saatin bulunduğunu doğrulayın.
+4. **Ders zilleri** sayfasında doğru günün ve saatin bulunduğunu doğrulayın.
 5. Aynı tarih için tatil/istisna kaydı olup olmadığını kontrol edin.
 
 ## Program açılmadı
@@ -66,7 +66,7 @@ Bu işlem zil programını, sesleri ve günlükleri etkilemez. PIN'in bir güven
 
 ## Kurulumdan sonra otomatik başlamadı (Windows)
 
-0.8.0 kurucusu bu görevi oluşturamıyordu (yetkisiz bağlamda "Erişim engellendi" hatası sessizce yutuluyordu); 0.9.0'ı kurmak görevi oluşturur.
+0.8.0 kurucusu bu görevi oluşturamıyordu (yetkisiz bağlamda "Erişim engellendi" hatası sessizce yutuluyordu); 0.9.0 ya da sonraki bir sürümü kurmak görevi oluşturur.
 
 1. Okul Zili'ni açın, **Sistem kontrolü** sayfasındaki **Otomatik başlatma** satırına bakın. Uyarı varsa yönetici profiliyle **Otomatik başlatmayı onar** düğmesine basın; görev, o an oturum açmış hesap için yönetici yetkisi istemeden yeniden yazılır.
 2. Onarım başarısız olursa zil bilgisayarında günlük kullanılan hesapta oturum açıp kurucuyu yeniden çalıştırın; kurucu görevi kurulumu başlatan hesaba yazar ve yazamazsa uyarı gösterir.
