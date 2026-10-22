@@ -61,15 +61,19 @@ yoktur; `.venv` 3.13'tür ve PyInstaller içermez. Testleri ve derlemeyi
 5. Paketleri `indir.okulapp.org` (R2, `okul-zili/<dosya>` anahtarı) altına
    yükle, eski sürümün dosyalarını temizle — MEB ağı için asıl indirme
    kaynağı burasıdır.
-6. okulapp.org'u güncelle: `oz-release.json` + proje kartı `badge` (aşağıdaki
+6. okulapp.org'u güncelle: `oz-release.json` (sürüm, bağlantılar, boyutlar ve
+   `notes` = "Bu sürümde" maddeleri) + proje kartı `badge` (aşağıdaki
    bölüm). Bu adım atlanırsa site eski paketi göstermeye devam eder ve
    kurulu uygulamaların güncelleme denetimi (`/okul-zili/surum.json`, aynı
-   dosyadan üretilir) yeni sürümü göremez.
+   dosyadan üretilir) yeni sürümü göremez. Arayüz değiştiyse ekran
+   görüntülerini `py -3.12 tools/site_ekranlari.py` ile yeniden üretip her
+   birini yayından önce gözle denetle (sayfadaki sürüm notu da güncellenir).
 
 ## okulapp.org yayını (ortak yayın alanı)
 
 Bu projenin sitedeki alanı, yan klon `../okulapp.org` içinde
-`src/data/oz-release.json` (indirme kartı) ile `/okul-zili/**` sayfalarıdır.
+`src/data/oz-release.json` (indirme kartı), `src/pages/okul-zili/**` sayfaları
+ve `public/okul-zili/**` ekran görüntüleridir.
 Tanıtım/kılavuz sayfalarının TEK kaynağı sitedir (GitHub Pages'ten taşındı;
 MEB ağında GitHub engelli olduğu için). Yeni sürüm çıktığında
 `oz-release.json` ve sitedeki proje kartının `badge` alanı güncellenmezse

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import io
 import math
 from array import array
@@ -91,6 +92,27 @@ BUNDLED_SOUND_ASSETS: dict[str, str] = {
 }
 
 BUNDLED_SOUND_MAX_SECONDS = {"blok_gecis": 5}
+
+# Yerini yeni paket kaydına bırakan eski paket kayıtlarının SHA-256 değerleri.
+# Veri dizinindeki kopya bunlardan biriyle birebir aynıysa kullanıcı onu
+# değiştirmemiştir ve açılışta yeni kayıtla güncellenir; "Dosya seç" ile
+# atanmış kendi kaydına dokunulmaz.
+SUPERSEDED_BUNDLED_SHA256: dict[str, frozenset[str]] = {
+    # 0.9.0: Windows "Microsoft Tolga" sesi → 0.9.1: ElevenLabs sesi.
+    "sinav_hazirlik": frozenset({"df24f65301b67adb879cd89311454ab982ec574a4c7134e61964d3f436f3d848"}),
+    "sinav_basladi": frozenset({"2aedbcc0ba3c00baaf2f5aee0569d0d90d6e20b70491328b9474e169738c6a87"}),
+    "sinav_bitti": frozenset({"f766b96714f3a2d26789246fd66cf395cd4393b58d0a40f6cdfc2120b2c45bad"}),
+}
+
+
+def _is_superseded_copy(sound_id: str, path: Path) -> bool:
+    known = SUPERSEDED_BUNDLED_SHA256.get(sound_id)
+    if not known:
+        return False
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest() in known
+    except OSError:
+        return False
 
 
 def bundled_sound_path(sound_id: str) -> Path | None:
@@ -279,7 +301,7 @@ def ensure_generated_sounds(base_dir: Path) -> None:
     sound_dir.mkdir(parents=True, exist_ok=True)
     for sound_id in BUNDLED_SOUND_ASSETS:
         destination = sound_dir / f"{sound_id}.wav"
-        if not destination.exists():
+        if not destination.exists() or _is_superseded_copy(sound_id, destination):
             restore_bundled_sound(sound_id, destination)
     for filename, sequence in TONES.items():
         destination = sound_dir / filename

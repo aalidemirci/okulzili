@@ -10,12 +10,14 @@ Konuşma iki yoldan gelir:
 * ``--konusma-dizini KLASÖR``: hazır kayıtlar. Klasörde
   ``sinav_hazirlik``, ``sinav_basladi`` ve ``sinav_bitti`` adlı WAV (16 bit
   PCM) ya da MP3 dosyaları bulunur — ör. bir öğretmenin sesiyle yapılmış
-  kayıtlar veya Azure Speech Studio'dan dışa aktarılmış dosyalar. Metinler
-  aşağıdaki ``ANNOUNCEMENTS`` ile aynı olmalıdır.
+  kayıtlar ya da bir ses sentezi hizmetinden dışa aktarılmış dosyalar.
+  Metinler aşağıdaki ``ANNOUNCEMENTS`` ile aynı olmalıdır. Paketteki 0.9.1
+  kayıtları ``src/zilsesleri/sinav-anonslari`` (ElevenLabs) klasöründen bu
+  yolla üretilmiştir; kaynak ve atıf için SES-KAYNAKLARI.md.
 
 Kullanım:
-    py -3.12 tools/build_exam_announcements.py
-    py -3.12 tools/build_exam_announcements.py --konusma-dizini D:/anonslar
+    py -3.12 tools/build_exam_announcements.py --konusma-dizini src/zilsesleri/sinav-anonslari
+    py -3.12 tools/build_exam_announcements.py   # Windows Tolga sesiyle
 """
 
 from __future__ import annotations
