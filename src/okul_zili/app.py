@@ -16,7 +16,7 @@ import customtkinter as ctk
 from tkinter import filedialog, messagebox, ttk
 from typing import Callable
 
-from . import __version__
+from . import __version__, autostart
 from .alerts import READY_TEXT, AlertLedger
 from .auth import AuthRepository, LoginThrottle, ROLE_LABELS, is_action_allowed
 from .academic_defaults import academic_calendar_template
@@ -45,6 +45,7 @@ from .recess_music import RecessMusicManager
 from .scheduler import BellScheduler, RunState, SchedulerNotice
 from .sound_assets import ensure_generated_sounds, restore_bundled_sound, restore_generated_sound
 from .time_check import check_time
+from .update_check import DOWNLOAD_PAGE, ReleaseInfo, UpdateCheckError, UpdateState, fetch_latest
 from .sound_catalog import SOUND_BY_ID, SOUND_DEFINITIONS, download_official_sound, import_audio_file
 from .tray import TrayController
 from .ui_theme import (
@@ -100,10 +101,12 @@ from .dialogs import (
     SESSIONS_BY_LABEL,
     TEAL,
     TEAL_HOVER,
+    WEEKDAY_SHORT,
     WEEKDAYS,
     AcademicCalendarDialog,
     CeremonyDialog,
     CopyScheduleDialog,
+    ExamDialog,
     EventEditor,
     ExtraEventsDialog,
     InitialSetupDialog,
@@ -130,6 +133,67 @@ DEVELOPER_NAME = "Ahmet Ali DEMİRCİ"
 DEVELOPER_EMAIL = "aalidemirci@gmail.com"
 LICENSE_NAME = "PolyForm Noncommercial License 1.0.0"
 LICENSE_URL = "https://polyformproject.org/licenses/noncommercial/1.0.0"
+
+def _weekday_summary(weekdays: tuple[int, ...]) -> str:
+    """Hafta günlerini kısa yazar: (0..4) → "Pzt–Cum", (0, 2) → "Pzt, Çar"."""
+    days = sorted(set(weekdays))
+    if len(days) > 2 and days == list(range(days[0], days[-1] + 1)):
+        return f"{WEEKDAY_SHORT[days[0]]}–{WEEKDAY_SHORT[days[-1]]}"
+    return ", ".join(WEEKDAY_SHORT[day] for day in days) or "—"
+
+
+LOG_LEVEL_LABELS = {"bilgi": "Bilgi", "uyarı": "Uyarı", "kritik": "KRİTİK"}
+# Olay günlüğü ekranı personel içindir: kayıt dosyası (ve dışa aktarım) teknik
+# kodları korur, ekranda Türkçe adları gösterilir.
+LOG_EVENT_LABELS = {
+    "zil_sonucu": "Zil",
+    "uygulama_acildi": "Uygulama açıldı",
+    "uygulama_kapatildi": "Uygulama kapatıldı",
+    "sistem_tepsisi": "Sistem tepsisi",
+    "pencere_tepsiye_alindi": "Pencere tepsiye alındı",
+    "profil_degisti": "Profil değişti",
+    "oturum_kilitlendi": "Oturum kilitlendi",
+    "yetkisiz_eylem_engellendi": "Yetkisiz işlem engellendi",
+    "yapilandirma_kaydedildi": "Ayarlar kaydedildi",
+    "yapilandirma_kurtarildi": "Ayarlar yedekten kurtarıldı",
+    "profil_dosyasi_kurtarildi": "Profil dosyası kurtarıldı",
+    "yedek_olusturuldu": "Yedek oluşturuldu",
+    "yedek_geri_yuklendi": "Yedek geri yüklendi",
+    "ses_degistirildi": "Ses değiştirildi",
+    "ses_durduruldu": "Ses durduruldu",
+    "ses_uretim_hatasi": "Ses üretim hatası",
+    "ses_duzeyi_onbellegi": "Ses düzeyi önbelleği",
+    "uretilen_ses_geri_yuklendi": "Ses varsayılana döndürüldü",
+    "meb_paket_sesi_geri_yuklendi": "Paket sesi geri yüklendi",
+    "meb_sesi_indirilemedi": "MEB sesi indirilemedi",
+    "zamanlayici_durumu": "Zamanlayıcı durumu",
+    "gunluk_sessize_alma": "Bugün zil çalma",
+    "saat_dogrulama": "Saat doğrulama",
+    "on_kontrol_hatasi": "Sistem kontrolü hatası",
+    "arayuz_temasi": "Arayüz teması",
+    "arayuz_hatasi": "Arayüz hatası",
+    "otomatik_baslatma_onarimi": "Otomatik başlatma onarımı",
+    "guncelleme_denetimi": "Güncelleme denetimi",
+}
+
+
+def format_log_line(item: dict[str, object]) -> str:
+    """Bir JSONL günlük kaydını ekranda okunur tek satıra çevirir."""
+    stamp = str(item.get("zaman", ""))
+    try:
+        stamp = datetime.fromisoformat(stamp).strftime("%d.%m.%Y %H:%M:%S")
+    except ValueError:
+        pass
+    level = str(item.get("seviye", ""))
+    code = str(item.get("olay", ""))
+    title = LOG_EVENT_LABELS.get(code, code.replace("_", " ").capitalize())
+    parts = [str(value) for value in (item.get("olay_adi"), item.get("mesaj") or item.get("hata")) if value]
+    if not parts and item.get("durum"):
+        parts.append(str(item["durum"]).replace("_", " "))
+    detail = " — ".join(parts)
+    line = f"{stamp}  ·  {LOG_LEVEL_LABELS.get(level, level.capitalize())}  ·  {title}"
+    return f"{line}: {detail}" if detail else line
+
 
 def _read_primary_license() -> str:
     candidates = (
@@ -212,6 +276,9 @@ class OkulZiliApp:
         self._time_check_thread: threading.Thread | None = None
         self._time_check_wake = threading.Event()
         self._time_check_alerted = False
+        self._update_state = UpdateState.load(self.data_dir / "guncelleme-denetimi.json")
+        self._update_thread: threading.Thread | None = None
+        self._update_check_running = False
         self._scheduler_failure_count = 0
         self._scheduler_last_success_at: datetime | None = None
         self._dashboard_after_id: str | None = None
@@ -236,6 +303,7 @@ class OkulZiliApp:
         log_event(self.logger, "sistem_tepsisi", etkin=tray_started)
         self._start_scheduler_worker()
         self._start_time_check_worker()
+        self._start_update_check_worker()
         self._prewarm_volume_cache()
         self._refresh_all()
         self.root.after(100, self._drain_notices)
@@ -291,7 +359,7 @@ class OkulZiliApp:
         self.role_label = ctk.CTkLabel(heading, text=f"  •  {ROLE_LABELS.get(self.role, self.role)} profili", text_color=MUTED, font=ctk.CTkFont("Segoe UI Variable Text", 12))
         self.role_label.pack(side="left")
         self.clock_label = ctk.CTkLabel(top, text="", text_color=INK_SUBTLE, font=ctk.CTkFont("Segoe UI Variable Text", 13, "bold"))
-        self.clock_label.pack(side="right")
+        self.clock_label.pack(side="right", padx=(16, 0))
         self.header_stop_button = ctk.CTkButton(top, text="■  Sesi durdur", width=118, height=40, corner_radius=10, fg_color=DANGER, hover_color=DANGER_HOVER, text_color="#FFFFFF", command=self._stop_audio, font=ctk.CTkFont("Segoe UI Variable Text", 12, "bold"))
         self.header_stop_button.pack(side="right", padx=(8, 0))
         self.management_button = ctk.CTkButton(top, text="Yönetim", width=104, height=40, corner_radius=10, fg_color=SURFACE, hover_color=HOVER, text_color=INK_SUBTLE, border_width=1, border_color=BORDER, command=self._open_management_center, font=ctk.CTkFont("Segoe UI Variable Text", 12, "bold"))
@@ -347,7 +415,7 @@ class OkulZiliApp:
         self.nav_buttons: dict[str, ctk.CTkButton] = {}
         for key, label in (
             ("durum", "Genel durum"),
-            ("program", "Haftalık program"),
+            ("program", "Ders zilleri"),
             ("takvim", "Akademik takvim"),
             ("istisnalar", "Tatil ve törenler"),
             ("sesler", "Sesler ve sirenler"),
@@ -357,7 +425,10 @@ class OkulZiliApp:
             button = ctk.CTkButton(sidebar, text=label, anchor="w", command=lambda selected=key: self._show_page(selected), height=46, corner_radius=10, fg_color="transparent", hover_color=NAV_HOVER, text_color=NAV_TEXT, font=ctk.CTkFont("Segoe UI Variable Text", 13, "bold"))
             button.pack(fill="x", padx=12, pady=3)
             self.nav_buttons[key] = button
-        ctk.CTkLabel(sidebar, text=f"Sürüm {__version__}\nÇevrimdışı çalışma hazır", justify="left", anchor="w", text_color=NAV_MUTED, font=ctk.CTkFont("Segoe UI Variable Text", 11)).pack(side="bottom", fill="x", padx=24, pady=(8, 18))
+        self.version_label = ctk.CTkLabel(sidebar, text=f"Sürüm {__version__}\nÇevrimdışı çalışma hazır", justify="left", anchor="w", text_color=NAV_MUTED, font=ctk.CTkFont("Segoe UI Variable Text", 11))
+        self.version_label.pack(side="bottom", fill="x", padx=24, pady=(8, 18))
+        # Yalnız yeni sürüm bilindiğinde, sürüm satırının hemen üstünde görünür.
+        self.update_nav_button = ctk.CTkButton(sidebar, text="", anchor="w", command=lambda: self._show_page("hakkinda"), height=40, corner_radius=10, fg_color=ACCENT_STRONG, hover_color=ACCENT_HOVER, text_color="#FFFFFF", font=ctk.CTkFont("Segoe UI Variable Text", 12, "bold"))
         about_button = ctk.CTkButton(sidebar, text="Hakkında ve Lisans", anchor="w", command=lambda: self._show_page("hakkinda"), height=44, corner_radius=10, fg_color="transparent", hover_color=NAV_HOVER, text_color=NAV_TEXT, font=ctk.CTkFont("Segoe UI Variable Text", 13, "bold"))
         about_button.pack(side="bottom", fill="x", padx=12, pady=3)
         self.nav_buttons["hakkinda"] = about_button
@@ -707,7 +778,12 @@ class OkulZiliApp:
         ctk.CTkLabel(parent, text=subtitle, text_color=MUTED, font=ctk.CTkFont("Segoe UI Variable Text", 13), anchor="w").pack(fill="x", pady=(2, 18))
 
     @staticmethod
-    def _action_button(parent: tk.Misc, text: str, command: Callable[[], None], primary: bool = False, danger: bool = False, width: int = 110) -> ctk.CTkButton:
+    def _action_button(parent: tk.Misc, text: str, command: Callable[[], None], primary: bool = False, danger: bool = False, width: int = 110, destructive: bool = False) -> ctk.CTkButton:
+        # destructive: geri alınamayan ama acil olmayan işlemler (sil, sıfırla)
+        # dolu kırmızı değil çerçeveli düğmedir; dolu kırmızı tatbikat ve
+        # "Sesi durdur" gibi acil eylemlere ayrılmıştır.
+        if destructive:
+            return ctk.CTkButton(parent, text=text, command=command, width=width, height=42, corner_radius=10, fg_color=SURFACE, hover_color=HOVER, text_color=CRITICAL, border_width=1, border_color=CRITICAL, font=ctk.CTkFont("Segoe UI Variable Text", 12, "bold"))
         color = DANGER if danger else (TEAL if primary else SURFACE)
         hover = DANGER_HOVER if danger else (TEAL_HOVER if primary else HOVER)
         return ctk.CTkButton(parent, text=text, command=command, width=width, height=42, corner_radius=10, fg_color=color, hover_color=hover, text_color="#FFFFFF" if danger else (ACCENT_INK if primary else INK_SUBTLE), border_width=0 if primary or danger else 1, border_color=BORDER, font=ctk.CTkFont("Segoe UI Variable Text", 12, "bold"))
@@ -743,8 +819,8 @@ class OkulZiliApp:
         self.advanced_add_button.pack(side="left", padx=(4, 4))
         # Varsayılan ya da elde kalmış zil saatlerini tümüyle silip yeniden
         # kurmanın tek yeri; ikili eğitime geçen okulların ihtiyacı.
-        self.reset_schedule_button = self._action_button(toolbar, "Sıfırla ve yeniden oluştur", self._reset_schedule, danger=True, width=196)
-        self.reset_schedule_button.pack(side="left", padx=(4, 0))
+        self.reset_schedule_button = self._action_button(toolbar, "Sıfırla ve yeniden oluştur", self._reset_schedule, width=196, destructive=True)
+        self.reset_schedule_button.pack(side="right")
         self.schedule_admin_buttons = [self.copy_schedule_button, self.advanced_add_button, self.reset_schedule_button]
 
         workspace = ctk.CTkFrame(self.schedule_page, fg_color="transparent")
@@ -785,7 +861,8 @@ class OkulZiliApp:
         self._draft_sessions: list[SessionSchedule] = []
         self._editing_session_name: str | None = None
         ctk.CTkLabel(mode_row, text="Eğitim modeli", text_color=MUTED, font=ctk.CTkFont("Segoe UI Variable Text", 12, "bold"), anchor="w").grid(row=0, column=0, sticky="ew", padx=(0, 5))
-        ctk.CTkLabel(mode_row, text="Düzenlenen oturum", text_color=MUTED, font=ctk.CTkFont("Segoe UI Variable Text", 12, "bold"), anchor="w").grid(row=0, column=1, sticky="ew", padx=(5, 0))
+        self.session_label = ctk.CTkLabel(mode_row, text="Düzenlenen oturum", text_color=MUTED, font=ctk.CTkFont("Segoe UI Variable Text", 12, "bold"), anchor="w")
+        self.session_label.grid(row=0, column=1, sticky="ew", padx=(5, 0))
         self.education_mode_box = ctk.CTkComboBox(
             mode_row, variable=self.education_mode_var, values=list(EDUCATION_MODES),
             state="readonly", height=40, fg_color=INPUT, border_color=BORDER,
@@ -858,7 +935,9 @@ class OkulZiliApp:
         self.calendar_title_label = ctk.CTkLabel(card, text="", text_color=INK, font=ctk.CTkFont("Segoe UI Variable Display", 22, "bold"), anchor="w")
         self.calendar_title_label.pack(fill="x", padx=22, pady=(22, 4))
         self.calendar_detail_label = ctk.CTkLabel(card, text="", text_color=INK_SUBTLE, justify="left", anchor="nw", font=ctk.CTkFont("Segoe UI Variable Text", 13), wraplength=760)
-        self.calendar_detail_label.pack(fill="both", expand=True, padx=22, pady=(8, 22))
+        self.calendar_detail_label.pack(fill="x", padx=22, pady=(8, 12))
+        # Takvim yokken ya da ders yılı bitmişken görünür (_refresh_calendar).
+        self.calendar_template_button = self._action_button(card, "MEB takvim şablonunu yükle", self._load_calendar_template, primary=True, width=230)
         self._refresh_calendar()
 
     def _build_preflight(self) -> None:
@@ -867,6 +946,10 @@ class OkulZiliApp:
         toolbar.pack(fill="x", pady=(0, 12))
         ctk.CTkLabel(toolbar, text="Sonuçlar otomatik yenilenir", text_color=MUTED, font=ctk.CTkFont("Segoe UI Variable Text", 12)).pack(side="left")
         self._action_button(toolbar, "Yeniden denetle", self._refresh_preflight, primary=True, width=138).pack(side="right")
+        # Yalnız otomatik başlatma eksik/bozukken görünür (_render_preflight).
+        self.autostart_repair_button = self._action_button(toolbar, "Otomatik başlatmayı onar", self._repair_autostart, width=196)
+        self._autostart_status: autostart.AutostartStatus | None = None
+        self._autostart_repair_running = False
         table_card = ctk.CTkFrame(self.preflight_page, fg_color=SURFACE, corner_radius=16, border_width=1, border_color=BORDER)
         table_card.pack(fill="both", expand=True)
         self.preflight_tree = ttk.Treeview(
@@ -883,19 +966,21 @@ class OkulZiliApp:
         self.preflight_tree.pack(fill="both", expand=True, padx=1, pady=1)
 
     def _build_rules(self) -> None:
-        self._page_heading(self.rules_page, "Tatil ve törenler", "Tarih aralıklarını, telafi günlerini ve hazır tören akışlarını yönetin")
+        self._page_heading(self.rules_page, "Tatil ve törenler", "Tatilleri, telafi günlerini, sınav haftalarını ve tören akışlarını yönetin")
         toolbar = ctk.CTkFrame(self.rules_page, fg_color="transparent")
         toolbar.pack(fill="x", pady=(0, 12))
         self.rule_admin_buttons = [
             self._action_button(toolbar, "İstisna ekle", self._add_rule, primary=True, width=126),
             self._action_button(toolbar, "Tören planla", self._add_ceremony, primary=True, width=126),
-            self._action_button(toolbar, "Düzenle", self._edit_rule),
-            self._action_button(toolbar, "Sil", self._delete_rule, danger=True, width=80),
+            self._action_button(toolbar, "Sınav planla", self._add_exam, primary=True, width=126),
         ]
-        self.rule_admin_buttons[0].pack(side="left")
-        self.rule_admin_buttons[1].pack(side="left", padx=8)
-        self.rule_admin_buttons[2].pack(side="left")
-        self.rule_admin_buttons[3].pack(side="left", padx=8)
+        for index, button in enumerate(self.rule_admin_buttons):
+            button.pack(side="left", padx=(0 if index == 0 else 8, 0))
+        # Seçime bağlı düğmeler: bir satır seçilmeden etkinleşmez (_update_rule_buttons).
+        self.rule_edit_button = self._action_button(toolbar, "Düzenle", self._edit_rule)
+        self.rule_edit_button.pack(side="left", padx=(24, 0))
+        self.rule_delete_button = self._action_button(toolbar, "Sil", self._delete_rule, width=80, destructive=True)
+        self.rule_delete_button.pack(side="left", padx=(8, 0))
         ctk.CTkLabel(
             toolbar,
             text="Tatilin ilk ve son günü programa dâhildir.",
@@ -921,6 +1006,21 @@ class OkulZiliApp:
             self.rules_tree.column(key, width=width, anchor="w")
         self.rules_tree.pack(fill="both", expand=True, padx=1, pady=1)
         self.rules_tree.bind("<Double-1>", lambda event: self._edit_rule())
+        self.rules_tree.bind("<<TreeviewSelect>>", lambda event: self._update_rule_buttons())
+        self.rules_empty_label = ctk.CTkLabel(
+            table_card,
+            text=(
+                "Henüz tatil, sınav ya da tören eklenmedi.\n\n"
+                "Resmî tatiller ve ara tatiller Akademik takvim sayfasından gelir. Buraya okulunuza özel "
+                "günleri ekleyin: “İstisna ekle” ile tatil, telafi veya kısaltılmış gün; “Tören planla” ile "
+                "İstiklâl Marşı ve 10 Kasım akışı; “Sınav planla” ile sınav haftası anonsları."
+            ),
+            text_color=MUTED,
+            fg_color=SURFACE,
+            justify="center",
+            wraplength=620,
+            font=ctk.CTkFont("Segoe UI Variable Text", 13),
+        )
 
     def _build_sounds(self) -> None:
         self._page_heading(self.sounds_page, "Sesler ve sirenler", "Paketle gelen MEB zillerini kullanın, kayıtları değiştirin ve tören akışlarını deneyin")
@@ -928,13 +1028,13 @@ class OkulZiliApp:
         toolbar.pack(fill="x", pady=(0, 12))
         self.sound_admin_buttons = [
             self._action_button(toolbar, "Dosya seç", self._assign_selected_sound),
-            self._action_button(toolbar, "Varsayılana döndür", self._download_selected_sound, primary=True, width=154),
+            self._action_button(toolbar, "Varsayılana döndür", self._download_selected_sound, width=154),
             self._action_button(toolbar, "Kaynağı aç", self._open_selected_source),
         ]
         for index, button in enumerate(self.sound_admin_buttons):
             button.pack(side="left", padx=(0 if index == 0 else 8, 0))
         self._action_button(toolbar, "■  Sesi durdur", self._stop_audio, danger=True, width=124).pack(side="right")
-        self._action_button(toolbar, "Seçili sesi dene", self._play_selected_sound, width=138).pack(side="right", padx=(0, 8))
+        self._action_button(toolbar, "Seçili sesi dene", self._play_selected_sound, primary=True, width=138).pack(side="right", padx=(0, 8))
 
         music_card = ctk.CTkFrame(self.sounds_page, fg_color=SURFACE, corner_radius=14, border_width=1, border_color=BORDER)
         music_card.pack(fill="x", pady=(0, 12))
@@ -1067,13 +1167,13 @@ class OkulZiliApp:
             log_event(self.logger, "uretilen_ses_geri_yuklendi", ses=sound_id)
             messagebox.showinfo("Ses geri yüklendi", "Çevrimdışı paket varsayılanı yeniden üretildi.", parent=self.root)
             return
-        if definition.source_kind in {"meb_paket", "resmi_kayit_paket"}:
+        if definition.source_kind in {"meb_paket", "resmi_kayit_paket", "paket_anons"}:
             relative = self.config.sounds.get(sound_id, f"sesler/{sound_id}.wav")
             destination = self.data_dir / relative
             if not restore_bundled_sound(sound_id, destination):
                 messagebox.showerror(
                     "Paket sesi bulunamadı",
-                    "Gömülü MEB zil kaydı paket içinde bulunamadı. Kurulumu onarın veya yeniden kurun.",
+                    "Gömülü kayıt paket içinde bulunamadı. Kurulumu onarın veya yeniden kurun.",
                     parent=self.root,
                 )
                 return
@@ -1081,7 +1181,7 @@ class OkulZiliApp:
             log_event(self.logger, "meb_paket_sesi_geri_yuklendi", ses=sound_id)
             messagebox.showinfo(
                 "Ses geri yüklendi",
-                "Paketle gelen MEB zil kaydı yeniden etkinleştirildi.",
+                "Paketle gelen kayıt yeniden etkinleştirildi.",
                 parent=self.root,
             )
             return
@@ -1172,7 +1272,9 @@ class OkulZiliApp:
             self.backup_button,
             *self.schedule_admin_buttons,
             self.calendar_edit_button,
+            self.calendar_template_button,
             *self.rule_admin_buttons,
+            self.autostart_repair_button,
             *self.sound_admin_buttons,
             self.recess_music_save_button,
         ):
@@ -1190,7 +1292,21 @@ class OkulZiliApp:
             *self.dashboard_operational_buttons,
         ):
             button.configure(state=operator_state)
-        self.lock_button.configure(state=operator_state)
+        self._update_rule_buttons()
+        self._update_session_buttons()
+
+    def _update_session_buttons(self) -> None:
+        """Üst çubukta yetkiye göre yalnız anlamlı düğme görünür.
+
+        Salt görüntülemede "Giriş" (PIN ile yetki yükseltme), yetkili oturumda
+        "Kilitle" (salt görüntülemeye dönüş). İkisi birlikte görünmez.
+        """
+        locked = self.role == "goruntuleme"
+        shown, hidden = (self.login_button, self.lock_button) if locked else (self.lock_button, self.login_button)
+        if hidden.winfo_manager():
+            hidden.pack_forget()
+        if not shown.winfo_manager():
+            shown.pack(side="right", padx=(8, 0), after=self.management_button)
 
     def set_role(self, role: str) -> None:
         """Çalışan uygulamada yetkiyi değiştirir (gözetimsiz açılış sonrası giriş)."""
@@ -1256,6 +1372,31 @@ class OkulZiliApp:
         identity_text.pack(side="left", fill="both", expand=True, pady=20)
         ctk.CTkLabel(identity_text, text="Okul Zili", text_color=INK, font=ctk.CTkFont("Segoe UI Variable Display", 24, "bold"), anchor="w").pack(fill="x")
         ctk.CTkLabel(identity_text, text=f"Sürüm {__version__} · Çevrimdışı okul zili ve anons sistemi", text_color=MUTED, font=ctk.CTkFont("Segoe UI Variable Text", 13), anchor="w").pack(fill="x", pady=(4, 0))
+
+        updates = ctk.CTkFrame(self.about_page, fg_color=SURFACE, corner_radius=16, border_width=1, border_color=BORDER)
+        updates.pack(fill="x", pady=(0, 14))
+        ctk.CTkLabel(updates, text="Güncellemeler", text_color=ACCENT, font=ctk.CTkFont("Segoe UI Variable Display", 16, "bold"), anchor="w").pack(fill="x", padx=22, pady=(18, 5))
+        self.update_status_label = ctk.CTkLabel(updates, text="", text_color=INK, font=ctk.CTkFont("Segoe UI Variable Text", 14, "bold"), anchor="w", justify="left", wraplength=900)
+        self.update_status_label.pack(fill="x", padx=22)
+        update_row = ctk.CTkFrame(updates, fg_color="transparent")
+        update_row.pack(fill="x", padx=22, pady=(10, 6))
+        self.update_check_button = self._action_button(update_row, "Şimdi denetle", self._check_updates_now, primary=True, width=130)
+        self.update_check_button.pack(side="left")
+        self._action_button(update_row, "İndirme sayfası ↗", lambda: webbrowser.open(DOWNLOAD_PAGE), width=150).pack(side="left", padx=8)
+        ctk.CTkLabel(
+            updates,
+            text=(
+                "Denetim yalnız okulapp.org'dan en son sürümün numarasını okur; okul, kişi ya da bilgisayar bilgisi "
+                "gönderilmez ve hiçbir şey kendiliğinden indirilip kurulmaz. Haftalık otomatik denetim Yönetim → "
+                "Okul ve cihaz ayarları'ndan kapatılabilir."
+            ),
+            text_color=MUTED,
+            font=ctk.CTkFont("Segoe UI Variable Text", 12),
+            anchor="w",
+            justify="left",
+            wraplength=900,
+        ).pack(fill="x", padx=22, pady=(4, 18))
+        self._render_update_status()
 
         developer = ctk.CTkFrame(self.about_page, fg_color=SURFACE, corner_radius=16, border_width=1, border_color=BORDER)
         developer.pack(fill="x", pady=(0, 14))
@@ -1428,14 +1569,14 @@ class OkulZiliApp:
                 self._draft_sessions = list(
                     build_dual_sessions(self._selected_draft_session())
                 )
-            self.session_box.configure(values=list(DUAL_SESSION_NAMES), state="readonly")
+            self._set_session_picker(dual=True)
             self.session_var.set(SESSION_NAME_MORNING)
         else:
             base = self._selected_draft_session()
             self._draft_sessions = [
                 replace(base, session_id="normal", name=SESSION_NAME_FULL_DAY)
             ]
-            self.session_box.configure(values=[SESSION_NAME_FULL_DAY], state="disabled")
+            self._set_session_picker(dual=False)
             self.session_var.set(SESSION_NAME_FULL_DAY)
         self._show_draft_session()
 
@@ -1536,12 +1677,22 @@ class OkulZiliApp:
         self._draft_sessions = sessions
         self._editing_session_name = None
         self.education_mode_var.set(MODE_DUAL if dual else MODE_FULL_DAY)
-        self.session_box.configure(
-            values=list(DUAL_SESSION_NAMES) if dual else [SESSION_NAME_FULL_DAY],
-            state="readonly" if dual else "disabled",
-        )
+        self._set_session_picker(dual)
         self.session_var.set(SESSION_NAME_MORNING if dual else SESSION_NAME_FULL_DAY)
         self._show_draft_session()
+
+    def _set_session_picker(self, dual: bool) -> None:
+        """Oturum seçici yalnız ikili eğitimde anlamlıdır; tam günde gizlenir."""
+        if dual:
+            self.session_box.configure(values=list(DUAL_SESSION_NAMES), state="readonly")
+            self.education_mode_box.grid_configure(columnspan=1, padx=(0, 5))
+            self.session_label.grid()
+            self.session_box.grid()
+        else:
+            self.session_box.configure(values=[SESSION_NAME_FULL_DAY], state="disabled")
+            self.session_label.grid_remove()
+            self.session_box.grid_remove()
+            self.education_mode_box.grid_configure(columnspan=2, padx=0)
 
     def _toggle_student_offset(self) -> None:
         state = "normal" if self.student_bell_var.get() else "disabled"
@@ -1740,9 +1891,18 @@ class OkulZiliApp:
         if not hasattr(self, "calendar_title_label"):
             return
         calendar = self.config.academic_calendar
+        expired = calendar is not None and date.today() > calendar.teaching_end
+        if calendar is None or expired:
+            if not self.calendar_template_button.winfo_manager():
+                self.calendar_template_button.pack(anchor="w", padx=22, pady=(0, 22))
+        elif self.calendar_template_button.winfo_manager():
+            self.calendar_template_button.pack_forget()
         if calendar is None:
             self.calendar_title_label.configure(text="Akademik takvim henüz oluşturulmadı")
-            self.calendar_detail_label.configure(text="Takvimi düzenleyerek ders yılı ve dönem sınırlarını belirleyin. Takvim tanımlanana kadar mevcut haftalık program kesintisiz kullanılır.")
+            self.calendar_detail_label.configure(text=(
+                "Takvim tanımlanmadığı için haftalık program her hafta içi uygulanır: resmî tatillerde ve ara "
+                "tatillerde de ders zilleri çalar.\n\nMEB çalışma takvimi şablonunu yükleyin, tarihleri denetleyip kaydedin."
+            ))
             return
         break_text = "\n".join(f"• {item.name}: {item.start.strftime('%d.%m.%Y')} – {item.end.strftime('%d.%m.%Y')}" for item in calendar.breaks) or "• Ara tatil tanımlanmadı"
         religious = []
@@ -1757,7 +1917,22 @@ class OkulZiliApp:
             f"2. dönem: {calendar.term2_start.strftime('%d.%m.%Y')} – {calendar.term2_end.strftime('%d.%m.%Y')}\n\n"
             f"Tatiller\n{break_text}\n" + ("\n".join(f"• {item}" for item in religious) if religious else "") +
             f"\n\nSabit Türkiye resmî tatilleri: {'Etkin' if calendar.official_holidays_enabled else 'Kapalı'}"
+            + (
+                "\n\n⚠ Bu ders yılı bitti. Yeni ders yılının takvimini girin; girilmezse yeni dönemde ders zilleri çalmaz."
+                if expired
+                else ""
+            )
         ))
+
+    def _load_calendar_template(self) -> None:
+        if not self._require_permission("yapilandir"):
+            return
+        today = date.today()
+        year = today.year if today.month >= 7 else today.year - 1
+        def save(calendar: AcademicCalendar) -> None:
+            self._apply_config(replace(self.config, academic_calendar=calendar))
+        # Şablon doğrudan kaydedilmez: kullanıcı tarihleri düzenleme penceresinde görüp onaylar.
+        AcademicCalendarDialog(self.root, academic_calendar_template(year), save)
 
     def _edit_academic_calendar(self) -> None:
         if not self._require_permission("yapilandir"):
@@ -1782,6 +1957,7 @@ class OkulZiliApp:
                 "resmi_desene_gore": "Resmî tarife göre yerel üretim",
                 "resmi_kayit_paket": "Paketle gelen resmî kayıt",
                 "kamu_mali_sentez": "Kamu malı beste — yerel sentez",
+                "paket_anons": "Paketle gelen anons (yapay ses)",
             }.get(definition.source_kind, "Kaynak belirtilmedi")
             self.sound_tree.insert("", "end", iid=definition.sound_id, values=(definition.category, definition.label, status, source))
         if selected and self.sound_tree.exists(selected[0]):
@@ -1790,7 +1966,50 @@ class OkulZiliApp:
     def _run_preflight_checks(self) -> list[CheckResult]:
         """Ön kontrol sonuçlarını hesaplar; Tk'ye dokunmadığı için işçide de çağrılabilir."""
         service = PreflightService(self.config, self.engine, self.backend, self.data_dir, self.data_dir)
-        return [*service.run(), self._runtime_health_check()]
+        return [*service.run(), self._runtime_health_check(), *self._autostart_checks()]
+
+    def _autostart_checks(self) -> list[CheckResult]:
+        try:
+            status = autostart.current_status()
+        except Exception as exc:  # Denetim zil motorunu asla durdurmamalı.
+            status = autostart.AutostartStatus(False, f"Otomatik başlatma denetlenemedi: {exc}")
+        self._autostart_status = status
+        if status is None:
+            return []
+        return [CheckResult("autostart", "iyi" if status.ok else "uyarı", "Otomatik başlatma", status.detail)]
+
+    def _repair_autostart(self) -> None:
+        if not self._require_permission("yapilandir") or self._autostart_repair_running:
+            return
+        self._autostart_repair_running = True
+        self.autostart_repair_button.configure(state="disabled", text="Onarılıyor…")
+
+        def worker() -> None:
+            try:
+                repaired, detail = autostart.repair()
+            except Exception as exc:
+                repaired, detail = False, str(exc)
+
+            def finish() -> None:
+                self._autostart_repair_running = False
+                self.autostart_repair_button.configure(state="normal", text="Otomatik başlatmayı onar")
+                log_event(self.logger, "otomatik_baslatma_onarimi", level="bilgi" if repaired else "uyarı", basarili=repaired, mesaj=detail)
+                if repaired:
+                    messagebox.showinfo("Otomatik başlatma", f"{detail}\nOkul Zili bundan sonra oturum açılınca kendiliğinden başlar.", parent=self.root)
+                else:
+                    messagebox.showerror(
+                        "Otomatik başlatma onarılamadı",
+                        f"{detail}\n\nKurucuyu zil bilgisayarında günlük kullanılan hesapla yeniden çalıştırın.",
+                        parent=self.root,
+                    )
+                self._refresh_preflight()
+
+            try:
+                self.root.after(0, finish)
+            except (tk.TclError, RuntimeError):
+                pass
+
+        threading.Thread(target=worker, name="otomatik-baslatma", daemon=True).start()
 
     def _refresh_preflight(self) -> None:
         self._render_preflight(self._run_preflight_checks())
@@ -1838,6 +2057,12 @@ class OkulZiliApp:
             self.preflight_tree.insert("", "end", values=(display, result.title, result.detail), tags=(result.level,))
             if result.level != "iyi":
                 critical.append(result)
+        status = self._autostart_status
+        if status is not None and not status.ok and status.repairable:
+            if not self.autostart_repair_button.winfo_manager():
+                self.autostart_repair_button.pack(side="right", padx=(0, 8))
+        elif self.autostart_repair_button.winfo_manager():
+            self.autostart_repair_button.pack_forget()
         self._last_alerts = critical
         self._show_alerts(critical)
 
@@ -1869,13 +2094,27 @@ class OkulZiliApp:
         for item in self.rules_tree.get_children():
             self.rules_tree.delete(item)
         for index, rule in enumerate(self.config.date_rules):
-            target = WEEKDAYS[rule.target_weekday] if rule.target_weekday is not None else "—"
+            if rule.exam_plan is not None:
+                target = _weekday_summary(rule.exam_plan.weekdays)
+            else:
+                target = WEEKDAYS[rule.target_weekday] if rule.target_weekday is not None else "—"
+            kind_label = "Sınav planı" if rule.is_planned_exam else RULE_LABELS.get(rule.kind, rule.kind.value)
             self.rules_tree.insert(
                 "",
                 "end",
                 iid=str(index),
-                values=(rule.name, RULE_LABELS.get(rule.kind, rule.kind.value), rule.start.strftime("%d.%m.%Y"), rule.end.strftime("%d.%m.%Y"), target),
+                values=(rule.name, kind_label, rule.start.strftime("%d.%m.%Y"), rule.end.strftime("%d.%m.%Y"), target),
             )
+        if self.config.date_rules:
+            self.rules_empty_label.place_forget()
+        else:
+            self.rules_empty_label.place(relx=0.5, rely=0.45, anchor="center")
+        self._update_rule_buttons()
+
+    def _update_rule_buttons(self) -> None:
+        state = "normal" if self.role == "yonetici" and self.rules_tree.selection() else "disabled"
+        self.rule_edit_button.configure(state=state)
+        self.rule_delete_button.configure(state=state)
 
     def _show_alerts(self, alerts: list[CheckResult]) -> None:
         label, level = self.alerts.status(alerts)
@@ -1903,9 +2142,7 @@ class OkulZiliApp:
         for line in lines:
             try:
                 item = json.loads(line)
-                detail = item.get("mesaj") or item.get("olay_adi") or item.get("hata") or ""
-                line_text = f"{item.get('zaman', '')}  [{item.get('seviye', '').upper()}]  {item.get('olay', '')}"
-                rendered.append(f"{line_text}  ·  {detail}" if detail else line_text)
+                rendered.append(format_log_line(item) if isinstance(item, dict) else line)
             except ValueError:
                 rendered.append(line)
         self.log_text.configure(state="normal")
@@ -1952,6 +2189,7 @@ class OkulZiliApp:
         grace: int,
         bell_volume: int,
         time_check_enabled: bool,
+        update_check_enabled: bool = True,
     ) -> None:
         updated = apply_general_settings(
             self.config,
@@ -1962,6 +2200,7 @@ class OkulZiliApp:
             grace_seconds=grace,
             bell_volume=bell_volume,
             time_check_enabled=time_check_enabled,
+            update_check_enabled=update_check_enabled,
         )
         if not self._apply_config(updated):
             return
@@ -1971,6 +2210,8 @@ class OkulZiliApp:
             self._start_time_check_worker()
             # Aynı oturumda kapatılıp yeniden açıldıysa altı saat beklenmesin.
             self._time_check_wake.set()
+        if updated.update_check_enabled:
+            self._start_update_check_worker()
 
     def _backup_menu(self) -> None:
         if not self._require_permission("yapilandir"):
@@ -2066,6 +2307,15 @@ class OkulZiliApp:
             self._apply_config(replace(self.config, date_rules=rules))
         RuleEditor(self.root, None, {day: self.config.combined_weekly(day) for day in range(7)}, save)
 
+    def _add_exam(self) -> None:
+        if not self._require_permission("yapilandir"):
+            return
+        def save(rule: DateRule) -> None:
+            rules = [*self.config.date_rules, rule]
+            rules.sort(key=lambda item: (item.start, item.end, item.name))
+            self._apply_config(replace(self.config, date_rules=rules))
+        ExamDialog(self.root, None, self.config.combined_weekly, save)
+
     def _add_ceremony(self) -> None:
         if not self._require_permission("yapilandir"):
             return
@@ -2087,6 +2337,9 @@ class OkulZiliApp:
             rules[index] = rule
             rules.sort(key=lambda item: (item.start, item.end, item.name))
             self._apply_config(replace(self.config, date_rules=rules))
+        if existing.is_planned_exam:
+            ExamDialog(self.root, existing, self.config.combined_weekly, save)
+            return
         RuleEditor(self.root, existing, {day: self.config.combined_weekly(day) for day in range(7)}, save)
 
     def _delete_rule(self) -> None:
@@ -2323,6 +2576,112 @@ class OkulZiliApp:
             elif self._time_check_alerted:
                 self._time_check_alerted = False
                 log_event(self.logger, "saat_dogrulama", durum="duzeldi", sunucu=result.server)
+
+    def _start_update_check_worker(self) -> None:
+        if not self.config.update_check_enabled:
+            return
+        if self._update_thread is not None and self._update_thread.is_alive():
+            return
+        self._update_thread = threading.Thread(
+            target=self._update_check_loop,
+            name="guncelleme-denetimi",
+            daemon=True,
+        )
+        self._update_thread.start()
+
+    def _update_check_loop(self) -> None:
+        """Haftada en çok bir kez yeni sürümü denetler (update_check.py).
+
+        İlk bakış açılıştan iki dakika sonradır; zil motoru ve ağ önce hazır
+        olsun. Ardından saatte bir yalnız sürenin dolup dolmadığına bakılır,
+        ağa haftada bir çıkılır. Ayar kapatılınca döngü sona erer.
+        """
+        wait_seconds = 120.0
+        while not self._shutdown_event.wait(wait_seconds):
+            wait_seconds = 3600.0
+            if not self.config.update_check_enabled:
+                return
+            if self._update_check_running or not self._update_state.is_due(datetime.now()):
+                continue
+            self._update_check_running = True
+            self._run_update_check(manual=False)
+
+    def _check_updates_now(self) -> None:
+        if self._update_check_running:
+            return
+        self._update_check_running = True
+        self.update_check_button.configure(state="disabled", text="Denetleniyor…")
+        threading.Thread(target=lambda: self._run_update_check(manual=True), name="guncelleme-elle", daemon=True).start()
+
+    def _run_update_check(self, manual: bool) -> None:
+        """İşçi iş parçacığında çalışır; sonuç arayüze after() ile taşınır."""
+        release: ReleaseInfo | None = None
+        error: str | None = None
+        try:
+            release = fetch_latest()
+        except UpdateCheckError as exc:
+            error = str(exc)
+        except Exception as exc:  # Denetim hiçbir durumda zil motorunu etkilememeli.
+            error = f"Beklenmeyen hata: {exc}"
+        try:
+            self.root.after(0, lambda: self._apply_update_result(release, error, manual))
+        except (tk.TclError, RuntimeError):
+            self._update_check_running = False
+
+    def _apply_update_result(self, release: ReleaseInfo | None, error: str | None, manual: bool) -> None:
+        previous = self._update_state.newer_than(__version__)
+        self._update_state.record(datetime.now(), release, error)
+        self._update_state.save()
+        self._update_check_running = False
+        newer = self._update_state.newer_than(__version__)
+        log_event(
+            self.logger,
+            "guncelleme_denetimi",
+            level="bilgi" if error is None else "uyarı",
+            durum="ulasilamadi" if error else ("yeni_surum" if newer else "guncel"),
+            en_yeni=release.version if release else None,
+            hata=error,
+        )
+        self._render_update_status()
+        if manual:
+            if error:
+                messagebox.showwarning("Güncelleme denetimi", f"{error}\nİnternet bağlantısını denetleyip daha sonra yeniden deneyin.", parent=self.root)
+            elif newer:
+                if messagebox.askyesno(
+                    "Yeni sürüm var",
+                    f"Okul Zili {newer} yayımlandı (kurulu sürüm {__version__}).\n\n"
+                    "İndirme sayfası tarayıcıda açılsın mı? Kurulumu ders saati dışında yapın.",
+                    parent=self.root,
+                ):
+                    webbrowser.open(DOWNLOAD_PAGE)
+            else:
+                messagebox.showinfo("Güncelleme denetimi", f"Okul Zili güncel (sürüm {__version__}).", parent=self.root)
+        elif newer and newer != previous:
+            # Yeni sürüm zil uyarısı değildir: panel uyarı defterine girmez,
+            # tepside bir kez bildirilir; kalıcı iz kenar çubuğundadır.
+            self.tray.notify(f"Okul Zili {newer} yayımlandı. Ayrıntı: Hakkında sayfası.", "Yeni sürüm")
+
+    def _render_update_status(self) -> None:
+        state = self._update_state
+        newer = state.newer_than(__version__)
+        if not self._update_check_running:
+            self.update_check_button.configure(state="normal", text="Şimdi denetle")
+        checked = state.last_checked.strftime("%d.%m.%Y %H:%M") if state.last_checked else None
+        if newer:
+            text, color = f"Yeni sürüm yayımlandı: {newer} (kurulu: {__version__}). Kurulumu ders saati dışında yapın.", WARNING_TEXT
+        elif checked is None:
+            text, color = "Henüz denetlenmedi." + ("" if self.config.update_check_enabled else " Otomatik denetim kapalı."), INK_SUBTLE
+        elif state.last_error:
+            text, color = f"Son deneme {checked}: {state.last_error}", INK_SUBTLE
+        else:
+            text, color = f"Okul Zili güncel. Son denetim: {checked}.", SUCCESS
+        self.update_status_label.configure(text=text, text_color=color)
+        if newer:
+            self.update_nav_button.configure(text=f"⬆  Yeni sürüm {newer}")
+            if not self.update_nav_button.winfo_manager():
+                self.update_nav_button.pack(side="bottom", fill="x", padx=12, pady=(3, 0), after=self.version_label)
+        elif self.update_nav_button.winfo_manager():
+            self.update_nav_button.pack_forget()
 
     def _enqueue_notice(self, notice: SchedulerNotice) -> None:
         try:
@@ -2652,6 +3011,11 @@ def _create_admin_pin(root: tk.Tk, auth: AuthRepository) -> bool:
 
 
 def main() -> int:
+    if "--otomatik-baslatmayi-kur" in sys.argv:
+        # Kurucu bu komutu kurulumu başlatan hesabın bağlamında çalıştırır
+        # (Inno ExecAsOriginalUser); arayüz kurulmaz, çıkış kodu sonucu bildirir.
+        installed, _detail = autostart.repair()
+        return 0 if installed else 14
     apply_process_identity()
     ctk.set_appearance_mode("light")
     if "--ses-cihazi-kontrol" in sys.argv:
@@ -2746,6 +3110,37 @@ def main() -> int:
         root.update_idletasks()
         root.destroy()
         return 0 if rule_ok and event_ok else 13
+    if "--sinav-kontrol" in sys.argv:
+        # Sınav planı kabulü: pencere girdiyi plana, plan üç anonsa dönüşüyor
+        # mu; motor sınav penceresindeki ders zillerini susturuyor mu?
+        from .defaults import default_config
+
+        root = ctk.CTk()
+        root.withdraw()
+        exam_config = default_config()
+        captured_exam: dict[str, DateRule] = {}
+        exam_dialog = ExamDialog(root, None, exam_config.combined_weekly, lambda item: captured_exam.__setitem__("rule", item))
+        exam_dialog.withdraw()
+        exam_dialog.start_var.set("02.11.2026")
+        exam_dialog.end_var.set("06.11.2026")
+        exam_dialog.slot_rows[0][1].set("09:00")
+        exam_dialog.slot_rows[0][2].set("40")
+        exam_dialog._save()
+        exam_rule = captured_exam.get("rule")
+        exam_ok = exam_rule is not None and exam_rule.is_planned_exam and [
+            item.sound_id for item in exam_rule.events
+        ] == ["sinav_hazirlik", "sinav_basladi", "sinav_bitti"]
+        if exam_ok and exam_rule is not None:
+            exam_config.date_rules = [exam_rule]
+            window_events = [
+                event
+                for event in CalendarEngine(exam_config).resolve(date(2026, 11, 2)).events
+                if time(8, 55) <= event.scheduled_at.time() <= time(9, 40)
+            ]
+            exam_ok = len(window_events) == 3 and all(event.sound_id.startswith("sinav_") for event in window_events)
+        root.update_idletasks()
+        root.destroy()
+        return 0 if exam_ok else 15
     if "--baslangic-kontrol" in sys.argv:
         root = ctk.CTk()
         startup = _prepare_startup_root(root)

@@ -3,8 +3,8 @@
 ## Sabah kontrolü
 
 1. Bilgisayar, USB ses kartı ve amplifikatörün açık olduğunu kontrol edin.
-2. Okul Zili penceresinde **Ön kontrol** sekmesini açın.
-3. Kırmızı **KRİTİK** satır varsa sorunu gidermeden sisteme güvenmeyin.
+2. Okul Zili penceresinde **Sistem kontrolü** sayfasını açın.
+3. Kırmızı **KRİTİK** satır varsa sorunu gidermeden sisteme güvenmeyin. **Otomatik başlatma** satırı uyarı veriyorsa bilgisayar yeniden başladığında zil kendiliğinden açılmaz; yönetici profiliyle **Otomatik başlatmayı onar** düğmesine basın.
 4. **Sonraki zil** alanındaki saati günlük ders çizelgesiyle karşılaştırın.
 5. Gün tören günü ise ertesi/güncel tören dosyalarının hazır olduğuna bakın.
 
@@ -22,19 +22,21 @@
 - Genel durum panelindeki **Uyarılar ve öneriler** kutusu "UYARI" satırı gösteriyorsa bir zil kaçırılmış, bekletilmiş, sessize alınmış ya da duraklatma sırasında atlanmış demektir; satırdaki saat ve zil adını günlük ders çizelgesiyle karşılaştırın. Durumu gördükten sonra **Uyarıları onayla** ile kutuyu temizleyin.
 - Zilleri duraklattığınız sürede vadesi gelen ziller çalmaz ve sürdürünce topluca çalmaz; her biri "duraklatıldığı için çalınmadı" notuyla panelde ve günlükte görünür.
 - Uzun bir yayın (AFAD ikazı, 10 Kasım akışı, elle başlatılan tören) sürerken saati gelen zil yayın bitince çalar; kaçırılmış sayılmaz.
-- Bilgisayarın başından ayrılırken üst çubuktaki **Kilitle** düğmesine basın: ziller çalmaya devam eder, yönetim işlevleri yeniden PIN ister. Geri dönünce **Giriş** ile açın.
+- Bilgisayarın başından ayrılırken üst çubuktaki **Kilitle** düğmesine basın: ziller çalmaya devam eder, yönetim işlevleri yeniden PIN ister. Kilitliyken aynı yerde **Giriş** düğmesi görünür; geri dönünce onunla açın.
 
 ## Tatil veya telafi günü ekleme
 
-1. **Tatil ve istisnalar** sekmesini açın.
-2. **Tatil / istisna ekle** düğmesine basın.
+1. **Tatil ve törenler** sayfasını açın.
+2. **İstisna ekle** düğmesine basın.
 3. Tatil için ilk ve son tarihi yazın; iki tarih de tatil kapsamındadır.
 4. Cumartesi gibi bir telafi gününde **Telafi günü** türünü seçin ve uygulanacak hafta gününü belirtin.
-5. Kaydettikten sonra **Ön kontrol** ekranını yenileyin.
+5. Kaydettikten sonra **Sistem kontrolü** sayfasını yenileyin.
+
+Resmî tatiller ve ara tatiller **Akademik takvim** sayfasından gelir. Takvim tanımlı değilse ders zilleri tatillerde de çalar; o sayfadaki **MEB takvim şablonunu yükle** düğmesi ders yılının şablonunu düzenleme penceresinde açar, tarihleri denetleyip kaydedin. Ders yılı bitince Sistem kontrolü yeni yılın takvimini girmenizi hatırlatır; girilmezse yeni dönemde ders zilleri çalmaz.
 
 ## Program zili düzenleme
 
-1. **Haftalık program** sekmesinde günü seçin.
+1. **Ders zilleri** sayfasında günü seçin.
 2. **Eğitim modeli** alanından **Tam gün** veya **İkili eğitim**'i seçin. İkili eğitime geçtiğinizde öğleden sonra oturumunun başlangıç saati, o an formda duran sabah oturumunun bitişine göre önerilir. Önce **Sabah**, sonra **Öğleden sonra** oturumunu düzenleyin; oturumlar arasında geçerken girdikleriniz korunur.
 3. Her oturum için ilk ders, ders sayısı, ders/teneffüs süreleri ve öğrenci zili farkını girin. İkili eğitimde uzun teneffüs her oturum için ayrı ayarlanır: **Uzun ara kaçıncı dersten sonra?** alanına blok sınırındaki ders numarasını, yanındaki alana süreyi yazın; uzun ara yoksa konumu `0` yapın.
 4. Normal dersler için **Blok düzeni** alanını boş bırakın. Blok dersler için `2+2+1+1` gibi, toplamı ders sayısına eşit bir desen yazın.
@@ -64,15 +66,34 @@ Varsayılan ya da eski zil saatlerini tek tek düzeltmek yerine tümüyle silip 
 
 Üst çubuktaki **Yönetim** düğmesinden **Okul ve cihaz ayarları** bölümünü açın. **Zil ses düzeyi** çubuğu öğrenci, öğretmen, teneffüs, tören ve tatbikat yayınlarının ortak seviyesini %0–100 arasında ayarlar. Teneffüs müziğinin ayrı ve düşük güvenlik sınırı değişmez. Ses düzeyini değiştirdikten sonra gerçek yayından önce **Sesler ve sirenler** sayfasında kısa bir deneme yapın.
 
-## Tören, sınav veya kısaltılmış gün
+## Sınav haftası
+
+Ortak sınav ya da yazılı haftasında ders zili yerine sınav anonslarını çaldırmak için:
+
+1. **Tatil ve törenler → Sınav planla** düğmesine basın.
+2. Plana bir ad verin, ilk ve son sınav gününü gg.aa.yyyy biçiminde yazın ve sınavın yapılacağı hafta günlerini işaretleyin (varsayılan Pazartesi–Cuma; aralıktaki cumartesi/pazar işaretlenmedikçe etkilenmez).
+3. Her sınav oturumunun başlangıç saatini ve süresini girin (ör. 09:00, 40 dk). Birden çok oturum için **Oturum ekle**; her gün aynı saatler kullanılır. Günden güne saatler değişiyorsa her gün için ayrı plan ekleyin.
+4. **Hazırlık anonsu** kaç dakika önce çalsın, belirleyin (varsayılan 5; 0 yazarsanız hazırlık anonsu çalmaz).
+5. **Sınav saatleri dışında ders zilleri çalmaya devam etsin** açıkken yalnız sınav penceresindeki (hazırlık anonsundan süre bitimine kadar) ders zilleri susar; kapatırsanız o günlerde haftalık ders zillerinin tümü susar.
+6. Penceredeki **Önizleme** çalacak anonsları ve ilk sınav günü susacak zilleri gösterir. **Takvime ekle** ile kaydedin; planı tablodan çift tıklayarak yeniden düzenleyebilirsiniz.
+
+Her oturumda üç anons çalar: hazırlık ("Sevgili öğrenciler, sınav birazdan başlayacaktır. Lütfen salondaki yerlerinizi alınız."), başlangıç ("Sınavınız başlamıştır. Hepinize başarılar dileriz.") ve süre bitti ("Sınav süresi sona ermiştir. Lütfen kalemlerinizi bırakınız."). Her anonstan önce kısa bir çan melodisi vardır. Anonslar anons ses çıkışından çalar; **Sesler ve sirenler → Sınav anonsları** grubundan dinlenebilir ve **Dosya seç** ile kendi kaydınızla değiştirilebilir. Sınav gününde planlanmış bir tören varsa tören de çalar.
+
+## Tören veya kısaltılmış gün
 
 Tören kuralları diğer kuralların **üzerine** biner: aynı güne birden çok tören ekleyebilirsiniz (ikili eğitimde sabah ve öğle İstiklâl Marşı gibi); tören, o günün geçerli programını (normal, kısaltılmış, sınav ya da telafi) silmez, yalnız aynı saatteki zilin yerine geçer. Tatil kuralı olan günde yalnız tören çalar. Gün içinde eklenen ya da adı değiştirilen kural, o gün çoktan çalmış zilleri yeniden çaldırmaz.
 
-1. **Tatil ve istisnalar → Tatil / istisna ekle** yolunu açın.
+Hazır İstiklâl Marşı ve 10 Kasım akışları için **Tatil ve törenler → Tören planla** yeterlidir. Kısaltılmış gün ya da kendi olay listesi olan özel gün için:
+
+1. **Tatil ve törenler → İstisna ekle** yolunu açın.
 2. Türü ve tarihi seçin.
 3. **Haftalık günü kopyala** ile normal günü başlangıç noktası yapın.
 4. Gerekmeyen olayları silin; tören/anons satırlarını ekleyin ve oturumu seçin.
-5. Kaydedip **Ön kontrol** ekranını yenileyin. Tören dosyalarını en geç bir gün önce deneyin.
+5. Kaydedip **Sistem kontrolü** sayfasını yenileyin. Tören dosyalarını en geç bir gün önce deneyin.
+
+## Güncellemeler
+
+Okul Zili haftada en çok bir kez, internet varsa, `okulapp.org`'dan yalnız en son sürümün numarasını okur; okul, kişi ya da bilgisayar bilgisi gönderilmez ve hiçbir şey kendiliğinden indirilip kurulmaz. Yeni sürüm yayımlandığında kenar çubuğunda **Yeni sürüm** düğmesi belirir. **Hakkında ve Lisans** sayfasındaki **Şimdi denetle** elle denetler, **İndirme sayfası** tarayıcıda okulapp.org'u açar. Kurulumu ders saati dışında yapın: kurucu çalışan uygulamayı kapatır, kurulum sonunda **Okul Zili'ni çalıştır** seçeneğiyle yeniden açılır; ayarlarınız ve sesleriniz korunur. Otomatik denetimi **Yönetim → Okul ve cihaz ayarları** bölümünden kapatabilirsiniz.
 
 ## Yedek alma ve başka bilgisayara taşıma
 

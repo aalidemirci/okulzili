@@ -18,6 +18,10 @@ TONES: dict[str, tuple[tuple[int, int], ...]] = {
     "istiklal_sozlu.wav": ((440, 250), (0, 150), (440, 250)),
     "istiklal_sozsuz.wav": ((440, 250), (0, 150), (440, 250)),
     "saygi_1dk_istiklal.wav": ((392, 300), (0, 180), (392, 300)),
+    # Paket kaydı eksikse sınav anonsunun yerine yalnız çan çalar.
+    "sinav_hazirlik.wav": ((392, 300), (523, 300), (659, 520)),
+    "sinav_basladi.wav": ((392, 300), (523, 300), (659, 520)),
+    "sinav_bitti.wav": ((659, 300), (523, 300), (392, 520)),
 }
 
 SIRENS: dict[str, tuple[int, int, int, int]] = {
@@ -80,6 +84,10 @@ BUNDLED_SOUND_ASSETS: dict[str, str] = {
     "afad_sari_ikaz": "afad-sari-ikaz.wav",
     "afad_kirmizi_alarm": "afad-kirmizi-ikaz.wav",
     "afad_kbrn_alarm": "afad-siyah-ikaz.wav",
+    # Sınav anonsları: çan + Türkçe konuşma (tools/build_exam_announcements.py).
+    "sinav_hazirlik": "sinav-hazirlik.wav",
+    "sinav_basladi": "sinav-basladi.wav",
+    "sinav_bitti": "sinav-bitti.wav",
 }
 
 BUNDLED_SOUND_MAX_SECONDS = {"blok_gecis": 5}

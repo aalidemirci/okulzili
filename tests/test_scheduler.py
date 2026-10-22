@@ -260,6 +260,8 @@ class SchedulerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "durum.json"
             first = RunState(path)
+            # Budama durumun saatine göredir; test duvar saatine bağlı kalmasın.
+            first.now = lambda: datetime(2026, 9, 7, 8, 0)
             deferred_at = datetime(2026, 9, 7, 8, 25)
             muted_until = datetime(2026, 9, 7, 23, 59, 59)
             first.defer("olay", deferred_at)

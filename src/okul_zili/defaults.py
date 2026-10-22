@@ -118,6 +118,38 @@ def generate_session(
     return sort_specs(events)
 
 
+# Paketin bildiği her ses kimliği ve veri dizinindeki yeri. Sonradan eklenen
+# bir ses (ör. 0.9.0 sınav anonsları) eski ayar dosyasına with_default_sounds
+# ile eklenir; böylece yükseltilen kurulumda "Dosya atanmamış" olmaz.
+DEFAULT_SOUNDS: dict[str, str] = {
+    "ogrenci": "sesler/ogrenci.wav",
+    "ogretmen": "sesler/ogretmen.wav",
+    "teneffus": "sesler/teneffus.wav",
+    "blok_gecis": "sesler/blok_gecis.wav",
+    "anons": "sesler/anons.wav",
+    "istiklal_sozlu": "sesler/istiklal_sozlu.wav",
+    "istiklal_sozsuz": "sesler/istiklal_sozsuz.wav",
+    "saygi_1dk_istiklal": "sesler/saygi_1dk_istiklal.wav",
+    "saygi_2dk": "sesler/saygi_2dk.wav",
+    "saygi_ti": "sesler/saygi_ti.wav",
+    "on_kasim_butun": "sesler/on_kasim_butun.wav",
+    "istiklal_cb_egitimsiz": "sesler/istiklal_cb_egitimsiz.wav",
+    "istiklal_cb_orijinal": "sesler/istiklal_cb_orijinal.wav",
+    "tatbikat_deprem": "sesler/tatbikat_deprem.wav",
+    "tatbikat_tahliye": "sesler/tatbikat_tahliye.wav",
+    "tatbikat_yangin": "sesler/tatbikat_yangin.wav",
+    "acil_durum": "sesler/acil_durum.wav",
+    "afad_sari_ikaz": "sesler/afad_sari_ikaz.wav",
+    "afad_kirmizi_alarm": "sesler/afad_kirmizi_alarm.wav",
+    "afad_kbrn_alarm": "sesler/afad_kbrn_alarm.wav",
+    "muzik_bach_prelud": "sesler/muzik_bach_prelud.wav",
+    "muzik_ode_to_joy": "sesler/muzik_ode_to_joy.wav",
+    "sinav_hazirlik": "sesler/sinav_hazirlik.wav",
+    "sinav_basladi": "sesler/sinav_basladi.wav",
+    "sinav_bitti": "sesler/sinav_bitti.wav",
+}
+
+
 def build_school_config(
     school_name: str = "Okulumuz",
     first_lesson: str = "08:20",
@@ -157,30 +189,7 @@ def build_school_config(
         preparation_enabled=preparation_enabled,
         selected_device=selected_device,
         announcement_device=None,
-        sounds={
-            "ogrenci": "sesler/ogrenci.wav",
-            "ogretmen": "sesler/ogretmen.wav",
-            "teneffus": "sesler/teneffus.wav",
-            "blok_gecis": "sesler/blok_gecis.wav",
-            "anons": "sesler/anons.wav",
-            "istiklal_sozlu": "sesler/istiklal_sozlu.wav",
-            "istiklal_sozsuz": "sesler/istiklal_sozsuz.wav",
-            "saygi_1dk_istiklal": "sesler/saygi_1dk_istiklal.wav",
-            "saygi_2dk": "sesler/saygi_2dk.wav",
-            "saygi_ti": "sesler/saygi_ti.wav",
-            "on_kasim_butun": "sesler/on_kasim_butun.wav",
-            "istiklal_cb_egitimsiz": "sesler/istiklal_cb_egitimsiz.wav",
-            "istiklal_cb_orijinal": "sesler/istiklal_cb_orijinal.wav",
-            "tatbikat_deprem": "sesler/tatbikat_deprem.wav",
-            "tatbikat_tahliye": "sesler/tatbikat_tahliye.wav",
-            "tatbikat_yangin": "sesler/tatbikat_yangin.wav",
-            "acil_durum": "sesler/acil_durum.wav",
-            "afad_sari_ikaz": "sesler/afad_sari_ikaz.wav",
-            "afad_kirmizi_alarm": "sesler/afad_kirmizi_alarm.wav",
-            "afad_kbrn_alarm": "sesler/afad_kbrn_alarm.wav",
-            "muzik_bach_prelud": "sesler/muzik_bach_prelud.wav",
-            "muzik_ode_to_joy": "sesler/muzik_ode_to_joy.wav",
-        },
+        sounds=dict(DEFAULT_SOUNDS),
         weekly_schedule={weekday: day for weekday in range(5)},
         extra_events={},
         day_schedules={weekday: day_settings for weekday in range(5)},
@@ -197,6 +206,17 @@ def build_school_config(
 
 def default_config() -> SchoolConfig:
     return build_school_config()
+
+
+def with_default_sounds(config: SchoolConfig) -> SchoolConfig:
+    """Ayar dosyasında olmayan paket seslerini varsayılan yollarıyla ekler.
+
+    Göç değildir: var olan atamalara dokunulmaz, yalnız eksik kimlikler eklenir.
+    """
+    missing = {key: value for key, value in DEFAULT_SOUNDS.items() if key not in config.sounds}
+    if missing:
+        config.sounds = {**config.sounds, **missing}
+    return config
 
 
 def generate_from_day_schedule(schedule: DaySchedule) -> tuple[EventSpec, ...]:
@@ -263,6 +283,7 @@ def apply_general_settings(
     grace_seconds: int,
     bell_volume: int,
     time_check_enabled: bool,
+    update_check_enabled: bool | None = None,
 ) -> SchoolConfig:
     """Genel ayarları, haftalık olay listesine dokunmadan uygular.
 
@@ -316,6 +337,9 @@ def apply_general_settings(
         grace_seconds=grace_seconds,
         bell_volume=bell_volume,
         time_check_enabled=time_check_enabled,
+        update_check_enabled=(
+            config.update_check_enabled if update_check_enabled is None else update_check_enabled
+        ),
         weekly_schedule=weekly,
         day_schedules=day_schedules,
     )

@@ -56,6 +56,9 @@ SOUND_DEFINITIONS: tuple[SoundDefinition, ...] = (
     SoundDefinition("muzik_bach_prelud", "Bach — Do Majör Prelüd", "Teneffüs Müziği", "Kamu malı besteden uygulama tarafından sentezlenen hafif, sözsüz düzenleme.", source_page=BACH_SCORE_PAGE, source_kind="kamu_mali_sentez"),
     SoundDefinition("muzik_ode_to_joy", "Beethoven — Neşeye Övgü", "Teneffüs Müziği", "Kamu malı besteden uygulama tarafından sentezlenen hafif, sözsüz düzenleme.", source_page=BEETHOVEN_SCORE_PAGE, source_kind="kamu_mali_sentez"),
     SoundDefinition("anons", "Anons başlangıcı", "Sistem", "Kayıtlı anons öncesi kısa dikkat sesi."),
+    SoundDefinition("sinav_hazirlik", "Sınav hazırlık anonsu", "Sınav anonsları", "Yükselen çan ve “Sevgili öğrenciler, sınav birazdan başlayacaktır. Lütfen salondaki yerlerinizi alınız.” anonsu.", source_kind="paket_anons"),
+    SoundDefinition("sinav_basladi", "Sınav başladı anonsu", "Sınav anonsları", "Yükselen çan ve “Sınavınız başlamıştır. Hepinize başarılar dileriz.” anonsu.", source_kind="paket_anons"),
+    SoundDefinition("sinav_bitti", "Sınav bitti anonsu", "Sınav anonsları", "Alçalan çan ve “Sınav süresi sona ermiştir. Lütfen kalemlerinizi bırakınız.” anonsu.", source_kind="paket_anons"),
 )
 
 SOUND_BY_ID = {item.sound_id: item for item in SOUND_DEFINITIONS}

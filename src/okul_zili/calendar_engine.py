@@ -34,8 +34,14 @@ class CalendarEngine:
        tatil gününde yalnız tören çalar, kısaltılmış gün töreni kısaltılmış
        kalır ve telafi günü töreni telafi programını korur (D2).
 
+    Planlı sınav (``exam_plan`` taşıyan sınav kuralı) tören katmanından önce
+    bindirilir: planın hafta günlerinde, her sınav penceresindeki (hazırlık
+    anonsundan süre bitimine) temel olaylar susar ve yerine sınav anonsları
+    çalar; ``keep_lesson_bells`` kapalıysa günün temel olaylarının tümü susar.
+    Planı olmayan eski tip sınav kuralı temel katmanda kalır.
+
     Her olay kendisini üreten kuralın adını ``source`` olarak taşır; günün
-    ``source`` özeti temel kaynağı ve varsa törenleri birlikte anar.
+    ``source`` özeti temel kaynağı ve varsa sınav ve törenleri birlikte anar.
     """
 
     def __init__(self, config: SchoolConfig) -> None:
@@ -44,8 +50,17 @@ class CalendarEngine:
     def resolve(self, day: date) -> DayResolution:
         matches = [rule for rule in self.config.date_rules if rule.matches(day)]
         ceremonies = [rule for rule in matches if rule.kind is ExceptionKind.CEREMONY]
+        exams = [
+            rule
+            for rule in matches
+            if rule.is_planned_exam and day.weekday() in rule.exam_plan.weekdays  # type: ignore[union-attr]
+        ]
         base_rules = sorted(
-            (rule for rule in matches if rule.kind is not ExceptionKind.CEREMONY),
+            (
+                rule
+                for rule in matches
+                if rule.kind is not ExceptionKind.CEREMONY and not rule.is_planned_exam
+            ),
             key=lambda rule: (int(rule.priority), rule.name),
             reverse=True,
         )
@@ -63,6 +78,20 @@ class CalendarEngine:
             base_specs = self._eligible_weekly_specs(day, self.config.combined_weekly(day.weekday()))
 
         events = list(self._materialize(day, base_specs, base_source))
+        for rule in exams:
+            plan = rule.exam_plan
+            assert plan is not None
+            if plan.keep_lesson_bells:
+                windows = plan.windows()
+                events = [
+                    event
+                    for event in events
+                    if not any(opening <= event.scheduled_at.time() <= closing for opening, closing in windows)
+                ]
+            else:
+                events = []
+            events.extend(self._materialize(day, rule.events, rule.name))
+            applied.append(rule.name)
         for rule in ceremonies:
             occupied = {(spec.at, spec.sequence) for spec in rule.events}
             events = [
@@ -75,8 +104,9 @@ class CalendarEngine:
         events.sort(key=lambda event: (event.scheduled_at, event.sequence))
 
         source = base_source
-        if ceremonies:
-            source = f"{base_source} + {', '.join(rule.name for rule in ceremonies)}"
+        overlays = [*exams, *ceremonies]
+        if overlays:
+            source = f"{base_source} + {', '.join(rule.name for rule in overlays)}"
         return DayResolution(day, tuple(events), source, tuple(applied), suppressed)
 
     def _base_specs(self, day: date, winner: DateRule) -> tuple[EventSpec, ...]:

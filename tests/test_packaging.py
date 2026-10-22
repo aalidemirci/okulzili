@@ -42,7 +42,7 @@ class PackagingDefinitionTests(unittest.TestCase):
         self.assertIn('Name: "turkish"', script)
         self.assertIn("Turkish.isl", script)
         self.assertIn("postinstall", script)
-        self.assertIn("install-task.ps1", script)
+        self.assertIn("--otomatik-baslatmayi-kur", script)
         self.assertIn("uninstall-stop.ps1", script)
         self.assertIn('RunOnceId: "StopOkulZili"', script)
         spec = (ROOT / "packaging" / "windows" / "okul-zili.spec").read_text(encoding="utf-8")
@@ -54,12 +54,15 @@ class PackagingDefinitionTests(unittest.TestCase):
         self.assertIn('LICENSE', script)
         self.assertIn('NOTICE', script)
         # D13: görev kaydı kurulumu başlatan hesapta; yükseltmede çalışan uygulama durur.
-        self.assertRegex(script, r"install-task\.ps1.*runasoriginaluser")
+        self.assertIn("ExecAsOriginalUser", script)
+        # 0.8.0 hatası: görev yazılamadığında kurucu sessiz kalıyordu.
+        self.assertIn("ResultCode <> 0", script)
+        self.assertIn(r"{app}\install-task.ps1", script)  # [InstallDelete]
         self.assertIn("function PrepareToInstall", script)
         self.assertIn("VersionInfoVersion={#MyAppVersion}", script)
         self.assertIn("version=str(version_file)", spec)
         self.assertTrue((ROOT / "packaging" / "windows" / "make_version_info.py").is_file())
-        task_script = (ROOT / "packaging" / "windows" / "install-task.ps1").read_text(encoding="utf-8")
+        task_script = (ROOT / "src" / "okul_zili" / "autostart.py").read_text(encoding="utf-8")
         self.assertIn("USERDOMAIN", task_script)
         build_script = (ROOT / "packaging" / "windows" / "build.ps1").read_text(encoding="utf-8")
         # D12: derleme yorumlayıcısı PATH'ten değil, sürüm ve modül denetimiyle seçilir.
@@ -68,10 +71,11 @@ class PackagingDefinitionTests(unittest.TestCase):
         self.assertNotIn('$python = "python"', build_script)
 
     def test_windows_logon_task_allows_battery_operation(self) -> None:
-        script = (ROOT / "packaging" / "windows" / "install-task.ps1").read_text(
+        script = (ROOT / "src" / "okul_zili" / "autostart.py").read_text(
             encoding="utf-8"
         )
-        self.assertIn("New-ScheduledTaskTrigger -AtLogOn", script)
+        # Kullanıcısız AtLogOn yetkisiz bağlamda "Erişim engellendi" verir.
+        self.assertIn("New-ScheduledTaskTrigger -AtLogOn -User $user", script)
         self.assertIn("-AllowStartIfOnBatteries", script)
         self.assertIn("-DontStopIfGoingOnBatteries", script)
         self.assertIn("-StartWhenAvailable", script)
@@ -182,10 +186,11 @@ class PackagingDefinitionTests(unittest.TestCase):
             self.assertIn(expected, licenses)
 
     def test_runtime_has_no_network_client_dependency(self) -> None:
-        # Bilinçli iki istisna dışında hiçbir modül ağ istemcisi içeremez:
+        # Bilinçli üç istisna dışında hiçbir modül ağ istemcisi içeremez:
         # sound_catalog yalnız yönetici onayıyla MEB indirmesi yapar,
-        # time_check yalnız isteğe bağlı SNTP saat karşılaştırması yapar.
-        allowed_sources = {"sound_catalog.py", "time_check.py"}
+        # time_check yalnız isteğe bağlı SNTP saat karşılaştırması yapar,
+        # update_check yalnız okulapp.org'dan sürüm numarasını okur.
+        allowed_sources = {"sound_catalog.py", "time_check.py", "update_check.py"}
         forbidden = {"requests", "httpx", "socket", "urllib", "http.client", "ftplib", "smtplib", "xmlrpc", "asyncio"}
         # 8.6: import düğümü dışındaki kaçış yolları — alt süreçle indirme aracı,
         # dinamik içe aktarma, WinINet. (webbrowser bilinçli istisna: yalnız

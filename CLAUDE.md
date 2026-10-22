@@ -31,12 +31,14 @@ yoktur; `.venv` 3.13'tür ve PyInstaller içermez. Testleri ve derlemeyi
 - **Test çatısı yalnız standart `unittest`.** pytest'e özgü özellik (fixture,
   `pytest.raises` vb.) kullanma; CI unittest ile koşar ve üçüncü taraf test
   bağımlılığı yoktur.
-- **Çevrimdışı ilkesi:** uygulama kendiliğinden ağa çıkmaz. Bilinçli iki
-  istisna `sound_catalog.py` (yalnız `*.meb.gov.tr`, yönetici onayıyla) ve
-  `time_check.py` (varsayılan kapalı SNTP). `test_packaging.py` diğer tüm
-  modüllerde ağ istemcisi importunu (`socket`, `urllib`, `requests`…) reddeder.
+- **Çevrimdışı ilkesi:** uygulama ağa yalnız bilinçli üç istisnayla çıkar:
+  `sound_catalog.py` (yalnız `*.meb.gov.tr`, yönetici onayıyla),
+  `time_check.py` (varsayılan kapalı SNTP) ve `update_check.py` (varsayılan
+  açık, haftada bir, yalnız `okulapp.org/okul-zili/surum.json`; kimlik/sürüm
+  göndermez, yalnız bildirir). `test_packaging.py` diğer tüm modüllerde ağ
+  istemcisi importunu (`socket`, `urllib`, `requests`…) reddeder.
 - **Sürüm tek kaynaktan:** `src/okul_zili/__init__.py`. `test_packaging.py`
-  senkronu pyproject.toml, okul-zili.iss, packaging/linux/control, KURULUM.md
+  senkronu pyproject.toml, uv.lock, okul-zili.iss, packaging/linux/control, KURULUM.md
   ve SURUM-NOTLARI.md ile denetler — sürüm yükseltirken hepsi birlikte değişir.
 - **Gömülü üçüncü taraf kopyalara elle dokunulmaz:** `src/pystray/` ve
   `vendor/` (customtkinter, darkdetect, packaging) dağıtıma gömülür; lisans
@@ -60,7 +62,9 @@ yoktur; `.venv` 3.13'tür ve PyInstaller içermez. Testleri ve derlemeyi
    yükle, eski sürümün dosyalarını temizle — MEB ağı için asıl indirme
    kaynağı burasıdır.
 6. okulapp.org'u güncelle: `oz-release.json` + proje kartı `badge` (aşağıdaki
-   bölüm). Bu adım atlanırsa site eski paketi göstermeye devam eder.
+   bölüm). Bu adım atlanırsa site eski paketi göstermeye devam eder ve
+   kurulu uygulamaların güncelleme denetimi (`/okul-zili/surum.json`, aynı
+   dosyadan üretilir) yeni sürümü göremez.
 
 ## okulapp.org yayını (ortak yayın alanı)
 
